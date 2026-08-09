@@ -14,6 +14,7 @@ require_relative "flexr/regexp/char_class"
 require_relative "flexr/unicode/utf8_splitter"
 require_relative "flexr/unicode/data/properties"
 require_relative "flexr/unicode/property"
+require_relative "flexr/unicode/reference_regexp"
 require_relative "flexr/unicode/case_fold"
 require_relative "flexr/automaton/byte_class_set"
 require_relative "flexr/automaton/nfa"
@@ -61,7 +62,8 @@ module Flexr
 
     def parse_pattern(pattern)
       regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
-      ast = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding).parse
+      ast = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding,
+                               unicode: options[:unicode] == true).parse
       Regexp::Normalizer.new(ast, encoding: regexp.encoding, options: regexp.options).normalize
     end
   end

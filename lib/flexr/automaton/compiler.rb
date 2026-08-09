@@ -68,6 +68,10 @@ module Flexr
         subset_construction(nfa, ec, class_count)
       end
 
+      def empty_dfa
+        DFA.new(transitions: [[nil]], accepts: [[]], ec: Array.new(256, 0), class_count: 1, start: 0, rule_ids: [])
+      end
+
       def reference_rule?(rule)
         rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
       end
@@ -83,10 +87,6 @@ module Flexr
           rule.bol_only = true if bol_only
           rule.end_anchor = true if end_anchor
         end
-      end
-
-      def empty_dfa
-        DFA.new(transitions: [[nil]], accepts: [[]], ec: Array.new(256, 0), class_count: 1, start: 0, rule_ids: [])
       end
 
       def strip_anchors(ast)
@@ -182,6 +182,10 @@ module Flexr
       end
 
       def validate_rules
+        if @spec.backend == :firstmatch && !@spec.options[:experimental]
+          raise CompileError, "firstmatch requires option :experimental"
+        end
+
         @spec.rules.each do |rule|
           if rule.patterns.empty?
             raise CompileError, "rule #{rule.index} has no pattern"
