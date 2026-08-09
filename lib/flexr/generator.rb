@@ -1,0 +1,90 @@
+# frozen_string_literal: true
+
+module Flexr
+  class Generator
+    def initialize(path, output: nil, eval_mode: false, options: {})
+      @path = path
+      @output = output
+      @eval_mode = eval_mode
+      @options = options
+    end
+
+    def generate
+      source = File.binread(@path).force_encoding(Encoding::UTF_8)
+      result = if @eval_mode
+        generate_from_runtime(source)
+      else
+        parsed = Source::PrismReader.new(source, path: @path).read
+        generate_static(parsed)
+      end
+      File.binwrite(@output, result) if @output
+      result
+    end
+
+    private
+
+    def generate_static(parsed)
+      payload = generated_payload(parsed)
+      indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
+      install = "Flexr::Generated.install!(self, #{payload})\n#{indent}"
+      Source::Passthrough.remove_spans(parsed.source, parsed.dsl_spans, insertion: parsed.first_dsl_offset, payload: install)
+    end
+
+    def generated_payload(parsed)
+      definitions = parsed.rules.map do |rule|
+        "{ index: #{rule.index}, patterns: #{rule.patterns.inspect}, trailing: #{rule.trailing.inspect}, " \
+          "action: #{action_expression(rule.action)}, states: #{rule.states.inspect}, " \
+          "bol_only: #{rule.bol_only.inspect}, end_anchor: #{rule.end_anchor.inspect} }"
+      end
+      "{ rules: [#{definitions.join(", ")}], " \
+        "backend: #{@options.fetch(:backend, parsed.config[:backend]).inspect}, " \
+        "token_kind: #{@options.fetch(:token_kind, parsed.config[:token_kind]).inspect}, " \
+        "encoding: #{encoding_expression(parsed.config[:encoding])}, " \
+        "declared_tokens: #{parsed.config[:declared_tokens].inspect}, " \
+        "options: #{(parsed.config[:options] || {}).inspect}, " \
+        "states: #{parsed.states.keys.reject { |name| name == :initial }.inspect}, " \
+        "inclusive_states: #{parsed.states.transform_values { |value| value[:inclusive] }.inspect} }"
+    end
+
+    def encoding_expression(encoding)
+      encoding == Encoding::BINARY ? "Encoding::BINARY" : "Encoding::UTF_8"
+    end
+
+    def action_expression(action)
+      return action if action.is_a?(String) && action.start_with?("proc")
+      return action.inspect unless action.is_a?(Proc)
+
+      "proc { emit(nil, text) }"
+    end
+
+    def generate_from_runtime(source)
+      loader = Object.new
+      loader.define_singleton_method(:load_spec) do
+        eval(source, TOPLEVEL_BINDING, @path, 1)
+      end
+      loader.instance_variable_set(:@path, @path)
+      loader.load_spec
+      passthrough = Source::PrismReader.new(source, path: @path).read(allow_dynamic: true)
+      classes = ObjectSpace.each_object(Class).select { |klass| klass.respond_to?(:__flexr_spec) }
+      classes.select! do |klass|
+        name = klass.name.to_s
+        (passthrough.class_name.nil? || name == passthrough.class_name || name.end_with?("::#{passthrough.class_name}")) &&
+          klass != Flexr::Lexer && klass.__flexr_rules.any?
+      end
+      klass = classes.last
+      raise CompileError, "--eval could not find a Flexr::Lexer class" unless klass
+
+      parsed = klass.__flexr_spec
+      # --eval is intentionally explicit; the generated file still contains
+      # executable action source, but its metadata is deterministic for this run.
+      parsed = klass.__flexr_spec
+      runtime_rules = parsed.rules.to_h { |rule| [rule.index, rule] }
+      passthrough.rules.each do |rule|
+        runtime_rule = runtime_rules.fetch(rule.index)
+        rule.patterns = runtime_rule.patterns
+        rule.trailing = runtime_rule.trailing
+      end
+      generate_static(passthrough)
+    end
+  end
+end

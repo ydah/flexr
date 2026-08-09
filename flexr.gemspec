@@ -8,14 +8,15 @@ Gem::Specification.new do |spec|
   spec.authors = ["Yudai Takada"]
   spec.email = ["t.yudai92@gmail.com"]
 
-  spec.summary = "TODO: Write a short summary, because RubyGems requires one."
-  spec.description = "TODO: Write a longer description or delete this line."
-  spec.homepage = "TODO: Put your gem's website or public repo URL here."
+  spec.summary = "Pure Ruby longest-match lexer generator"
+  spec.description = "A Ruby DSL and source generator for deterministic byte-oriented lexers."
+  spec.homepage = "https://github.com/yudai-takada/flexr"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
-  spec.metadata["allowed_push_host"] = "TODO: Set to your gem server 'https://example.com'"
+  spec.required_ruby_version = ">= 3.1.0"
+  spec.metadata["rubygems_mfa_required"] = "true"
+  spec.metadata["generator_ruby_version"] = ">= 3.3 (Prism)"
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "TODO: Put your gem's public repo URL here."
+  spec.metadata["source_code_uri"] = "https://github.com/yudai-takada/flexr"
 
   gemspec = File.basename(__FILE__)
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|

@@ -1,0 +1,16 @@
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: enable
+  Exclude:
+    - "lib/flexr/codegen/**/*"
+    - "lib/flexr/unicode/data/**/*"
+    - "vendor/**/*"
+
+Metrics/MethodLength:
+  Max: 80
+
+Metrics/ClassLength:
+  Max: 250
+
+Style/Documentation:
+  Enabled: false

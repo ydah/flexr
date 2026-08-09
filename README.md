@@ -1,39 +1,75 @@
-# Flexr
+# flexr
 
-TODO: Delete this and the text below, and describe your gem
-
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/flexr`. To experiment with that code, run `bin/console` for an interactive prompt.
+flexr is a Pure Ruby longest-match lexer generator. A specification is an
+ordinary Ruby file with a small internal DSL, so it can be required directly
+during development or transformed into generated Ruby for deployment.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+# Gemfile
+gem "flexr"
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+The runtime and generated lexers have no runtime gem dependencies. The source
+generator uses Prism on Ruby 3.3 and newer.
 
-```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+## Quick start
+
+```ruby
+require "flexr"
+
+class CalculatorLexer < Flexr::Lexer
+  rule(/[ \t\n]+/, skip: true)
+  rule(/[0-9]+/) { emit :INTEGER, text.to_i }
+  rule(/\+/) { emit :PLUS }
+end
+
+CalculatorLexer.new("12 + 3").tokens
+# => [[:INTEGER, 12], [:PLUS, "+"], [:INTEGER, 3]]
 ```
 
-## Usage
+flexr chooses the longest match at the current position. Source order breaks
+ties, which means rule reordering cannot accidentally make a shorter rule win.
 
-TODO: Write usage instructions here
+## Generating a lexer
+
+```sh
+flexr lib/calculator/lexer.flexr.rb -o lib/calculator/lexer.rb
+```
+
+Generation statically evaluates regular-expression literals, arrays, constants,
+`.freeze`, and `Regexp.union`. Dynamic pattern construction is rejected with
+`FLEXR-E017`; use `--eval` only when intentionally executing the specification
+at generation time.
+
+## Pattern support
+
+Character classes, alternation, repetition, Unicode properties, boundary
+anchors, and `/i`, `/m`, `/x`, `/n` are supported. Look-around, backreferences,
+lazy or possessive quantifiers, `\b`, and conditional expressions are rejected
+with `FLEXR-E014` and an alternative suggestion.
+
+States, EOF actions, `followed_by:`, `token_kind`, and location reporting are
+available through the runtime DSL. The implementation is byte-oriented, which
+also makes invalid UTF-8 input fail with a normal lexer error instead of
+entering an invalid character loop.
+
+## Security
+
+flexr is a code generator. Actions are Ruby code and are copied into generated
+files. Do not process untrusted specification files. The `--eval` option also
+executes the specification during generation and should only be used with
+trusted input.
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/flexr.
+```sh
+bundle install
+bundle exec rake test
+bundle exec rake modes:equivalence
+```
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+MIT
