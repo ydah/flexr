@@ -25,6 +25,26 @@ module Flexr
           return
         end
 
+        if prefix.length == length - 1
+          first_byte = prefix.empty? ? encoded(lo)[0] : 0x80
+          last_byte = prefix.empty? ? encoded(hi)[0] : 0xbf
+          group_start = nil
+          first_byte.upto(last_byte) do |byte|
+            min_cp, max_cp = prefix_bounds(prefix + [byte], length)
+            allowed = min_cp && lo <= min_cp && max_cp <= hi
+            if allowed
+              group_start ||= byte
+            elsif group_start
+              output << prefix.map { |value| [value, value] } + [[group_start, byte - 1]]
+              group_start = nil
+            end
+          end
+          if group_start
+            output << prefix.map { |value| [value, value] } + [[group_start, last_byte]]
+          end
+          return
+        end
+
         first_byte = prefix.empty? ? encoded(lo)[0] : 0x80
         last_byte = prefix.empty? ? encoded(hi)[0] : 0xbf
         first_byte.upto(last_byte) do |byte|

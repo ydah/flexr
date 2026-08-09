@@ -33,5 +33,21 @@ module Flexr
         { states: states, classes: class_count, accepting_states: accepts.count { |rules| !rules.empty? } }
       end
     end
+
+    class ReferenceDFA
+      def initialize(regexp)
+        @regexp = ::Regexp.new("\\A(?:#{regexp.source})\\z", regexp.options)
+      end
+
+      def accept?(bytes)
+        @regexp.match?(bytes)
+      rescue ArgumentError
+        false
+      end
+
+      def stats
+        { states: 0, classes: 0, accepting_states: 0, reference: true }
+      end
+    end
   end
 end

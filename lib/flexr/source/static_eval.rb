@@ -108,7 +108,7 @@ module Flexr
         diagnostic = Diagnostics.error(
           "FLEXR-E017", "pattern is not statically resolvable",
           help: "pass a literal, a constant, or use --eval",
-          note: "#{reason}; runtime mode still supports this Ruby expression"
+          note: "#{reason}; runtime mode still supports this Ruby expression; --eval can resolve it by executing the spec"
         )
         raise StaticResolutionError.new(diagnostic.message, diagnostic: diagnostic)
       end

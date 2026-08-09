@@ -3,7 +3,8 @@
 module Flexr
   module Runtime
     def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024)
-      raise ArgumentError, "input must be a String" unless input.is_a?(String)
+      input = Runtime::Buffer.new(input).source unless input.is_a?(String)
+      raise ArgumentError, "input must be a String or IO" unless input.is_a?(String)
 
       self.class.compile!
       @input = input
@@ -22,9 +23,12 @@ module Flexr
       @bol = true
       @more_start = nil
       @eof_fired = false
+      @on_error = nil
     end
 
     attr_reader :input, :filename, :error_mode
+
+    attr_writer :on_error
 
     def next_token
       loop do
@@ -45,7 +49,9 @@ module Flexr
           return handle_unmatched_byte if !eof?
           return nil
         end
-        raise LexError, "token exceeds max_token_size" if match.end_pos - match.start_pos > @max_token_size
+        if match.end_pos - match.start_pos > @max_token_size
+          raise Runtime::TokenTooLargeError, "token exceeds max_token_size"
+        end
 
         @match_start = match.start_pos
         @match_end = match.end_pos
@@ -131,6 +137,13 @@ module Flexr
 
     def error!(message)
       error = LexError.new(message, filename: @filename, byte_pos: @match_start, line: @line, text: text)
+      if @on_error
+        action = @on_error.call(error)
+        return @pending = nil if action == :skip
+        raise error if action == :raise
+        return @pending = nil if action == :halt
+        emit(:error, text) if action == :token
+      end
       case @error_mode
       when :token
         emit(:error, text)

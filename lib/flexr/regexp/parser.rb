@@ -113,39 +113,53 @@ module Flexr
         if consume("\\")
           parse_escape
           return AST::CharClass.new(ranges: @last_ranges, negated: false, loc: nil) if @last_ranges
-          return AST::CodepointRange.new(lo: read_codepoint, hi: @last_codepoint, loc: nil) if @escaped_value
+          return codepoint_node(read_codepoint) if @escaped_value
         end
 
         char = advance
         raise_syntax("unexpected end of expression") unless char
-        AST::CodepointRange.new(lo: char.ord, hi: char.ord, loc: nil)
+        codepoint_node(char.ord)
       end
 
       def parse_group
+        saved_options = @options
         if consume("?")
-          parse_group_prefix
+          prefix = parse_group_prefix
+          return AST::Empty.new(loc: nil) if prefix == :global
         else
           warn_capture
         end
         node = parse_expression
         expect(")")
+        @options = saved_options if prefix
         node
       end
 
       def parse_group_prefix
         if consume(":")
-          return
+          return true
         end
-        if peek_prefix("-mix:") || peek_prefix("mix:")
+        if peek_prefix("-mix:")
           @index += 5
-          return
+          @options &= ~(::Regexp::IGNORECASE | ::Regexp::MULTILINE | ::Regexp::EXTENDED)
+          return true
         end
-        if current == "i" || current == "m" || current == "x"
+        if ["i", "m", "x", "-"].include?(current)
+          add = true
+          flags = []
           while ["i", "m", "x", "-"].include?(current)
-            advance
+            add = false if current == "-"
+            flags << advance unless current == "-"
           end
-          expect(":") if current == ":"
-          return
+          if consume(":")
+            flags.each { |flag| update_option(flag, add) }
+            return true
+          end
+          if consume(")")
+            flags.each { |flag| update_option(flag, add) }
+            return :global
+          end
+          raise_syntax("invalid inline option group")
         end
         if peek_prefix("=") || peek_prefix("!") || peek_prefix("<=") || peek_prefix("<!")
           raise unsupported("look-around", "use followed_by: or a state instead")
@@ -154,6 +168,28 @@ module Flexr
           raise unsupported("atomic groups", "rewrite the expression as a DFA-compatible expression")
         end
         raise unsupported("unsupported group syntax", "use a non-capturing group (?:...)")
+      end
+
+      def update_option(flag, enabled)
+        bit = { "i" => ::Regexp::IGNORECASE, "m" => ::Regexp::MULTILINE, "x" => ::Regexp::EXTENDED }.fetch(flag)
+        @options = enabled ? (@options | bit) : (@options & ~bit)
+      end
+
+      def codepoint_node(codepoint)
+        return AST::CodepointRange.new(lo: codepoint, hi: codepoint, loc: nil) if (@options & ::Regexp::IGNORECASE).zero?
+
+        AST::CharClass.new(ranges: fold_ranges([[codepoint, codepoint]]), negated: false, loc: nil)
+      end
+
+      def fold_ranges(ranges)
+        values = ranges.flat_map do |lo, hi|
+          points = (lo..hi).to_a
+          points + points.filter_map do |codepoint|
+            swapped = codepoint.chr(Encoding::UTF_8).swapcase.ord
+            swapped == codepoint ? nil : swapped
+          end
+        end
+        merge_ranges(values.uniq.sort.map { |value| [value, value] })
       end
 
       def parse_class
@@ -175,7 +211,9 @@ module Flexr
         end
         expect("]")
         @class_depth -= 1
-        AST::CharClass.new(ranges: merge_ranges(ranges), negated: negated, loc: nil)
+        ranges = merge_ranges(ranges)
+        ranges = fold_ranges(ranges) if (@options & ::Regexp::IGNORECASE) != 0
+        AST::CharClass.new(ranges: ranges, negated: negated, loc: nil)
       ensure
         @class_depth -= 1 if @class_depth.positive? && current != "]"
       end
@@ -226,7 +264,7 @@ module Flexr
       def parse_escape
         @escaped_value = false
         @last_ranges = nil
-        char = advance
+        char = advance_raw
         raise_syntax("trailing backslash") unless char
         if ESCAPES.key?(char)
           @escaped_value = true
@@ -245,7 +283,11 @@ module Flexr
           @last_ranges = ranges
           return
         when "x"
-          digits = read_exact(2)
+          digits = if consume("{")
+            read_until("}")
+          else
+            read_exact(2)
+          end
           @escaped_value = true
           @last_codepoint = Integer(digits, 16)
           return
@@ -261,6 +303,9 @@ module Flexr
           return
         when "G", "K", "b", "B", "A", "z", "Z", "1", "2", "3", "4", "5", "6", "7", "8", "9"
           raise unsupported("\\#{char}", "use a state or followed_by: instead")
+        when "k"
+          read_until(">") if consume("<")
+          raise unsupported("backreferences", "split the rule into DFA-compatible states")
         else
           @escaped_value = true
           @last_codepoint = char.ord
@@ -331,6 +376,10 @@ module Flexr
 
       def advance
         skip_extended_space if (@options & ::Regexp::EXTENDED) != 0 && @class_depth.zero?
+        advance_raw
+      end
+
+      def advance_raw
         char = @source[@index]
         @index += 1 if char
         char

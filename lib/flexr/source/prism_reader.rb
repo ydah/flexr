@@ -21,6 +21,7 @@ module Flexr
         @rules = []
         @spans = []
         @states = { initial: { inclusive: true } }
+        @eof_rules = {}
         @config = { backend: :table, token_kind: :array, encoding: Encoding::UTF_8, declared_tokens: [] }
       end
 
@@ -39,12 +40,12 @@ module Flexr
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
 
-        klass = find_lexer_class(prism.value)
+        klass, class_name = find_lexer_class(prism.value)
         raise CompileError, "no class inheriting from Flexr::Lexer found" unless klass
 
         collect_constants(klass.body)
         collect_body(klass.body, [:initial])
-        class_name = source_slice(klass.constant_path)
+        @config[:eof_rules] = @eof_rules
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq { |span| span.first },
                        first_dsl_offset: @spans.map(&:first).min, constants: @constants, states: @states)
@@ -52,11 +53,28 @@ module Flexr
 
       private
 
-      def find_lexer_class(node)
-        nodes = node.respond_to?(:child_nodes) ? node.child_nodes : []
-        return node if node.class.name.end_with?("ClassNode") && lexer_superclass?(node)
+      def find_lexer_class(node, namespace = [])
+        return nil unless node && node.respond_to?(:child_nodes)
 
-        nodes.lazy.map { |child| find_lexer_class(child) }.find(&:itself)
+        kind = node.class.name.split("::").last
+        if kind == "ClassNode" || kind == "ModuleNode"
+          name = source_slice(node.constant_path)
+          current_namespace = namespace + name.to_s.split("::")
+          if kind == "ClassNode" && lexer_superclass?(node)
+            return [node, current_namespace.join("::")]
+          end
+          node.child_nodes.compact.each do |child|
+            found = find_lexer_class(child, current_namespace)
+            return found if found
+          end
+          return nil
+        end
+
+        node.child_nodes.compact.each do |child|
+          found = find_lexer_class(child, namespace)
+          return found if found
+        end
+        nil
       end
 
       def lexer_superclass?(node)
@@ -99,8 +117,11 @@ module Flexr
         when :all_states
           collect_state(node, @states.keys)
         when :on_eof
-          # EOF actions are represented by the runtime class; source generation
-          # keeps the action available for the interpreter in a later pass.
+          action_source = node.block && source_slice(node.block)
+          action = if action_source
+            action_source.start_with?("do") ? "proc #{action_source}" : "proc#{action_source}"
+          end
+          @eof_rules[states.last.to_sym] = action if action
         when :emits
           values = positional(node).map { |item| static(item) }.compact.flatten
           @config[:declared_tokens].concat(values.map(&:to_sym))
@@ -133,6 +154,10 @@ module Flexr
         values = positional(node)
         patterns = static(values.first)
         patterns = [patterns] unless patterns.is_a?(Array)
+        unless @allow_dynamic && patterns.any?(&:nil?) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) }
+          diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, or Array")
+          raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+        end
         options = keywords(node)
         action_source = node.block && source_slice(node.block)
         action = if action_source

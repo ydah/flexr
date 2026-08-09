@@ -36,10 +36,7 @@ module Flexr
       def normalize_leaf(node)
         case node
         when AST::CodepointRange
-          alternatives(casefold_ranges(node.lo, node.hi).flat_map do |lo, hi|
-            value = byte_sequences(lo, hi)
-            value.is_a?(AST::Alt) ? value.children : [value]
-          end)
+          byte_sequences_for_ranges(casefold_ranges(node.lo, node.hi))
         else
           node
         end
@@ -54,19 +51,33 @@ module Flexr
           end
         end
         ranges = complement(ranges) if node.negated
-        alternatives(ranges.flat_map { |lo, hi| byte_sequences(lo, hi) })
+        byte_sequences_for_ranges(ranges)
       end
 
-      def byte_sequences(lo, hi)
+      def byte_sequences_for_ranges(ranges)
         if @byte_mode
-          return AST::Empty.new(loc: nil) if lo > 255
-          hi = 255 if hi > 255
-          return AST::ByteRange.new(lo: lo, hi: hi, loc: nil) if lo <= hi
+          byte_ranges = ranges.filter_map do |lo, hi|
+            next if lo > 255
+
+            [lo, [hi, 255].min]
+          end
+          return AST::Empty.new(loc: nil) if byte_ranges.empty?
+
+          return alternatives(byte_ranges.map { |lo, hi| AST::ByteRange.new(lo: lo, hi: hi, loc: nil) })
         end
 
-        sequences = Unicode::Utf8Splitter.split(lo, hi)
-        alternatives(sequences.map do |sequence|
-          AST::Seq.new(children: sequence.map { |range| AST::ByteRange.new(lo: range[0], hi: range[1], loc: nil) }, loc: nil)
+        sequences = ranges.flat_map { |lo, hi| Unicode::Utf8Splitter.split(lo, hi) }
+        trie(sequences, 0)
+      end
+
+      def trie(sequences, index)
+        return AST::Empty.new(loc: nil) if sequences.empty?
+        return AST::Empty.new(loc: nil) if sequences.first.length == index
+
+        groups = sequences.group_by { |sequence| sequence[index] }
+        alternatives(groups.map do |(lo, hi), group|
+          child = trie(group, index + 1)
+          AST::Seq.new(children: [AST::ByteRange.new(lo: lo, hi: hi, loc: nil), child], loc: nil)
         end)
       end
 

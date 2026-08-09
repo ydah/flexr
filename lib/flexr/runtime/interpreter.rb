@@ -14,7 +14,7 @@ module Flexr
         data = @lexer.binary_input
         position = @lexer.byte_pos
         state = machine.dfa.start
-        best = nil
+        best = reference_match(position, data)
         cursor = position
 
         while cursor < data.bytesize
@@ -44,11 +44,32 @@ module Flexr
 
       private
 
+      def reference_match(position, data)
+        candidates = @lexer.class.__flexr_rules.filter_map do |rule|
+          next unless rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
+          next if rule.bol_only && !@lexer.beginning_of_line?
+
+          match = rule.patterns.filter_map do |pattern|
+            pattern.match(@lexer.input.byteslice(position..), 0)
+          rescue ArgumentError
+            nil
+          end.max_by { |item| item[0].bytesize }
+          next unless match && match.begin(0).zero?
+          trailing = trailing_length(rule, data, position + match[0].bytesize)
+          next if rule.trailing && trailing.nil?
+
+          Match.new(rule: rule, start_pos: position, end_pos: position + match[0].bytesize,
+                    total_end_pos: position + match[0].bytesize + (trailing || 0))
+        end
+        candidates.max_by { |candidate| [candidate.total_end_pos, -candidate.rule.index] }
+      end
+
       def trailing_length(rule, data, position)
         return 0 unless rule.trailing
 
         regexp = rule.trailing
-        match = regexp.match(data.byteslice(position..), 0)
+        segment = @lexer.input.byteslice(position..)
+        match = regexp.match(segment, 0)
         return nil unless match && match.begin(0).zero?
 
         match[0].bytesize

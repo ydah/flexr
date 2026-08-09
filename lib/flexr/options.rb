@@ -12,5 +12,22 @@ module Flexr
           max_dfa_states: 100_000, warn_level: :default, warn_as_error: false,
           color: :auto, format: :human)
     end
+
+    def validate!
+      validate_value!(backend, %i[table direct firstmatch auto], :backend)
+      validate_value!(token_kind, %i[array struct yield], :token_kind)
+      validate_value!(accel, %i[auto strscan regexp none], :accel)
+      validate_value!(table_compression, %i[none rows full], :table_compression)
+      validate_value!(table_format, %i[literal packed], :table_format)
+      self
+    end
+
+    private
+
+    def validate_value!(value, allowed, name)
+      return if allowed.include?(value)
+
+      raise ArgumentError, "unsupported #{name}: #{value.inspect}"
+    end
   end
 end

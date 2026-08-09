@@ -2,6 +2,8 @@
 
 module Flexr
   module Unicode
+    VERSION = "15.1.0"
+
     module Property
       CACHE = {}
       module_function
@@ -33,21 +35,15 @@ module Flexr
 
       def codepoint_ranges(regexp)
         ranges = []
-        start = nil
-        0.upto(0x10ffff) do |codepoint|
-          matched = begin
-            regexp.match?([codepoint].pack("U"))
-          rescue RangeError, ArgumentError
-            false
-          end
-          if matched && start.nil?
-            start = codepoint
-          elsif !matched && start
-            ranges << [start, codepoint - 1]
-            start = nil
+        scanner = ::Regexp.new("(?:#{regexp.source})+")
+        [[0, 0xd7ff], [0xe000, 0x10ffff]].each do |lower, upper|
+          segment = (lower..upper).to_a.pack("U*")
+          segment.scan(scanner) do
+            match = ::Regexp.last_match
+            range_start = lower + match.begin(0)
+            ranges << [range_start, range_start + match[0].length - 1]
           end
         end
-        ranges << [start, 0x10ffff] if start
         ranges
       end
 

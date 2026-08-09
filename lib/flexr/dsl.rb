@@ -121,6 +121,10 @@ module Flexr
 
     attr_reader :__flexr_rules, :__flexr_states, :__flexr_config, :__flexr_compiled
 
+    def __flexr_add_generated_eof(state, action)
+      @__flexr_eof_rules[state.to_sym] = action
+    end
+
     private
 
     def normalize_patterns(pattern)

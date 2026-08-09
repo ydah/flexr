@@ -43,6 +43,8 @@ module Flexr
       def compile_machine(rules)
         normalized = []
         rules.each do |rule|
+          next if reference_rule?(rule)
+
           rule.patterns.each do |pattern|
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
             parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding)
@@ -54,9 +56,19 @@ module Flexr
             normalized << [normalized_ast, rule.index]
           end
         end
+        return empty_dfa if normalized.empty?
+
         nfa = NFABuilder.new.build(normalized)
         ec, class_count = nfa.byte_classes.build
         subset_construction(nfa, ec, class_count)
+      end
+
+      def reference_rule?(rule)
+        rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
+      end
+
+      def empty_dfa
+        DFA.new(transitions: [[nil]], accepts: [[]], ec: Array.new(256, 0), class_count: 1, start: 0, rule_ids: [])
       end
 
       def strip_anchors(ast)
@@ -76,6 +88,8 @@ module Flexr
       end
 
       def subset_construction(nfa, ec, class_count)
+        representatives = Array.new(class_count)
+        ec.each_with_index { |class_id, byte| representatives[class_id] ||= byte }
         start_set = epsilon_closure(nfa, 1 << nfa.start)
         sets = [start_set]
         ids = { start_set => 0 }
@@ -89,7 +103,7 @@ module Flexr
           transitions[state_id] ||= Array.new(class_count)
           accepts[state_id] = accepting_rules(nfa, set)
           class_count.times do |class_id|
-            moved = move(nfa, set, ec, class_id)
+            moved = move(nfa, set, representatives[class_id])
             next if moved.zero?
             closure = epsilon_closure(nfa, moved)
             destination = ids[closure]
@@ -104,8 +118,9 @@ module Flexr
           end
         end
         transitions.each { |row| row.map! { |value| value } }
-        DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: class_count, start: 0,
-                rule_ids: accepts.flatten.uniq.sort)
+        dfa = DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: class_count, start: 0,
+                      rule_ids: accepts.flatten.uniq.sort)
+        Minimizer.minimize(dfa)
       end
 
       def epsilon_closure(nfa, set)
@@ -124,22 +139,18 @@ module Flexr
         closure
       end
 
-      def move(nfa, set, ec, class_id)
+      def move(nfa, set, byte)
         moved = 0
         nfa.states.each_index do |state|
           next if (set & (1 << state)).zero?
 
           nfa.states[state].transitions.each do |transition|
-            next unless transition_class?(transition, ec, class_id)
+            next unless transition.lo <= byte && byte <= transition.hi
 
             moved |= 1 << transition.to
           end
         end
         moved
-      end
-
-      def transition_class?(transition, ec, class_id)
-        transition.lo.upto(transition.hi).any? { |byte| ec[byte] == class_id }
       end
 
       def accepting_rules(nfa, set)
@@ -158,6 +169,7 @@ module Flexr
             raise CompileError, "rule #{rule.index} has no pattern"
           end
           regexp = rule.patterns.first
+          regexp = ::Regexp.new(::Regexp.escape(regexp)) if regexp.is_a?(String)
           next unless regexp.is_a?(::Regexp) && regexp.match?("")
           next if @spec.options[:allow_empty_match]
 
