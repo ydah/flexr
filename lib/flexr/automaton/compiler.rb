@@ -43,7 +43,10 @@ module Flexr
       def compile_machine(rules)
         normalized = []
         rules.each do |rule|
-          next if reference_rule?(rule)
+          if reference_rule?(rule)
+            validate_reference_patterns(rule)
+            next
+          end
 
           rule.patterns.each do |pattern|
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
@@ -65,6 +68,17 @@ module Flexr
 
       def reference_rule?(rule)
         rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
+      end
+
+      def validate_reference_patterns(rule)
+        rule.patterns.each do |pattern|
+          regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
+          parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding)
+          ast = parser.parse
+          _body, bol_only, end_anchor = strip_anchors(ast)
+          rule.bol_only = true if bol_only
+          rule.end_anchor = true if end_anchor
+        end
       end
 
       def empty_dfa

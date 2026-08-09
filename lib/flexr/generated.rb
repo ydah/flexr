@@ -25,6 +25,30 @@ module Flexr
       end
       klass
     end
+
+    def install_compiled!(klass, payload)
+      install!(klass, payload)
+      machines = payload.fetch(:compiled).fetch(:machines).transform_values do |machine|
+        dfa_data = machine.fetch(:dfa)
+        dfa = Automaton::DFA.new(
+          transitions: dfa_data.fetch(:transitions),
+          accepts: dfa_data.fetch(:accepts),
+          ec: dfa_data.fetch(:ec),
+          class_count: dfa_data.fetch(:class_count),
+          start: dfa_data.fetch(:start),
+          rule_ids: dfa_data.fetch(:rule_ids)
+        )
+        Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym)
+      end
+      compiled = Automaton::CompiledSpec.new(
+        machines: machines,
+        rules: klass.__flexr_rules,
+        states: payload.fetch(:compiled).fetch(:states).map(&:to_sym),
+        stats: payload.fetch(:compiled).fetch(:stats)
+      )
+      klass.__flexr_set_compiled!(compiled)
+      klass
+    end
   end
 
   module DSL

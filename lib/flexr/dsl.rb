@@ -125,6 +125,10 @@ module Flexr
       @__flexr_eof_rules[state.to_sym] = action
     end
 
+    def __flexr_set_compiled!(compiled)
+      @__flexr_compiled = compiled
+    end
+
     private
 
     def normalize_patterns(pattern)

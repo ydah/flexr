@@ -2,49 +2,29 @@
 
 module Flexr
   module Unicode
-    VERSION = "15.1.0"
+    VERSION = Data::VERSION
 
     module Property
+      ALIASES = {
+        "L" => "L", "Letter" => "L", "N" => "N", "Number" => "N", "Nd" => "Nd",
+        "Hiragana" => "Hiragana", "Greek" => "Greek", "ASCII" => "ASCII",
+        "Alnum" => "Alnum", "Word" => "Word", "Space" => "Space", "XDigit" => "XDigit",
+        "Cntrl" => "Cntrl", "Lower" => "Lowercase", "Lowercase" => "Lowercase",
+        "Upper" => "Uppercase", "Uppercase" => "Uppercase"
+      }.freeze
       CACHE = {}
       module_function
 
       def ranges(name, negate: false)
-        key = [name, negate]
+        key = [name.to_s, negate]
         return CACHE[key] if CACHE.key?(key)
 
-        regexp = property_regexp(name)
-        ranges = codepoint_ranges(regexp)
-        ranges = complement(ranges) if negate
-        CACHE[key] = ranges.freeze
-      end
-
-      def property_regexp(name)
-        normalized = name.to_s
-        normalized = normalized[0] if normalized.length == 1
-        normalized = {
-          "L" => "L", "Letter" => "L", "N" => "N", "Number" => "N",
-          "Nd" => "Nd", "Hiragana" => "Hiragana", "Greek" => "Greek",
-          "ASCII" => "ASCII", "Alnum" => "Alnum", "Word" => "Word",
-          "Space" => "Space", "XDigit" => "XDigit", "Cntrl" => "Cntrl",
-          "Lower" => "Lowercase", "Upper" => "Uppercase"
-        }.fetch(normalized, normalized)
-        ::Regexp.new("\\p{#{normalized}}")
-      rescue RegexpError
-        raise CompileError, "unknown Unicode property: #{name}"
-      end
-
-      def codepoint_ranges(regexp)
-        ranges = []
-        scanner = ::Regexp.new("(?:#{regexp.source})+")
-        [[0, 0xd7ff], [0xe000, 0x10ffff]].each do |lower, upper|
-          segment = (lower..upper).to_a.pack("U*")
-          segment.scan(scanner) do
-            match = ::Regexp.last_match
-            range_start = lower + match.begin(0)
-            ranges << [range_start, range_start + match[0].length - 1]
-          end
+        canonical = ALIASES.fetch(name.to_s, name.to_s)
+        ranges = Data::PROPERTIES.fetch(canonical) do
+          raise CompileError, "unknown Unicode property: #{name}"
         end
-        ranges
+        ranges = complement(ranges) if negate
+        CACHE[key] = ranges.map(&:dup).freeze
       end
 
       def complement(ranges)
