@@ -26,6 +26,7 @@ module Flexr
       def parse
         node = parse_expression
         raise_syntax("unexpected `#{current}`") unless eof?
+        validate_anchor_positions(node)
         node
       end
 
@@ -79,7 +80,12 @@ module Flexr
         expect("}")
         raise_syntax("invalid repetition") if min.nil? || (!max.nil? && max < min)
         raise_syntax("open repetition is not supported") if max.nil?
-        raise diagnostic("FLEXR-E007", "repetition limit exceeds 1000") if max > 1000
+        if max > 1000
+          raise_diagnostic(
+            diagnostic("FLEXR-E007", "repetition limit exceeds 1000",
+                       help: "split the rule or use a smaller bounded repetition")
+          )
+        end
         reject_postfix_quantifier
 
         required = Array.new(min) { atom }
@@ -327,12 +333,53 @@ module Flexr
 
       def parse_anchor
         char = advance
-        if char == "^"
-          raise diagnostic("FLEXR-E009", "^ is only valid at the beginning of a pattern") unless @index == 1
-          return AST::Anchor.new(kind: :bol, loc: nil)
-        end
-        raise diagnostic("FLEXR-E009", "$ is only valid at the end of a pattern") unless eof? || current == ")"
+        return AST::Anchor.new(kind: :bol, loc: nil) if char == "^"
+
         AST::Anchor.new(kind: :eol, loc: nil)
+      end
+
+      def validate_anchor_positions(node)
+        anchors = anchor_nodes(node)
+        return if anchors.empty?
+
+        sequence = flatten_sequence(node)
+        allowed = [sequence.first, sequence.last].compact
+        boundaries_valid = if sequence.length == 1 && sequence.first.is_a?(AST::Anchor)
+          %i[bol eol].include?(sequence.first.kind)
+        else
+          (!sequence.first.is_a?(AST::Anchor) || sequence.first.kind == :bol) &&
+            (!sequence.last.is_a?(AST::Anchor) || sequence.last.kind == :eol)
+        end
+        valid = !anchor_nested_in_alternative?(node) && anchors.all? { |anchor| allowed.include?(anchor) } && boundaries_valid
+        return if valid
+
+        raise_diagnostic(
+          diagnostic("FLEXR-E009", "anchors are only valid at the outermost pattern boundaries",
+                     help: "split alternatives into separate rules or move ^/$ outside the alternation")
+        )
+      end
+
+      def flatten_sequence(node)
+        return [] if node.is_a?(AST::Empty)
+        return node.children.flat_map { |child| flatten_sequence(child) } if node.is_a?(AST::Seq)
+
+        [node]
+      end
+
+      def anchor_nodes(node)
+        return [node] if node.is_a?(AST::Anchor)
+        return anchor_nodes(node.child) if node.is_a?(AST::Star)
+        return [] unless node.respond_to?(:children)
+
+        node.children.flat_map { |child| anchor_nodes(child) }
+      end
+
+      def anchor_nested_in_alternative?(node)
+        return node.children.any? { |child| anchor_nodes(child).any? } if node.is_a?(AST::Alt)
+        return anchor_nested_in_alternative?(node.child) if node.is_a?(AST::Star)
+        return false unless node.respond_to?(:children)
+
+        node.children.any? { |child| anchor_nested_in_alternative?(child) }
       end
 
       def warn_capture
@@ -418,8 +465,12 @@ module Flexr
         @index >= @source.length
       end
 
-      def diagnostic(code, message)
-        Diagnostics.error(code, message)
+      def diagnostic(code, message, help: nil)
+        Diagnostics.error(code, message, help: help)
+      end
+
+      def raise_diagnostic(diagnostic)
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
 
       def raise_syntax(message)

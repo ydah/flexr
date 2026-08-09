@@ -19,6 +19,26 @@ class RuntimeChunkedInput
 end
 
 RSpec.describe "Flexr runtime" do
+  it "accepts a literal followed_by context" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/a/, followed_by: "b") { emit :A }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer_class.new("ab").tokens).to eq([[:A, "a"], [:OTHER, "b"]])
+  end
+
+  it "reports UTF-8 columns in characters" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      rule(/./) { emit :CHAR }
+    end
+
+    locations = lexer_class.new("あa").tokens.map(&:location)
+    expect(locations.map { |location| [location.column_begin, location.column_end] })
+      .to eq([[1, 2], [2, 3]])
+  end
+
   it "joins matches after more into the next token text" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/"/) do

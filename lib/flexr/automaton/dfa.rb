@@ -28,10 +28,16 @@ module Flexr
         class_id = @ec[byte]
         return @transitions[state][class_id] unless @packed
 
-        index = @packed.fetch(:base).fetch(state) + class_id
-        return @packed.fetch(:default).fetch(state) unless @packed.fetch(:check)[index] == state
+        cursor = state
+        loop do
+          index = @packed.fetch(:base).fetch(cursor) + class_id
+          return @packed.fetch(:next).fetch(index) if @packed.fetch(:check)[index] == cursor
 
-        @packed.fetch(:next).fetch(index)
+          fallback = @packed[:fallback]&.fetch(cursor)
+          return @packed.fetch(:default).fetch(cursor) unless fallback
+
+          cursor = fallback
+        end
       end
 
       # Generated direct lexers use a flattened dispatch representation. The

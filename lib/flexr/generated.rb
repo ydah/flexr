@@ -71,7 +71,8 @@ module Flexr
         base: decode_array(packed.fetch(:base)),
         default: decode_array(packed.fetch(:default), nil_value: -1),
         next: decode_array(packed.fetch(:next), nil_value: -1),
-        check: decode_array(packed.fetch(:check), nil_value: -1)
+        check: decode_array(packed.fetch(:check), nil_value: -1),
+        fallback: packed.key?(:fallback) ? decode_array(packed.fetch(:fallback), nil_value: -1) : nil
       }
     end
 
@@ -87,10 +88,16 @@ module Flexr
 
       Array.new(state_count) do |state|
         Array.new(class_count) do |class_id|
-          index = packed.fetch(:base).fetch(state) + class_id
-          next packed.fetch(:default).fetch(state) unless packed.fetch(:check)[index] == state
+          cursor = state
+          loop do
+            index = packed.fetch(:base).fetch(cursor) + class_id
+            break packed.fetch(:next).fetch(index) if packed.fetch(:check)[index] == cursor
 
-          packed.fetch(:next).fetch(index)
+            fallback = packed[:fallback]&.fetch(cursor)
+            break packed.fetch(:default).fetch(cursor) unless fallback
+
+            cursor = fallback
+          end
         end
       end
     end
@@ -101,9 +108,10 @@ module Flexr
       action = definition.fetch(:action)
       @__flexr_rules << IR::Rule.new(
         index: definition.fetch(:index), patterns: Array(definition.fetch(:patterns)),
-        trailing: definition[:trailing], action: action,
+        trailing: normalize_trailing(definition[:trailing]), action: action,
         states: Array(definition.fetch(:states)).map(&:to_sym),
         bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
+        location: definition[:span] || definition[:location],
         pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
           next unless condition
 

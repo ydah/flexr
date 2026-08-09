@@ -324,9 +324,14 @@ module Flexr
     end
 
     def column_at(position)
-      prefix = @buffer.byteslice(0...position).to_s.b
+      prefix = @buffer.byteslice(0...position).to_s
       last_newline = prefix.rindex("\n")
-      position - (last_newline ? last_newline + 1 : 0) + 1
+      line_prefix = prefix.byteslice((last_newline ? last_newline + 1 : 0)..).to_s
+      if utf8_input? && line_prefix.dup.force_encoding(Encoding::UTF_8).valid_encoding?
+        line_prefix.force_encoding(Encoding::UTF_8).length + 1
+      else
+        line_prefix.bytesize + 1
+      end
     end
   end
 end

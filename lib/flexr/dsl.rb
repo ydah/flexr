@@ -3,6 +3,7 @@
 module Flexr
   module DSL
     DSL_METHODS = %i[rule state all_states on_eof emits backend token_kind encoding option accel].freeze
+    AUTO_DIRECT_CELL_THRESHOLD = 100_000
 
     def inherited(child)
       super
@@ -33,7 +34,7 @@ module Flexr
       end
       states = @__flexr_state_stack.empty? ? [:initial] : @__flexr_state_stack.dup
       @__flexr_rules << IR::Rule.new(
-        index: @__flexr_rules.length, patterns: patterns, trailing: followed_by,
+        index: @__flexr_rules.length, patterns: patterns, trailing: normalize_trailing(followed_by),
         action: rule_action, states: states, bol_only: false, end_anchor: nil
       )
       nil
@@ -99,7 +100,11 @@ module Flexr
       @__flexr_compile_mutex.synchronize do
         # The ivar is part of the generated/runtime class contract.
         # rubocop:disable Naming/MemoizedInstanceVariableName
-        @__flexr_compiled ||= Automaton::Compiler.new(__flexr_spec).compile
+        @__flexr_compiled ||= begin
+          compiled = Automaton::Compiler.new(__flexr_spec).compile
+          @__flexr_config.backend = auto_direct?(compiled) ? :direct : :table if @__flexr_config.backend == :auto
+          compiled
+        end
         # rubocop:enable Naming/MemoizedInstanceVariableName
       end
     end
@@ -146,6 +151,23 @@ module Flexr
         end
       end
       values
+    end
+
+    def normalize_trailing(value)
+      case value
+      when nil, ::Regexp
+        value
+      when String
+        ::Regexp.new(::Regexp.escape(value))
+      else
+        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp or String")
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+      end
+    end
+
+    def auto_direct?(compiled)
+      cells = compiled.stats.values.map { |stats| stats[:states] * stats[:classes] }.max.to_i
+      cells > AUTO_DIRECT_CELL_THRESHOLD
     end
   end
 end

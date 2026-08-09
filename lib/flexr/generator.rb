@@ -43,6 +43,8 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n#{indent}"
+      install = "Flexr::Generated.install_compiled!(self, #{payload})\n#{Codegen::Direct.new(compiled).source(indent: indent)}#{indent}" if
+        effective_backend(parsed) == :direct
       result = Source::Passthrough.remove_spans(parsed.source, parsed.dsl_spans, insertion: parsed.first_dsl_offset, payload: install)
       result = result.gsub(/^\s*require ["']flexr["']\s*\n/, "") if standalone?(parsed)
       digest = Digest::SHA256.hexdigest(payload)
@@ -51,8 +53,9 @@ module Flexr
         "# source: #{parsed.path}",
         "# spec-digest: sha256:#{digest}",
         "# unicode: #{Unicode::VERSION}",
-        "# backend: #{@options.fetch(:backend, parsed.config[:backend])}",
+        "# backend: #{effective_backend(parsed)}",
         "# compiled: true",
+        "# eval: #{@eval_mode}",
         "# standalone: #{standalone?(parsed)}"
       ].join("\n")
       prefix = standalone?(parsed) ? "require \"json\"\n#{embedded_runtime}\n" : ""
@@ -69,7 +72,7 @@ module Flexr
           "bol_only: #{rule.bol_only.inspect}, end_anchor: #{rule.end_anchor.inspect} }"
       end
       "{ rules: [#{definitions.join(', ')}], " \
-        "backend: #{@options.fetch(:backend, parsed.config[:backend]).inspect}, " \
+        "backend: #{effective_backend(parsed).inspect}, " \
         "token_kind: #{@options.fetch(:token_kind, parsed.config[:token_kind]).inspect}, " \
         "encoding: #{encoding_expression(parsed.config[:encoding])}, " \
         "declared_tokens: #{parsed.config[:declared_tokens].inspect}, " \
@@ -78,7 +81,7 @@ module Flexr
         "states: #{parsed.states.keys.reject { |name| name == :initial }.inspect}, " \
         "inclusive_states: #{parsed.states.transform_values { |value| value[:inclusive] }.inspect}, " \
         "compiled: #{compiled_expression(compiled, compression: table_compression(parsed),
-                                         backend: @options.fetch(:backend, parsed.config[:backend]).to_sym)} }"
+                                         backend: effective_backend(parsed))} }"
     end
 
     def compile_parsed(parsed)
@@ -86,7 +89,7 @@ module Flexr
         [name.to_sym, IR::State.new(name: name.to_sym, inclusive: value[:inclusive], id: index)]
       end
       rules = parsed.rules.map do |rule|
-        IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: rule.trailing,
+        IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),
                      action: rule.action, states: rule.states, bol_only: rule.bol_only,
                      end_anchor: rule.end_anchor, location: rule.span)
       end
@@ -100,11 +103,36 @@ module Flexr
       )
       compiled = Automaton::Compiler.new(spec).compile
       validate_firstmatch_equivalence!(spec, compiled) if spec.backend == :firstmatch
+      @resolved_backend = resolve_backend(spec.backend, compiled)
       parsed.rules.each do |rule|
         compiled_rule = spec.rules.fetch(rule.index)
         rule.pattern_conditions = compiled_rule.pattern_conditions
       end
       compiled
+    end
+
+    def effective_backend(parsed)
+      @resolved_backend || resolve_backend(@options.fetch(:backend, parsed.config[:backend]).to_sym, nil)
+    end
+
+    def resolve_backend(requested, compiled)
+      return requested unless requested == :auto
+      return :table unless compiled
+
+      cells = compiled.stats.values.map { |stats| stats[:states] * stats[:classes] }.max.to_i
+      cells > DSL::AUTO_DIRECT_CELL_THRESHOLD ? :direct : :table
+    end
+
+    def normalize_trailing(value)
+      case value
+      when nil, ::Regexp
+        value
+      when String
+        ::Regexp.new(::Regexp.escape(value))
+      else
+        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp or String")
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+      end
     end
 
     def validate_firstmatch_equivalence!(spec, compiled)
@@ -171,7 +199,7 @@ module Flexr
         }
         pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
         if pack_tables
-          packed = Codegen::TablePacker.pack(dfa.transitions)
+          packed = Codegen::TablePacker.pack(dfa.transitions, compression: compression)
           data[:packed] = if @options.fetch(:table_format, :literal).to_sym == :packed
             Codegen::TablePacker.encode(packed)
           else

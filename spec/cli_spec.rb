@@ -82,4 +82,22 @@ RSpec.describe Flexr::CLI do
   ensure
     FileUtils.rm_f(path)
   end
+
+  it "reports undeclared emit tokens during check" do
+    path = File.join(Dir.tmpdir, "flexr-undeclared-#{Process.pid}.flexr.rb")
+    File.write(path, <<~RUBY)
+      require "flexr"
+      class UndeclaredLexer < Flexr::Lexer
+        emits :A
+        rule(/a/) { emit :B }
+      end
+    RUBY
+
+    status, output, errors = run_cli("check", path, "--format", "json", "--warn", "all")
+    expect(status).to eq(0)
+    expect(JSON.parse(output).map { |item| item.fetch("code") }).to include("FLEXR-W014")
+    expect(errors).to be_empty
+  ensure
+    FileUtils.rm_f(path)
+  end
 end

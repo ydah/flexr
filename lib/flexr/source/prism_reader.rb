@@ -56,31 +56,40 @@ module Flexr
       private
 
       def find_lexer_class(node, namespace = [])
-        return nil unless node.respond_to?(:child_nodes)
+        candidates = lexer_class_candidates(node, namespace)
+        candidates.find { |candidate, _name| lexer_has_dsl?(candidate.body) } || candidates.first
+      end
+
+      def lexer_class_candidates(node, namespace = [])
+        return [] unless node.respond_to?(:child_nodes)
 
         kind = node.class.name.split("::").last
         if %w[ClassNode ModuleNode].include?(kind)
           name = source_slice(node.constant_path)
           current_namespace = namespace + name.to_s.split("::")
-          return [node, current_namespace.join("::")] if kind == "ClassNode" && lexer_superclass?(node)
-          node.child_nodes.compact.each do |child|
-            found = find_lexer_class(child, current_namespace)
-            return found if found
+          own = if kind == "ClassNode" && lexer_superclass?(node)
+            [[node, current_namespace.join("::")]]
+          else
+            []
           end
-          return nil
+          return own + node.child_nodes.compact.flat_map { |child| lexer_class_candidates(child, current_namespace) }
         end
 
-        node.child_nodes.compact.each do |child|
-          found = find_lexer_class(child, namespace)
-          return found if found
+        node.child_nodes.compact.flat_map { |child| lexer_class_candidates(child, namespace) }
+      end
+
+      def lexer_has_dsl?(node)
+        found = false
+        each_node(node) do |child|
+          found = true if child.class.name.end_with?("CallNode") && child.receiver.nil? && DSL_NAMES.include?(child.name.to_sym)
         end
-        nil
+        found
       end
 
       def lexer_superclass?(node)
         return false unless node.superclass
 
-        source_slice(node.superclass).delete(" ") == "Flexr::Lexer"
+        source_slice(node.superclass).delete(" ").sub(/\A::/, "") == "Flexr::Lexer"
       end
 
       def collect_constants(node)

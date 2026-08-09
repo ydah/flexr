@@ -20,12 +20,12 @@ module Flexr
         return CACHE[key] if CACHE.key?(key)
 
         parser = Regexp::Parser.new(pattern.source, options: pattern.options, encoding: encoding, unicode: unicode)
-        source = source_for(parser.parse)
+        source = source_for(parser.parse, ignorecase: pattern.options.anybits?(::Regexp::IGNORECASE))
         regexp_options = options & ~::Regexp::IGNORECASE
         CACHE[key] = ::Regexp.new(source, regexp_options).freeze
       end
 
-      def source_for(node)
+      def source_for(node, ignorecase: false)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor then ""
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
@@ -33,16 +33,19 @@ module Flexr
         when Regexp::AST::CharClass
           ranges = node.ranges.flat_map do |range|
             if range.first == Regexp::AST::Property
-              Unicode::Property.ranges(range[2], negate: range[1])
+              property_ranges = Unicode::Property.ranges(range[2])
+              property_ranges = casefold_ranges(property_ranges) if ignorecase
+              range[1] ? complement(property_ranges) : property_ranges
             else
               [range]
             end
           end
           ranges = complement(ranges) if node.negated
           codepoint_class(ranges)
-        when Regexp::AST::Seq then node.children.map { |child| source_for(child) }.join
-        when Regexp::AST::Alt then "(?:#{node.children.map { |child| source_for(child) }.join('|')})"
-        when Regexp::AST::Star then "(?:#{source_for(node.child)})*"
+        when Regexp::AST::Seq then node.children.map { |child| source_for(child, ignorecase: ignorecase) }.join
+        when Regexp::AST::Alt
+          "(?:#{node.children.map { |child| source_for(child, ignorecase: ignorecase) }.join('|')})"
+        when Regexp::AST::Star then "(?:#{source_for(node.child, ignorecase: ignorecase)})*"
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"
         end
@@ -75,6 +78,10 @@ module Flexr
         end
         result << [cursor, 0x10ffff] if cursor <= 0x10ffff
         result
+      end
+
+      def casefold_ranges(ranges)
+        CaseFold.merge(ranges.flat_map { |lo, hi| CaseFold.ranges(lo, hi) })
       end
     end
   end

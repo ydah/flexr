@@ -107,11 +107,28 @@ RSpec.describe Flexr do
     expect(lexer_class.new("A").tokens).to eq([[:X, "A"]])
   end
 
+  it "preserves anchors around global inline options" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/(?i)^a$/) { emit :A }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer_class.new("a").tokens).to eq([[:A, "a"]])
+    expect(lexer_class.new("A").tokens).to eq([[:A, "A"]])
+  end
+
   it "provides diagnostics for unsupported regexp features" do
     expect { Flexr::Regexp::Parser.new("a(?=b)").parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
       expect(error.diagnostic.code).to eq("FLEXR-E014")
       expect(error.diagnostic.help).to include("followed_by")
     end
+  end
+
+  it "reports parser limit and anchor diagnostics as compile errors" do
+    expect { Flexr::Regexp::Parser.new("a{1001}").parse }
+      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E007") }
+    expect { Flexr::Regexp::Parser.new("a^b").parse }
+      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E009") }
   end
 
   it "parses public patterns and rejects malformed regexp sources" do
@@ -171,6 +188,19 @@ RSpec.describe Flexr do
     FileUtils.rm_f(output) if output
   end
 
+  it "loads full compressed generated tables from Base64" do
+    path = File.expand_path("fixtures/generated.flexr.rb", __dir__)
+    output = File.join(Dir.tmpdir, "flexr-compressed-full-packed-#{Process.pid}.rb")
+    generated = Flexr::Generator.new(path, output: output,
+                                     options: { table_compression: :full, table_format: :packed }).generate
+
+    expect(generated).to include("encoding: :base64", "fallback:")
+    load output
+    expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])
+  ensure
+    FileUtils.rm_f(output) if output
+  end
+
   it "loads the direct dispatch representation for generated direct lexers" do
     spec = File.join(Dir.tmpdir, "flexr-direct-#{Process.pid}.flexr.rb")
     output = File.join(Dir.tmpdir, "flexr-direct-#{Process.pid}.rb")
@@ -178,17 +208,21 @@ RSpec.describe Flexr do
       require "flexr"
       class GeneratedDirectFixture < Flexr::Lexer
         backend :direct
+        rule(/</) { push :number; skip }
         rule(/[a-z]+/) { emit :WORD }
+        state :number do
+          rule(/[0-9]+/) { pop; emit :NUMBER }
+        end
       end
     RUBY
 
     generated = Flexr::Generator.new(spec, output: output).generate
 
-    expect(generated).to include("dispatch: :case")
+    expect(generated).to include("dispatch: :case", "case class_id")
     load output
     dfa = GeneratedDirectFixture.compile!.machines.fetch(:initial).dfa
     expect(dfa.direct).not_to be_nil
-    expect(GeneratedDirectFixture.new("abc").tokens).to eq([[:WORD, "abc"]])
+    expect(GeneratedDirectFixture.new("abc<123").tokens).to eq([[:WORD, "abc"], [:NUMBER, "123"]])
   ensure
     FileUtils.rm_f(spec) if spec
     FileUtils.rm_f(output) if output
@@ -251,6 +285,15 @@ RSpec.describe Flexr do
 
     latin = Class.new(Flexr::Lexer) { rule(/\p{Latin}+/) { emit :LATIN } }
     expect(latin.new("abc").tokens).to eq([[:LATIN, "abc"]])
+  end
+
+  it "case-folds Unicode properties in reference rules" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/\p{Lu}/i) { emit :LETTER }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer_class.new("aA1").tokens).to eq([[:LETTER, "a"], [:LETTER, "A"], [:OTHER, "1"]])
   end
 
   it "splits singleton Unicode codepoints without admitting surrogates" do

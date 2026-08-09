@@ -98,6 +98,8 @@ module Flexr
 
       def strip_anchors(ast)
         children = ast.is_a?(Regexp::AST::Seq) ? ast.children.dup : [ast]
+        children.shift while children.first.is_a?(Regexp::AST::Empty)
+        children.pop while children.last.is_a?(Regexp::AST::Empty)
         bol_only = children.first.is_a?(Regexp::AST::Anchor) && children.first.kind == :bol
         end_anchor = children.last.is_a?(Regexp::AST::Anchor) && children.last.kind == :eol
         children.shift if bol_only

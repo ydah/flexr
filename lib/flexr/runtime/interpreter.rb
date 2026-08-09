@@ -210,24 +210,24 @@ module Flexr
       def minimum_match_bytes(pattern)
         ast = Regexp::Parser.new(pattern.source, options: pattern.options,
                                  encoding: pattern.encoding, unicode: true).parse
-        minimum_ast_bytes(ast)
+        minimum_ast_bytes(ast, ignorecase: pattern.options.anybits?(::Regexp::IGNORECASE))
       rescue CompileError, RegexpError
         1
       end
 
-      def minimum_ast_bytes(node)
+      def minimum_ast_bytes(node, ignorecase: false)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor then 0
         when Regexp::AST::ByteRange then 1
         when Regexp::AST::CodepointRange then utf8_length(node.lo)
         when Regexp::AST::CharClass
           ranges = node.ranges.flat_map do |range|
-            range.first == Regexp::AST::Property ? Unicode::Property.ranges(range[2], negate: range[1]) : [range]
+            range.first == Regexp::AST::Property ? property_ranges(range, ignorecase: ignorecase) : [range]
           end
           ranges = complement_codepoint_ranges(ranges) if node.negated
           ranges.map { |lo, _hi| utf8_length(lo) }.min || 1
-        when Regexp::AST::Seq then node.children.sum { |child| minimum_ast_bytes(child) }
-        when Regexp::AST::Alt then node.children.map { |child| minimum_ast_bytes(child) }.min || 0
+        when Regexp::AST::Seq then node.children.sum { |child| minimum_ast_bytes(child, ignorecase: ignorecase) }
+        when Regexp::AST::Alt then node.children.map { |child| minimum_ast_bytes(child, ignorecase: ignorecase) }.min || 0
         else minimum_unknown_bytes(node)
         end
       end
@@ -259,7 +259,7 @@ module Flexr
             .map { |value| [value, value] }
         when Regexp::AST::CharClass
           ranges = node.ranges.flat_map do |range|
-            range.first == Regexp::AST::Property ? Unicode::Property.ranges(range[2], negate: range[1]) : [range]
+            range.first == Regexp::AST::Property ? property_ranges(range, ignorecase: options.anybits?(::Regexp::IGNORECASE)) : [range]
           end
           ranges = complement_codepoint_ranges(ranges) if node.negated
           return ranges if binary
@@ -314,6 +314,12 @@ module Flexr
         result
       end
 
+      def property_ranges(range, ignorecase:)
+        ranges = Unicode::Property.ranges(range[2])
+        ranges = Unicode::CaseFold.merge(ranges.flat_map { |lo, hi| Unicode::CaseFold.ranges(lo, hi) }) if ignorecase
+        range[1] ? complement_codepoint_ranges(ranges) : ranges
+      end
+
       def consider_acceptances(machine, state, cursor, position, buffer, best)
         machine.dfa.accepts[state].each do |acceptance|
           candidate = @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
@@ -360,6 +366,10 @@ module Flexr
       end
 
       def transition(dfa, state, byte)
+        if @lexer.class.__flexr_config.backend == :direct &&
+            @lexer.class.respond_to?(:__flexr_generated_direct_transition)
+          return @lexer.class.__flexr_generated_direct_transition(@lexer.state, state, byte)
+        end
         return dfa.transition_direct(state, byte) if @lexer.class.__flexr_config.backend == :direct
 
         dfa.transition(state, byte)

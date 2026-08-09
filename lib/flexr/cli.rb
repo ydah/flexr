@@ -241,6 +241,7 @@ module Flexr
       klass.backend(overrides.fetch(:backend, config.fetch(:backend, :table)))
       klass.token_kind(overrides.fetch(:token_kind, config.fetch(:token_kind, :array)))
       klass.encoding(config.fetch(:encoding, Encoding::UTF_8))
+      Array(config[:declared_tokens]).each { |token| klass.emits(token) }
       config_options = config.fetch(:options, {}).merge(overrides.slice(:experimental, :allow_empty_match))
       config_options.each do |name, value|
         value ? klass.option(name) : nil
@@ -253,7 +254,7 @@ module Flexr
 
         klass.state(name, inclusive: value[:inclusive]) { nil }
       end
-      parsed.rules.each { |rule| klass.__flexr_add_generated_rule(rule.to_h.merge(action: :skip)) }
+      parsed.rules.each { |rule| klass.__flexr_add_generated_rule(rule.to_h) }
       klass.compile!
     end
 
