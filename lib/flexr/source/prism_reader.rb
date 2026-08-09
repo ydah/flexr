@@ -30,8 +30,8 @@ module Flexr
         prism = begin
           require "prism"
           Prism.parse(@source)
-        rescue LoadError => error
-          diagnostic = Diagnostics.error("FLEXR-E019", "Prism is required for source generation", note: error.message)
+        rescue LoadError => e
+          diagnostic = Diagnostics.error("FLEXR-E019", "Prism is required for source generation", note: e.message)
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
         unless prism.errors.empty?
@@ -48,22 +48,20 @@ module Flexr
         first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
-                       config: @config, dsl_spans: @spans.uniq { |span| span.first },
+                       config: @config, dsl_spans: @spans.uniq(&:first),
                        first_dsl_offset: first_dsl_offset, constants: @constants, states: @states)
       end
 
       private
 
       def find_lexer_class(node, namespace = [])
-        return nil unless node && node.respond_to?(:child_nodes)
+        return nil unless node.respond_to?(:child_nodes)
 
         kind = node.class.name.split("::").last
-        if kind == "ClassNode" || kind == "ModuleNode"
+        if %w[ClassNode ModuleNode].include?(kind)
           name = source_slice(node.constant_path)
           current_namespace = namespace + name.to_s.split("::")
-          if kind == "ClassNode" && lexer_superclass?(node)
-            return [node, current_namespace.join("::")]
-          end
+          return [node, current_namespace.join("::")] if kind == "ClassNode" && lexer_superclass?(node)
           node.child_nodes.compact.each do |child|
             found = find_lexer_class(child, current_namespace)
             return found if found
@@ -106,9 +104,7 @@ module Flexr
         return if node.receiver
 
         name = node.name.to_sym
-        unless DSL_NAMES.include?(name)
-          return
-        end
+        return unless DSL_NAMES.include?(name)
         @spans << [node.location.start_offset, node.location.end_offset]
         case name
         when :rule
@@ -155,7 +151,7 @@ module Flexr
         values = positional(node)
         patterns = static(values.first)
         patterns = [patterns] unless patterns.is_a?(Array)
-        unless @allow_dynamic && patterns.any?(&:nil?) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) }
+        unless (@allow_dynamic && patterns.any?(&:nil?)) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) }
           diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, or Array")
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end

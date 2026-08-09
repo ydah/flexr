@@ -128,9 +128,7 @@ module Flexr
             unless destination
               destination = sets.length
               limit = @spec.options.fetch(:max_dfa_states, 100_000)
-              if destination >= limit
-                raise CompileError.new("DFA state limit exceeded", diagnostic: Diagnostics.error("FLEXR-E006", "DFA state limit exceeded"))
-              end
+              raise CompileError.new("DFA state limit exceeded", diagnostic: Diagnostics.error("FLEXR-E006", "DFA state limit exceeded")) if destination >= limit
               ids[closure] = destination
               sets << closure
               queue << closure
@@ -147,11 +145,11 @@ module Flexr
       def epsilon_closure(nfa, set)
         closure = set
         stack = []
-        nfa.states.each_index { |id| stack << id if (set & (1 << id)) != 0 }
+        nfa.states.each_index { |id| stack << id if set.anybits?(1 << id) }
         until stack.empty?
           state = stack.pop
           nfa.states[state].epsilon.each do |target|
-            next if (closure & (1 << target)) != 0
+            next if closure.anybits?(1 << target)
 
             closure |= 1 << target
             stack << target
@@ -163,10 +161,10 @@ module Flexr
       def move(nfa, set, byte)
         moved = 0
         nfa.states.each_index do |state|
-          next if (set & (1 << state)).zero?
+          next if set.nobits?(1 << state)
 
           nfa.states[state].transitions.each do |transition|
-            next unless transition.lo <= byte && byte <= transition.hi
+            next unless byte.between?(transition.lo, transition.hi)
 
             moved |= 1 << transition.to
           end
@@ -177,7 +175,7 @@ module Flexr
       def accepting_rules(nfa, set)
         rules = []
         nfa.states.each_index do |state|
-          next if (set & (1 << state)).zero?
+          next if set.nobits?(1 << state)
 
           rules.concat(nfa.states[state].accepts)
         end
@@ -185,14 +183,10 @@ module Flexr
       end
 
       def validate_rules
-        if @spec.backend == :firstmatch && !@spec.options[:experimental]
-          raise CompileError, "firstmatch requires option :experimental"
-        end
+        raise CompileError, "firstmatch requires option :experimental" if @spec.backend == :firstmatch && !@spec.options[:experimental]
 
         @spec.rules.each do |rule|
-          if rule.patterns.empty?
-            raise CompileError, "rule #{rule.index} has no pattern"
-          end
+          raise CompileError, "rule #{rule.index} has no pattern" if rule.patterns.empty?
           next if @spec.options[:allow_empty_match]
 
           rule.patterns.each do |pattern|

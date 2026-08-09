@@ -29,7 +29,9 @@ RSpec.describe Flexr do
       rule(/"/) { push :string }
       state :string do
         rule(/[^"\\]+/) { @value = text }
-        rule(/"/) { value = @value; pop; emit :STRING, value }
+        rule(/"/) do value = @value
+ pop
+ emit :STRING, value end
       end
     end
 
@@ -99,9 +101,9 @@ RSpec.describe Flexr do
 
   it "supports EOF actions and Unicode properties" do
     load File.expand_path("fixtures/eof.flexr.rb", __dir__)
-    expect(EofFixture::Lexer.new("ok").tokens).to eq([[:WORD, "ok"], [:EOF_TOKEN, :done]])
+    expect(EofFixture::Lexer.new("ok").tokens).to eq([[:WORD, "ok"], %i[EOF_TOKEN done]])
 
-    lexer_class = Class.new(Flexr::Lexer) { rule(/[\p{Hiragana}]+/) { emit :WORD } }
+    lexer_class = Class.new(Flexr::Lexer) { rule(/\p{Hiragana}+/) { emit :WORD } }
     expect(lexer_class.new("あいう").tokens).to eq([[:WORD, "あいう"]])
   end
 end

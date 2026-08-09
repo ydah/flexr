@@ -22,9 +22,7 @@ module Flexr
       validate_value!(warn_level, %i[all default none], :warn_level)
       validate_value!(color, %i[auto always never], :color)
       validate_value!(format, %i[human json], :format)
-      unless max_dfa_states.is_a?(Integer) && max_dfa_states.positive?
-        raise ArgumentError, "unsupported max_dfa_states: #{max_dfa_states.inspect}"
-      end
+      raise ArgumentError, "unsupported max_dfa_states: #{max_dfa_states.inspect}" unless max_dfa_states.is_a?(Integer) && max_dfa_states.positive?
       self
     end
 

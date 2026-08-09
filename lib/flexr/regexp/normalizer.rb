@@ -109,7 +109,7 @@ module Flexr
       end
 
       def casefold_ranges(lo, hi)
-        return [[lo, hi]] if (@options & ::Regexp::IGNORECASE).zero?
+        return [[lo, hi]] if @options.nobits?(::Regexp::IGNORECASE)
         return [[lo, hi]] unless lo <= 0x7f && hi >= 0
 
         points = (lo..hi).to_a

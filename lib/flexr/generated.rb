@@ -14,8 +14,8 @@ module Flexr
       Array(config[:declared_tokens]).each { |token| klass.emits(token) }
       Array(config[:options]&.keys).each { |option| klass.option(option) }
       klass.accel(config[:options][:accel]) if config[:options]&.key?(:accel)
-      Array(config[:states]).each do |state| 
-        klass.state(state, inclusive: config.fetch(:inclusive_states, {}).fetch(state.to_sym, false)) { }
+      Array(config[:states]).each do |state|
+        klass.state(state, inclusive: config.fetch(:inclusive_states, {}).fetch(state.to_sym, false)) { nil }
       end
       rules.each do |definition|
         klass.__flexr_add_generated_rule(definition)

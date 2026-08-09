@@ -69,9 +69,7 @@ module Flexr
       text.each_line do |line|
         stripped = line.strip
         case stripped
-        when ""
-          next
-        when /^%\{/
+        when "", /^%\{/
           next
         when /^%x\s+(.+)/
           ::Regexp.last_match(1).split.each { |name| @states[name] = false }
@@ -172,9 +170,7 @@ module Flexr
         end
         break if before == result
       end
-      if result.match?(/\{[A-Za-z_]\w*\}/)
-        warn_incomplete("unresolved flex macro in #{pattern}")
-      end
+      warn_incomplete("unresolved flex macro in #{pattern}") if result.match?(/\{[A-Za-z_]\w*\}/)
       result
     end
 
@@ -232,7 +228,7 @@ module Flexr
       translated.gsub!(/\bECHO\b/, "echo")
 
       returns = translated.scan(/\breturn\s+([^;]+);?/)
-      translated.gsub!(/\breturn\s+([^;]+);?\s*/) { "emit #{token_expression($1)}\n" }
+      translated.gsub!(/\breturn\s+([^;]+);?\s*/) { "emit #{token_expression(::Regexp.last_match(1))}\n" }
       translated.gsub!(/\breturn\s*;/, "skip\n")
 
       complete = true
@@ -275,7 +271,7 @@ module Flexr
       lines << "end"
       lines << ""
       lines.concat(@comments_after_class || [])
-      lines.join("\n") + "\n"
+      "#{lines.join("\n")}\n"
     end
 
     def render_rule(rule)
@@ -289,7 +285,7 @@ module Flexr
             render_rule_call("  ", rule[:pattern], action)
           else
             inclusive = @states[state.to_s] == true ? ", inclusive: true" : ""
-            "  state #{state.inspect}#{inclusive} do\n#{render_rule_call("    ", rule[:pattern], action)}\n  end"
+            "  state #{state.inspect}#{inclusive} do\n#{render_rule_call('    ', rule[:pattern], action)}\n  end"
           end
         end
       end
@@ -333,16 +329,14 @@ module Flexr
       escaped = false
       source.each_char.with_index do |char, index|
         if quote
-          if char == quote && !escaped
-            quote = nil
-          end
+          quote = nil if char == quote && !escaped
         elsif char == '"' && class_depth.zero?
           quote = char
         elsif char == "["
           class_depth += 1
         elsif char == "]" && class_depth.positive?
           class_depth -= 1
-        elsif char.match?(%r{\s}) && class_depth.zero?
+        elsif char.match?(/\s/) && class_depth.zero?
           return [source[0...index], source[index..].strip]
         end
         escaped = char == "\\" && !escaped
@@ -361,7 +355,7 @@ module Flexr
 
     def normalize_rexical_line(line)
       stripped = line.strip
-      if stripped.match?(/\A\//) && (finish = stripped.rindex("/")) && finish.positive?
+      if stripped.match?(%r{\A/}) && (finish = stripped.rindex("/")) && finish.positive?
         pattern = stripped[1...finish]
         rest = stripped[(finish + 1)..].to_s
         "#{pattern} #{rest}\n"

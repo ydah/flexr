@@ -31,7 +31,7 @@ module Flexr
           end
         end
         ranges.map do |lo, hi|
-          lo == hi ? "\\x%02X" % lo : "\\x%02X-\\x%02X" % [lo, hi]
+          lo == hi ? format("\\x%<byte>02X", byte: lo) : format("\\x%<lo>02X-\\x%<hi>02X", lo: lo, hi: hi)
         end.join
       end
     end

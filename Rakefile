@@ -15,7 +15,7 @@ task test: :spec
 
 module FlexrVerification
   ROOT = File.expand_path(__dir__)
-  EXAMPLES = Dir[File.join(ROOT, "examples/**/*.flexr.rb")].sort.freeze
+  EXAMPLES = Dir[File.join(ROOT, "examples/**/*.flexr.rb")].freeze
   EXPECTED_INPUTS = {
     %r{/examples/json/} => '{"answer": 42}',
     %r{/examples/toy_lang/} => "answer + 12"
@@ -27,7 +27,7 @@ module FlexrVerification
   end
 
   def golden_path(spec)
-    name = "#{File.basename(File.dirname(spec))}_#{File.basename(spec, ".flexr.rb")}.sha256"
+    name = "#{File.basename(File.dirname(spec))}_#{File.basename(spec, '.flexr.rb')}.sha256"
     File.join(ROOT, "benchmark/golden", name)
   end
 
@@ -90,9 +90,7 @@ namespace :modes do
                                                                        spec, FlexrVerification.input_for(spec))
       generated_output, generated_error, generated_status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script,
                                                                             generated_path, FlexrVerification.input_for(spec))
-      unless runtime_status.success? && generated_status.success? && runtime_output == generated_output
-        abort "mode mismatch: #{spec}\n#{runtime_error}#{generated_error}"
-      end
+      abort "mode mismatch: #{spec}\n#{runtime_error}#{generated_error}" unless runtime_status.success? && generated_status.success? && runtime_output == generated_output
     ensure
       FileUtils.rm_f(generated_path) if generated_path
     end

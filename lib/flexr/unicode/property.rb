@@ -12,7 +12,9 @@ module Flexr
         "Cntrl" => "Cntrl", "Lower" => "Lowercase", "Lowercase" => "Lowercase",
         "Upper" => "Uppercase", "Uppercase" => "Uppercase"
       }.freeze
+      # rubocop:disable Style/MutableConstant
       CACHE = {}
+      # rubocop:enable Style/MutableConstant
       module_function
 
       def ranges(name, negate: false)

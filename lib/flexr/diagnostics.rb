@@ -29,8 +29,8 @@ module Flexr
       @items = []
     end
 
-    def each(&block)
-      @items.each(&block)
+    def each(&)
+      @items.each(&)
     end
 
     def <<(diagnostic)
@@ -60,6 +60,7 @@ module Flexr
 
     def render_one(item, color:)
       prefix = "#{item.severity}[#{item.code}]: #{item.message}"
+      prefix = "\e[31m#{prefix}\e[0m" if [true, :always].include?(color)
       lines = [prefix]
       lines << "  help: #{item.help}" if item.help
       lines << "  note: #{item.note}" if item.note

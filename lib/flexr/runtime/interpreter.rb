@@ -26,9 +26,7 @@ module Flexr
             region = acceleration_region(machine, state)
             if region
               accelerated_start = cursor
-              while buffer.ensure_available?(cursor + 1) && region.bytes.include?(buffer.getbyte(cursor))
-                cursor += 1
-              end
+              cursor += 1 while buffer.ensure_available?(cursor + 1) && region.bytes.include?(buffer.getbyte(cursor))
               if cursor > accelerated_start
                 best = consider_acceptances(machine, state, cursor, position, buffer, best)
                 next

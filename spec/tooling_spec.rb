@@ -7,7 +7,7 @@ require "tempfile"
 require_relative "../benchmark/run"
 
 RSpec.describe "verification tooling" do
-  ROOT = File.expand_path("..", __dir__)
+  let(:root) { File.expand_path("..", __dir__) }
 
   it "keeps golden, acceleration, and dogfood gates independent" do
     script = <<~RUBY
@@ -17,7 +17,7 @@ RSpec.describe "verification tooling" do
         puts "\#{name}:\#{Rake::Task[name].prerequisites.inspect}"
       end
     RUBY
-    stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, chdir: ROOT)
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, chdir: root)
 
     expect(status).to be_success, stderr
     expect(stdout).to include("golden:verify:[]", "accel:equivalence:[]", "dogfood:verify:[]")
@@ -25,7 +25,7 @@ RSpec.describe "verification tooling" do
 
   it "passes the independent verification gates" do
     %w[golden:verify accel:equivalence dogfood:verify].each do |name|
-      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-S", "rake", name, chdir: ROOT)
+      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-S", "rake", name, chdir: root)
       expect(status).to be_success, "#{name} failed: #{stderr}"
     end
   end
@@ -33,14 +33,14 @@ RSpec.describe "verification tooling" do
   it "fails benchmark verification when its baseline is missing" do
     missing = File.join(Dir.tmpdir, "flexr-missing-baseline-#{Process.pid}.json")
     _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "benchmark/run.rb",
-                                             "--baseline", missing, "--json", chdir: ROOT)
+                                             "--baseline", missing, "--json", chdir: root)
 
     expect(status.exitstatus).to eq(2)
     expect(stderr).to include("baseline is missing or invalid")
   end
 
   it "rejects a baseline for changed input identity" do
-    baseline = JSON.parse(File.read(File.join(ROOT, "benchmark/baselines/json.json")))
+    baseline = JSON.parse(File.read(File.join(root, "benchmark/baselines/json.json")))
     baseline["source_sha256"] = "changed"
     Tempfile.create(["flexr-baseline-", ".json"]) do |file|
       file.write(JSON.generate(baseline))

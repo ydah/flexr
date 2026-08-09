@@ -21,14 +21,14 @@ module Flexr
       raise ArgumentError, "unexpected argument: #{positionals.first}" unless positionals.empty?
 
       execute(command, spec, options, output, rule_number, benchmark_args, out, err)
-    rescue ArgumentError => error
-      err.puts "error: #{error.message}"
+    rescue ArgumentError => e
+      err.puts "error: #{e.message}"
       usage(err, status: EXIT_USAGE)
-    rescue Flexr::Error, Errno::ENOENT, Errno::EACCES, SyntaxError => error
-      err.puts render_error(error, options: options)
+    rescue Flexr::Error, Errno::ENOENT, Errno::EACCES, SyntaxError => e
+      err.puts render_error(e, options: options)
       EXIT_FAILURE
-    rescue StandardError => error
-      err.puts "error: #{error.class}: #{error.message}"
+    rescue StandardError => e
+      err.puts "error: #{e.class}: #{e.message}"
       EXIT_FAILURE
     end
 
@@ -82,10 +82,8 @@ module Flexr
           rule_number = Integer(required_argument!(args, argument), 10)
           raise ArgumentError, "--rule must be non-negative" if rule_number.negative?
         when "--input-file", "--baseline", "--iterations"
-          unless command == :bench
-            raise ArgumentError, "#{argument} is only valid for the bench command"
-          end
-          benchmark_args.concat([argument, required_argument!(args, argument)])
+          raise ArgumentError, "#{argument} is only valid for the bench command" unless command == :bench
+          benchmark_args.push(argument, required_argument!(args, argument))
         else
           raise ArgumentError, "unknown option: #{argument}"
         end
@@ -93,10 +91,10 @@ module Flexr
 
       options.validate!
       [options, output, rule_number, benchmark_args, positionals]
-    rescue ArgumentError => error
-      raise error if error.message.start_with?("unsupported ", "--rule")
+    rescue ArgumentError => e
+      raise e if e.message.start_with?("unsupported ", "--rule")
 
-      raise ArgumentError, "invalid option value: #{error.message}"
+      raise ArgumentError, "invalid option value: #{e.message}"
     end
 
     def execute(command, spec, options, output, rule_number, benchmark_args, out, err)
@@ -167,7 +165,7 @@ module Flexr
       rules = rules.select { |rule| rule.index == rule_number } if rule_number
       raise ArgumentError, "rule not found: #{rule_number}" if rules.empty? && rule_number
 
-      out.puts rules.map { |rule| "rule #{rule.index}: #{rule.patterns.inspect}" }
+      out.puts(rules.map { |rule| "rule #{rule.index}: #{rule.patterns.inspect}" })
       EXIT_OK
     end
 
@@ -200,7 +198,7 @@ module Flexr
       parsed.states.each do |name, value|
         next if name.to_sym == :initial
 
-        klass.state(name, inclusive: value[:inclusive]) { }
+        klass.state(name, inclusive: value[:inclusive]) { nil }
       end
       parsed.rules.each { |rule| klass.__flexr_add_generated_rule(rule.to_h.merge(action: :skip)) }
       klass.compile!

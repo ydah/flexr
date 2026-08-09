@@ -50,11 +50,11 @@ module Flexr
       @__flexr_state_stack.concat(names.map(&:to_sym))
       class_eval(&block)
     ensure
-      names.length.times { @__flexr_state_stack.pop } if names
+      names&.length&.times { @__flexr_state_stack.pop }
     end
 
-    def all_states(&block)
-      state(*@__flexr_states.keys, &block)
+    def all_states(&)
+      state(*@__flexr_states.keys, &)
     end
 
     def on_eof(&action)
@@ -94,7 +94,10 @@ module Flexr
 
     def compile!
       @__flexr_compile_mutex.synchronize do
+        # The ivar is part of the generated/runtime class contract.
+        # rubocop:disable Naming/MemoizedInstanceVariableName
         @__flexr_compiled ||= Automaton::Compiler.new(__flexr_spec).compile
+        # rubocop:enable Naming/MemoizedInstanceVariableName
       end
     end
 

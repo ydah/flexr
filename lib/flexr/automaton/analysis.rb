@@ -19,7 +19,7 @@ module Flexr
       end
 
       def self_loop_set(dfa, state)
-        dfa.transitions[state].each_with_index.each_with_object([]) do |(destination, class_id), result|
+        dfa.transitions[state].each_with_index.with_object([]) do |(destination, class_id), result|
           next unless destination == state
 
           dfa.ec.each_with_index do |value, byte|

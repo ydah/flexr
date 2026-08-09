@@ -23,7 +23,7 @@ module Flexr
           when "CodepointRange" then "CodepointRange(#{lo}..#{hi})"
           when "Anchor" then "Anchor(#{kind})"
           when "Star" then "Star(#{child})"
-          when "Seq", "Alt" then "#{name}(#{children.map(&:to_s).join(", ")})"
+          when "Seq", "Alt" then "#{name}(#{children.join(', ')})"
           else super
           end
         end

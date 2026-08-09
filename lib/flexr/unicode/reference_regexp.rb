@@ -3,7 +3,9 @@
 module Flexr
   module Unicode
     module ReferenceRegexp
+      # rubocop:disable Style/MutableConstant
       CACHE = {}
+      # rubocop:enable Style/MutableConstant
       module_function
 
       def match(pattern, subject, encoding:, options: 0, unicode: false)
@@ -25,7 +27,7 @@ module Flexr
 
       def source_for(node)
         case node
-        when Regexp::AST::Empty then ""
+        when Regexp::AST::Empty, Regexp::AST::Anchor then ""
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
         when Regexp::AST::CodepointRange then codepoint_class([[node.lo, node.hi]])
         when Regexp::AST::CharClass
@@ -41,7 +43,6 @@ module Flexr
         when Regexp::AST::Seq then node.children.map { |child| source_for(child) }.join
         when Regexp::AST::Alt then "(?:#{node.children.map { |child| source_for(child) }.join('|')})"
         when Regexp::AST::Star then "(?:#{source_for(node.child)})*"
-        when Regexp::AST::Anchor then ""
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"
         end
@@ -52,7 +53,7 @@ module Flexr
       end
 
       def byte_escape(lo, hi)
-        lo == hi ? "\\x%02X" % lo : "\\x%02X-\\x%02X" % [lo, hi]
+        lo == hi ? format("\\x%<byte>02X", byte: lo) : format("\\x%<lo>02X-\\x%<hi>02X", lo: lo, hi: hi)
       end
 
       def codepoint_class(ranges)

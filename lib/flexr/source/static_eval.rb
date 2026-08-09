@@ -14,8 +14,8 @@ module Flexr
         evaluate(node)
       rescue StaticResolutionError
         raise
-      rescue StandardError => error
-        raise_resolution("#{node.class}: #{error.message}")
+      rescue StandardError => e
+        raise_resolution("#{node.class}: #{e.message}")
       end
 
       private
@@ -33,9 +33,7 @@ module Flexr
           interpolated(node.parts)
         when "SymbolNode"
           node.unescaped.to_sym
-        when "IntegerNode"
-          node.value
-        when "FloatNode"
+        when "IntegerNode", "FloatNode"
           node.value
         when "TrueNode"
           true
@@ -85,12 +83,8 @@ module Flexr
       end
 
       def evaluate_call(node)
-        if node.receiver && node.name == :freeze
-          return evaluate(node.receiver).freeze
-        end
-        if node.receiver && node.name == :union && constant_name(node.receiver) == "Regexp"
-          return ::Regexp.union(positional_arguments(node).map { |argument| evaluate(argument) })
-        end
+        return evaluate(node.receiver).freeze if node.receiver && node.name == :freeze
+        return ::Regexp.union(positional_arguments(node).map { |argument| evaluate(argument) }) if node.receiver && node.name == :union && constant_name(node.receiver) == "Regexp"
         raise_resolution("method call #{node.name} is not statically supported")
       end
 

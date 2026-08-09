@@ -35,13 +35,11 @@ module Flexr
             if allowed
               group_start ||= byte
             elsif group_start
-              output << prefix.map { |value| [value, value] } + [[group_start, byte - 1]]
+              output << (prefix.map { |value| [value, value] } + [[group_start, byte - 1]])
               group_start = nil
             end
           end
-          if group_start
-            output << prefix.map { |value| [value, value] } + [[group_start, last_byte]]
-          end
+          output << (prefix.map { |value| [value, value] } + [[group_start, last_byte]]) if group_start
           return
         end
 
@@ -54,7 +52,7 @@ module Flexr
 
           if lo <= min_cp && max_cp <= hi
             rest = length - next_prefix.length
-            output << next_prefix.map { |value| [value, value] } + Array.new(rest) { [0x80, 0xbf] }
+            output << (next_prefix.map { |value| [value, value] } + Array.new(rest) { [0x80, 0xbf] })
           else
             walk(lo, hi, length, next_prefix, output)
           end
@@ -97,13 +95,12 @@ module Flexr
 
       def decode(bytes)
         return bytes.first if bytes.length == 1
-        value = case bytes.length
+        case bytes.length
         when 2 then ((bytes[0] & 0x1f) << 6) | (bytes[1] & 0x3f)
         when 3 then ((bytes[0] & 0x0f) << 12) | ((bytes[1] & 0x3f) << 6) | (bytes[2] & 0x3f)
         when 4 then ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3f) << 12) |
           ((bytes[2] & 0x3f) << 6) | (bytes[3] & 0x3f)
         end
-        value
       end
     end
   end

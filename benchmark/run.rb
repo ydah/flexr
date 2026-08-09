@@ -33,14 +33,14 @@ module Flexr
 
       err.puts status == 2 ? "benchmark error: baseline is missing or invalid" : "benchmark regression detected"
       status
-    rescue ArgumentError => error
-      err.puts "benchmark error: #{error.message}"
+    rescue ArgumentError => e
+      err.puts "benchmark error: #{e.message}"
       usage(err, status: 2)
-    rescue Errno::ENOENT => error
-      err.puts "benchmark error: #{error.message}"
+    rescue Errno::ENOENT => e
+      err.puts "benchmark error: #{e.message}"
       2
-    rescue StandardError => error
-      err.puts "benchmark error: #{error.class}: #{error.message}"
+    rescue StandardError => e
+      err.puts "benchmark error: #{e.class}: #{e.message}"
       1
     end
 
@@ -89,10 +89,10 @@ module Flexr
         return
       end
 
-      out.puts "spec: #{result.fetch("spec")}"
-      out.puts "input_bytes: #{result.fetch("input_bytes")}, tokens: #{result.fetch("tokens")}"
+      out.puts "spec: #{result.fetch('spec')}"
+      out.puts "input_bytes: #{result.fetch('input_bytes')}, tokens: #{result.fetch('tokens')}"
       result.fetch("modes").each do |mode, metrics|
-        out.puts "#{mode}: #{metrics.fetch("mb_per_s")} MB/s, #{metrics.fetch("tokens_per_s")} tokens/s"
+        out.puts "#{mode}: #{metrics.fetch('mb_per_s')} MB/s, #{metrics.fetch('tokens_per_s')} tokens/s"
       end
     end
 
@@ -212,7 +212,7 @@ module Flexr
 
       def write(path, result)
         FileUtils.mkdir_p(File.dirname(File.expand_path(path)))
-        File.write(path, JSON.pretty_generate(result) + "\n")
+        File.write(path, "#{JSON.pretty_generate(result)}\n")
       end
 
       def identity_matches?(baseline, result)
@@ -224,6 +224,4 @@ module Flexr
   end
 end
 
-if $PROGRAM_NAME == __FILE__
-  exit Flexr::Benchmarking.run(ARGV)
-end
+exit Flexr::Benchmarking.run(ARGV) if $PROGRAM_NAME == __FILE__
