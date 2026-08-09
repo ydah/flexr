@@ -44,6 +44,7 @@ module Flexr
       end
 
       def compile_machine(rules)
+        @active_rule_ids = rules.map(&:index)
         normalized = []
         rules.each do |rule|
           rule.pattern_conditions = []
@@ -149,7 +150,12 @@ module Flexr
               destination = sets.length
               limit = @spec.options.fetch(:max_dfa_states, 100_000)
               limit = 100_000 unless limit.is_a?(Integer) && limit.positive?
-              raise CompileError.new("DFA state limit exceeded", diagnostic: Diagnostics.error("FLEXR-E006", "DFA state limit exceeded")) if destination >= limit
+              if destination >= limit
+                message = "DFA state limit exceeded while compiling rules #{@active_rule_ids.join(', ')}"
+                diagnostic = Diagnostics.error("FLEXR-E006", message,
+                                                help: "raise max_dfa_states or split the listed rules")
+                raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+              end
               ids[closure] = destination
               sets << closure
               queue << closure
@@ -228,8 +234,12 @@ module Flexr
         end
         reference_rules = @spec.rules.select { |rule| reference_rule?(rule) && rule_active_anywhere?(rule) }
         present.concat(reference_rules.map(&:index))
+        shadowers = shadowed_rules(compiled)
         diagnostics.concat(@spec.rules.reject { |rule| present.include?(rule.index) }.map do |rule|
-          Diagnostics.warning("FLEXR-W001", "rule #{rule.index} is unreachable")
+          winners = shadowers.fetch(rule.index, []).uniq.sort
+          suffix = winners.empty? ? "" : " (shadowed by rule #{winners.join(', ')})"
+          Diagnostics.warning("FLEXR-W001", "rule #{rule.index} is unreachable#{suffix}", location: rule.location,
+                              help: "remove it, reorder the rules, or make its language distinct")
         end)
 
         @spec.states.each_key do |state_name|
@@ -239,9 +249,9 @@ module Flexr
           diagnostics << Diagnostics.warning("FLEXR-W002", "state #{state_name.inspect} has no rules")
         end
 
-        if @spec.backend == :firstmatch && @spec.rules.length > 1
+        firstmatch_conflicts(@spec.rules).each do |left, right|
           diagnostics << Diagnostics.warning(
-            "FLEXR-W010", "firstmatch may change longest-match semantics",
+            "FLEXR-W010", "firstmatch rules #{left.index} and #{right.index} may change longest-match semantics",
             help: "use backend :table unless first-match compatibility is required"
           )
         end
@@ -262,7 +272,7 @@ module Flexr
                               help: "make the body or followed_by expression fixed length when possible")
         end)
 
-        if @spec.options[:accel] == :regexp
+        if @spec.options.fetch(:accel, :auto) != :none
           diagnostics.concat(@spec.rules.select(&:trailing).map do |rule|
             Diagnostics.warning("FLEXR-W012", "rule #{rule.index} cannot use region acceleration with trailing context")
           end)
@@ -273,6 +283,29 @@ module Flexr
                                               help: "use generated mode for production startup")
         end
         diagnostics
+      end
+
+      def shadowed_rules(compiled)
+        shadowers = Hash.new { |hash, key| hash[key] = [] }
+        compiled.machines.each_value do |machine|
+          machine.dfa.accepts.each do |acceptances|
+            winner = acceptances.min_by(&:rule_index)&.rule_index
+            next unless winner
+
+            acceptances.each do |acceptance|
+              next if acceptance.rule_index == winner
+
+              shadowers[acceptance.rule_index] << winner
+            end
+          end
+        end
+        shadowers
+      end
+
+      def firstmatch_conflicts(rules)
+        return [] unless @spec.backend == :firstmatch
+
+        rules.combination(2).to_a
       end
 
       def rule_active_anywhere?(rule)

@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+begin
+  require "strscan"
+rescue LoadError
+  # StringScanner is an optional accelerator; the regexp path remains valid.
+end
+
 module Flexr
   module Runtime
     Match = Struct.new(:rule, :start_pos, :end_pos, :total_end_pos, keyword_init: true)
@@ -26,9 +32,9 @@ module Flexr
           if accelerated
             region = acceleration_region(machine, state)
             if region
-              accelerated_start = cursor
-              cursor += 1 while buffer.ensure_available?(cursor + 1) && region.bytes.include?(buffer.getbyte(cursor))
-              if cursor > accelerated_start
+              accelerated_end = accelerate(region, buffer, cursor)
+              if accelerated_end && accelerated_end > cursor
+                cursor = accelerated_end
                 best = consider_acceptances(machine, state, cursor, position, buffer, best)
                 next
               end
@@ -140,7 +146,11 @@ module Flexr
           end
           return match if match && match[0].bytesize < subject.bytesize
           return match if match && %i[eof invalid].include?(tail)
-          return nil if !match && subject.bytesize >= minimum && tail != :incomplete
+          if !match && subject.bytesize >= minimum && tail != :incomplete
+            first_byte = subject.getbyte(0)
+            return nil unless first_byte && possible_first_byte?(pattern, first_byte)
+            return nil if %i[eof invalid].include?(tail)
+          end
           return match unless can_refill_match?(buffer, position, subject.bytesize, tail)
         rescue ArgumentError, RegexpError
           return nil
@@ -228,6 +238,63 @@ module Flexr
         1
       end
 
+      def possible_first_byte?(pattern, byte)
+        ast = Regexp::Parser.new(pattern.source, options: pattern.options,
+                                 encoding: pattern.encoding, unicode: true).parse
+        binary = !@lexer.utf8_input?
+        first_byte_ranges(ast, pattern.options, binary: binary).any? { |lo, hi| byte.between?(lo, hi) }
+      rescue CompileError, RegexpError
+        true
+      end
+
+      def first_byte_ranges(node, options, binary: false)
+        case node
+        when Regexp::AST::Empty, Regexp::AST::Anchor then []
+        when Regexp::AST::ByteRange then [[node.lo, node.hi]]
+        when Regexp::AST::CodepointRange
+          ranges = options.anybits?(::Regexp::IGNORECASE) ? Unicode::CaseFold.ranges(node.lo, node.hi) : [[node.lo, node.hi]]
+          return ranges if binary
+
+          ranges.flat_map { |lo, hi| Unicode::Utf8Splitter.split(lo, hi).map(&:first).map(&:first) }
+            .map { |value| [value, value] }
+        when Regexp::AST::CharClass
+          ranges = node.ranges.flat_map do |range|
+            range.first == Regexp::AST::Property ? Unicode::Property.ranges(range[2], negate: range[1]) : [range]
+          end
+          ranges = complement_codepoint_ranges(ranges) if node.negated
+          return ranges if binary
+
+          ranges.flat_map { |lo, hi| Unicode::Utf8Splitter.split(lo, hi).map(&:first).map(&:first) }
+            .map { |value| [value, value] }
+        when Regexp::AST::Seq
+          ranges = []
+          node.children.each do |child|
+            ranges.concat(first_byte_ranges(child, options, binary: binary))
+            break unless nullable?(child)
+          end
+          ranges
+        when Regexp::AST::Alt
+          node.children.flat_map { |child| first_byte_ranges(child, options, binary: binary) }
+        when Regexp::AST::Star
+          first_byte_ranges(node.child, options, binary: binary)
+        else
+          first_byte_fallback
+        end
+      end
+
+      def first_byte_fallback
+        []
+      end
+
+      def nullable?(node)
+        case node
+        when Regexp::AST::Empty, Regexp::AST::Anchor, Regexp::AST::Star then true
+        when Regexp::AST::Seq then node.children.all? { |child| nullable?(child) }
+        when Regexp::AST::Alt then node.children.any? { |child| nullable?(child) }
+        else false
+        end
+      end
+
       def utf8_length(codepoint)
         return 1 if codepoint <= 0x7f
         return 2 if codepoint <= 0x7ff
@@ -270,6 +337,26 @@ module Flexr
 
       def acceleration_enabled?
         @lexer.class.__flexr_config.options.fetch(:accel, :auto) != :none && !@lexer.utf8_input?
+      end
+
+      def accelerate(region, buffer, position)
+        mode = @lexer.class.__flexr_config.options.fetch(:accel, :auto)
+        binary = buffer.source.b
+        match_end = if mode == :strscan && defined?(StringScanner)
+          scanner = StringScanner.new(binary)
+          scanner.pos = position
+          length = scanner.skip(region.regexp)
+          length && scanner.pos
+        else
+          region.regexp.match(binary, position)&.then { |match| match.begin(0) == position ? match.end(0) : nil }
+        end
+        return match_end if match_end && match_end < buffer.bytesize
+        return match_end if match_end && buffer.eof_loaded?
+        return unless buffer.ensure_available?(buffer.bytesize + 1)
+
+        accelerate(region, buffer, position)
+      rescue ArgumentError
+        nil
       end
 
       def transition(dfa, state, byte)

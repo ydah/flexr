@@ -3,9 +3,9 @@
 module Flexr
   module Automaton
     class DFA
-      attr_reader :transitions, :accepts, :ec, :class_count, :start, :states, :rule_ids, :packed
+      attr_reader :transitions, :accepts, :ec, :class_count, :start, :states, :rule_ids, :packed, :direct
 
-      def initialize(transitions:, accepts:, ec:, class_count:, start:, rule_ids:, packed: nil)
+      def initialize(transitions:, accepts:, ec:, class_count:, start:, rule_ids:, packed: nil, direct: nil)
         @transitions = transitions.freeze
         @accepts = accepts.map do |rules|
           rules.map do |acceptance|
@@ -21,6 +21,7 @@ module Flexr
         @states = transitions.length
         @rule_ids = rule_ids.map { |id| id.respond_to?(:rule_index) ? id.rule_index : id }.uniq.sort.freeze
         @packed = packed
+        @direct = direct
       end
 
       def transition(state, byte)
@@ -33,11 +34,15 @@ module Flexr
         @packed.fetch(:next).fetch(index)
       end
 
-      # Direct dispatch deliberately keeps the class lookup and row access in
-      # one small method.  The interpreter uses this route for `backend:
-      # :direct`, leaving the packed/table path independent for equivalence
-      # testing and future generated case dispatch.
+      # Generated direct lexers use a flattened dispatch representation. The
+      # interpreter keeps this route separate from packed/table equivalence.
       def transition_direct(state, byte)
+        if @direct
+          class_id = @ec[byte]
+          value = @direct.fetch(:nxt).fetch((state * @direct.fetch(:classes)) + class_id)
+          return value >= 0 ? value : nil
+        end
+
         @transitions[state][@ec[byte]]
       end
 

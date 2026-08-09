@@ -116,6 +116,7 @@ RSpec.describe Flexr do
 
   it "parses public patterns and rejects malformed regexp sources" do
     expect(Flexr.parse_pattern(/a+/)).to be_a(Flexr::Regexp::AST::Seq)
+    expect(Flexr.compile_pattern(/[^a]/).accept?("あ")).to be(true)
 
     expect { Flexr::Regexp::Parser.new("a)").parse }
       .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E001") }
@@ -141,6 +142,74 @@ RSpec.describe Flexr do
     expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])
   ensure
     FileUtils.rm_f(output) if output
+  end
+
+  it "loads generated tables from the packed representation" do
+    path = File.expand_path("fixtures/generated.flexr.rb", __dir__)
+    output = File.join(Dir.tmpdir, "flexr-packed-test.rb")
+    generated = Flexr::Generator.new(path, output: output, options: { table_format: :packed }).generate
+
+    expect(generated).to include("encoding: :base64")
+    expect(generated).not_to include("transitions:")
+    load output
+    expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])
+  ensure
+    FileUtils.rm_f(output) if output
+  end
+
+  it "loads row-compressed generated tables without Base64 encoding" do
+    path = File.expand_path("fixtures/generated.flexr.rb", __dir__)
+    output = nil
+    %i[rows full].each do |compression|
+      output = File.join(Dir.tmpdir, "flexr-compressed-#{compression}-#{Process.pid}.rb")
+      Flexr::Generator.new(path, output: output, options: { table_compression: compression }).generate
+      load output
+      expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])
+      FileUtils.rm_f(output)
+    end
+  ensure
+    FileUtils.rm_f(output) if output
+  end
+
+  it "loads the direct dispatch representation for generated direct lexers" do
+    spec = File.join(Dir.tmpdir, "flexr-direct-#{Process.pid}.flexr.rb")
+    output = File.join(Dir.tmpdir, "flexr-direct-#{Process.pid}.rb")
+    File.write(spec, <<~RUBY)
+      require "flexr"
+      class GeneratedDirectFixture < Flexr::Lexer
+        backend :direct
+        rule(/[a-z]+/) { emit :WORD }
+      end
+    RUBY
+
+    generated = Flexr::Generator.new(spec, output: output).generate
+
+    expect(generated).to include("dispatch: :case")
+    load output
+    dfa = GeneratedDirectFixture.compile!.machines.fetch(:initial).dfa
+    expect(dfa.direct).not_to be_nil
+    expect(GeneratedDirectFixture.new("abc").tokens).to eq([[:WORD, "abc"]])
+  ensure
+    FileUtils.rm_f(spec) if spec
+    FileUtils.rm_f(output) if output
+  end
+
+  it "aborts firstmatch generation when deterministic differential checks disagree" do
+    spec = File.join(Dir.tmpdir, "flexr-firstmatch-#{Process.pid}.flexr.rb")
+    File.write(spec, <<~RUBY)
+      require "flexr"
+      class FirstmatchFixture < Flexr::Lexer
+        backend :firstmatch
+        option :experimental
+        rule(/a/) { emit :A }
+        rule(/aa/) { emit :AA }
+      end
+    RUBY
+
+    expect { Flexr::Generator.new(spec).generate }
+      .to raise_error(Flexr::CompileError, /firstmatch differs from table/)
+  ensure
+    FileUtils.rm_f(spec) if spec
   end
 
   it "removes nested DSL spans as one source transformation" do
@@ -184,6 +253,12 @@ RSpec.describe Flexr do
     expect(latin.new("abc").tokens).to eq([[:LATIN, "abc"]])
   end
 
+  it "splits singleton Unicode codepoints without admitting surrogates" do
+    expect(Flexr::Unicode::Utf8Splitter.split(0x1f600, 0x1f600).first.map(&:first))
+      .to eq("😀".bytes)
+    expect(Flexr::Unicode::Utf8Splitter.split(0xd800, 0xd800)).to eq([])
+  end
+
   it "uses simple case folding equivalence classes from the UCD" do
     lexer_class = Class.new(Flexr::Lexer) { rule(/k/i) { emit :K } }
 
@@ -205,5 +280,14 @@ RSpec.describe Flexr do
     expect(generated).not_to include("rule(/a/)")
   ensure
     FileUtils.rm_f(spec) if spec
+  end
+
+  it "generates deterministic source despite compilation timing diagnostics" do
+    path = File.expand_path("../examples/json/lexer.flexr.rb", __dir__)
+
+    first = Flexr::Generator.new(path).generate
+    second = Flexr::Generator.new(path).generate
+
+    expect(second).to eq(first)
   end
 end

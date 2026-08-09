@@ -134,12 +134,13 @@ module Flexr
 
     def check(spec, options, out)
       compiled = if options.eval_mode
-                   generate(spec, options)
-                   nil
+                   generator = Generator.new(spec, eval_mode: true, options: options.generator_options)
+                   generator.generate
+                   generator.diagnostics
                  else
                    compile(read_spec(spec), overrides: options.overrides)
                  end
-      diagnostics = compiled ? Array(compiled.diagnostics) : []
+      diagnostics = compiled.is_a?(Array) ? compiled : Array(compiled&.diagnostics)
       diagnostics.select! do |diagnostic|
         options.warn_level == :all || (options.warn_level == :default && diagnostic.code != "FLEXR-W016")
       end
@@ -156,7 +157,7 @@ module Flexr
     end
 
     def print_stats(spec, options, out)
-      compiled = compile(read_spec(spec))
+      compiled = compile(read_spec(spec), overrides: options.overrides)
       stats = compiled.stats.transform_keys(&:to_s).transform_values do |stat|
         stat.merge(table_cells: stat[:states] * stat[:classes])
       end
@@ -171,8 +172,8 @@ module Flexr
       EXIT_OK
     end
 
-    def print_dot(spec, _options, out)
-      compiled = compile(read_spec(spec))
+    def print_dot(spec, options, out)
+      compiled = compile(read_spec(spec), overrides: options.overrides)
       out.puts "digraph flexr {"
       compiled.machines.each do |state_name, machine|
         dfa = machine.dfa
@@ -191,8 +192,8 @@ module Flexr
       EXIT_OK
     end
 
-    def print_trace(spec, _options, out)
-      compiled = compile(read_spec(spec))
+    def print_trace(spec, options, out)
+      compiled = compile(read_spec(spec), overrides: options.overrides)
       compiled.machines.each do |state_name, machine|
         dfa = machine.dfa
         out.puts "state #{state_name} start=#{dfa.start} classes=#{dfa.class_count}"

@@ -7,6 +7,8 @@ module Flexr
 
       def split(lo, hi)
         raise ArgumentError, "invalid codepoint range" if lo > hi || lo.negative? || hi > 0x10ffff
+        return [] if lo.between?(0xd800, 0xdfff) && hi.between?(0xd800, 0xdfff)
+        return [encoded(lo).map { |byte| [byte, byte] }] if lo == hi
 
         ranges = []
         [[0, 0x7f, 1], [0x80, 0x7ff, 2], [0x800, 0xffff, 3], [0x10000, 0x10ffff, 4]].each do |min, max, length|

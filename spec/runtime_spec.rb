@@ -89,6 +89,18 @@ RSpec.describe "Flexr runtime" do
     expect(input.reads.length).to be < 10
   end
 
+  it "keeps firstmatch semantics across chunk boundaries" do
+    input = RuntimeChunkedInput.new("aaab")
+    lexer_class = Class.new(Flexr::Lexer) do
+      backend :firstmatch
+      option :experimental
+      rule(/a{2,4}b/) { emit :AB }
+      rule(/./) { emit :CHAR }
+    end
+
+    expect(lexer_class.new(input, chunk_size: 1).tokens).to eq([[:AB, "aaab"]])
+  end
+
   it "enforces max_token_size for reference matches" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/\p{Hiragana}+/) { emit :WORD, text }

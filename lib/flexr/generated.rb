@@ -12,13 +12,20 @@ module Flexr
       klass.token_kind(config.fetch(:token_kind, :array))
       klass.encoding(config.fetch(:encoding, Encoding::UTF_8))
       Array(config[:declared_tokens]).each { |token| klass.emits(token) }
-      Array(config[:options]&.keys).each { |option| klass.option(option) }
-      klass.accel(config[:options][:accel]) if config[:options]&.key?(:accel)
+      config.fetch(:options, {}).each do |option, value|
+        if option == :accel
+          klass.accel(value)
+        elsif value == true
+          klass.option(option)
+        else
+          klass.__flexr_config.options[option] = value
+        end
+      end
       Array(config[:states]).each do |state|
         klass.state(state, inclusive: config.fetch(:inclusive_states, {}).fetch(state.to_sym, false)) { nil }
       end
       rules.each do |definition|
-      klass.__flexr_add_generated_rule(definition)
+        klass.__flexr_add_generated_rule(definition)
       end
       config.fetch(:eof_rules, {}).each do |state, action|
         klass.__flexr_add_generated_eof(state, action)
@@ -30,14 +37,17 @@ module Flexr
       install!(klass, payload)
       machines = payload.fetch(:compiled).fetch(:machines).transform_values do |machine|
         dfa_data = machine.fetch(:dfa)
+        packed = decode_packed(dfa_data[:packed])
         dfa = Automaton::DFA.new(
-          transitions: dfa_data.fetch(:transitions),
+          transitions: dfa_data[:transitions] || inflate_packed(packed, dfa_data.fetch(:state_count),
+                                                                 dfa_data.fetch(:class_count)),
           accepts: dfa_data.fetch(:accepts),
           ec: dfa_data.fetch(:ec),
           class_count: dfa_data.fetch(:class_count),
           start: dfa_data.fetch(:start),
           rule_ids: dfa_data.fetch(:rule_ids),
-          packed: dfa_data[:packed]
+          packed: packed,
+          direct: dfa_data[:direct]
         )
         Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym)
       end
@@ -46,10 +56,43 @@ module Flexr
         rules: klass.__flexr_rules,
         states: payload.fetch(:compiled).fetch(:states).map(&:to_sym),
         stats: payload.fetch(:compiled).fetch(:stats),
-        diagnostics: []
+        diagnostics: payload.fetch(:compiled).fetch(:diagnostics, []).map do |diagnostic|
+          Diagnostic.new(**diagnostic.transform_keys(&:to_sym))
+        end
       )
       klass.__flexr_set_compiled!(compiled)
       klass
+    end
+
+    def decode_packed(packed)
+      return packed unless packed.is_a?(Hash) && packed[:encoding]&.to_sym == :base64
+
+      {
+        base: decode_array(packed.fetch(:base)),
+        default: decode_array(packed.fetch(:default), nil_value: -1),
+        next: decode_array(packed.fetch(:next), nil_value: -1),
+        check: decode_array(packed.fetch(:check), nil_value: -1)
+      }
+    end
+
+    def decode_array(encoded, nil_value: nil)
+      values = encoded.unpack1("m0").unpack("l<*")
+      return values unless nil_value
+
+      values.map { |value| value == nil_value ? nil : value }
+    end
+
+    def inflate_packed(packed, state_count, class_count)
+      return nil unless packed
+
+      Array.new(state_count) do |state|
+        Array.new(class_count) do |class_id|
+          index = packed.fetch(:base).fetch(state) + class_id
+          next packed.fetch(:default).fetch(state) unless packed.fetch(:check)[index] == state
+
+          packed.fetch(:next).fetch(index)
+        end
+      end
     end
   end
 

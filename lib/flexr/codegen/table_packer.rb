@@ -27,6 +27,20 @@ module Flexr
         end
         { base: base.freeze, default: default.freeze, next: next_table.freeze, check: check.freeze }.freeze
       end
+
+      def encode(packed)
+        {
+          encoding: :base64,
+          base: encode_array(packed.fetch(:base)),
+          default: encode_array(packed.fetch(:default), nil_value: -1),
+          next: encode_array(packed.fetch(:next), nil_value: -1),
+          check: encode_array(packed.fetch(:check), nil_value: -1)
+        }.freeze
+      end
+
+      def encode_array(values, nil_value: 0)
+        [values.map { |value| value.nil? ? nil_value : value }.pack("l<*")].pack("m0")
+      end
     end
   end
 end

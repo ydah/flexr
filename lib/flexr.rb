@@ -52,11 +52,12 @@ module Flexr
     def compile_pattern(pattern, options: {})
       regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
       return Automaton::ReferenceDFA.new(regexp) if regexp.source.include?("\\p{")
+      encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
       rule = IR::Rule.new(index: 0, patterns: [regexp], action: :skip, states: [:initial])
       state = IR::State.new(name: :initial, inclusive: true, id: 0)
       spec = IR::Spec.new(
         class_name: "Pattern", backend: :table, token_kind: :array,
-        encoding: regexp.encoding, options: options, declared_tokens: [],
+        encoding: encoding, options: options, declared_tokens: [],
         states: { initial: state }, rules: [rule], eof_rules: {}, verbatim: nil
       )
       Automaton::Compiler.new(spec).compile.machines.fetch(:initial).dfa
@@ -64,9 +65,10 @@ module Flexr
 
     def parse_pattern(pattern, options: {})
       regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
-      ast = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding,
+      encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
+      ast = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
                                unicode: options[:unicode] == true).parse
-      Regexp::Normalizer.new(ast, encoding: regexp.encoding, options: regexp.options).normalize
+      Regexp::Normalizer.new(ast, encoding: encoding, options: regexp.options).normalize
     end
   end
 end
