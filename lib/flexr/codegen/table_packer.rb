@@ -7,15 +7,22 @@ module Flexr
 
       def pack(rows)
         base = []
-        default = rows.map { |row| row.values.tally.max_by(&:last)&.first || -1 }
+        default = rows.map { |row| row.tally.max_by { |_value, count| count }&.first }
         next_table = []
         check = []
+        occupied = {}
         rows.each_with_index do |row, state|
-          base[state] = next_table.length
-          row.each do |class_id, destination|
-            index = next_table.length
-            next_table[index] = destination
+          entries = row.each_index.reject { |class_id| row[class_id] == default[state] }
+          offset = 0
+          while entries.any? { |class_id| occupied.key?(offset + class_id) }
+            offset += 1
+          end
+          base[state] = offset
+          entries.each do |class_id|
+            index = offset + class_id
+            next_table[index] = row[class_id]
             check[index] = class_id
+            occupied[index] = true
           end
         end
         { base: base.freeze, default: default.freeze, next: next_table.freeze, check: check.freeze }.freeze

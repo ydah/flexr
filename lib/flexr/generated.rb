@@ -36,7 +36,8 @@ module Flexr
           ec: dfa_data.fetch(:ec),
           class_count: dfa_data.fetch(:class_count),
           start: dfa_data.fetch(:start),
-          rule_ids: dfa_data.fetch(:rule_ids)
+          rule_ids: dfa_data.fetch(:rule_ids),
+          packed: dfa_data[:packed]
         )
         Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym)
       end

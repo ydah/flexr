@@ -19,30 +19,29 @@ module Flexr
         state = machine.dfa.start
         best = reference_match(position, buffer)
         cursor = position
+        accelerated = acceleration_enabled?
 
         while buffer.ensure_available?(cursor + 1)
+          if accelerated
+            region = acceleration_region(machine, state)
+            if region
+              accelerated_start = cursor
+              while buffer.ensure_available?(cursor + 1) && region.bytes.include?(buffer.getbyte(cursor))
+                cursor += 1
+              end
+              if cursor > accelerated_start
+                best = consider_acceptances(machine, state, cursor, position, buffer, best)
+                next
+              end
+            end
+          end
+
           byte = buffer.getbyte(cursor)
           state = machine.dfa.transition(state, byte)
           break unless state
 
           cursor += 1
-          machine.dfa.accepts[state].each do |rule_index|
-            candidate = @lexer.class.__flexr_rules.fetch(rule_index)
-            next if candidate.bol_only && !@lexer.beginning_of_line?
-            next unless @lexer.utf8_boundary?(cursor)
-            next unless candidate.end_anchor.nil? || end_anchor_match?(buffer, cursor)
-
-            trailing_length = trailing_length(candidate, buffer, cursor)
-            next if candidate.trailing && trailing_length.nil?
-
-            total_end = cursor + (trailing_length || 0)
-            next if best && total_end < best.total_end_pos
-            next if best && total_end == best.total_end_pos && rule_index > best.rule.index
-
-            ensure_token_size!(cursor, position)
-            best = Match.new(rule: candidate, start_pos: position, end_pos: cursor,
-                             total_end_pos: total_end)
-          end
+          best = consider_acceptances(machine, state, cursor, position, buffer, best)
         end
         best
       end
@@ -129,6 +128,45 @@ module Flexr
         match[0].bytesize
       rescue ArgumentError
         nil
+      end
+
+      def consider_acceptances(machine, state, cursor, position, buffer, best)
+        machine.dfa.accepts[state].each do |rule_index|
+          candidate = @lexer.class.__flexr_rules.fetch(rule_index)
+          next if candidate.bol_only && !@lexer.beginning_of_line?
+          next unless @lexer.utf8_boundary?(cursor)
+          next unless candidate.end_anchor.nil? || end_anchor_match?(buffer, cursor)
+
+          trailing_size = trailing_length(candidate, buffer, cursor)
+          next if candidate.trailing && trailing_size.nil?
+
+          total_end = cursor + (trailing_size || 0)
+          next if best && total_end < best.total_end_pos
+          next if best && total_end == best.total_end_pos && rule_index > best.rule.index
+
+          ensure_token_size!(cursor, position)
+          best = Match.new(rule: candidate, start_pos: position, end_pos: cursor,
+                           total_end_pos: total_end)
+        end
+        best
+      end
+
+      def acceleration_enabled?
+        @lexer.class.__flexr_config.options.fetch(:accel, :auto) != :none && !@lexer.utf8_input?
+      end
+
+      def acceleration_region(machine, state)
+        @acceleration_regions ||= Automaton::Accel.extract(machine.dfa).to_h { |region| [region.state, region] }
+        region = @acceleration_regions[state]
+        return unless region
+
+        accepting = machine.dfa.accepts[state]
+        return if accepting.any? do |rule_index|
+          rule = @lexer.class.__flexr_rules.fetch(rule_index)
+          rule.bol_only || rule.end_anchor || rule.trailing
+        end
+
+        region
       end
 
       def end_anchor_match?(buffer, position)

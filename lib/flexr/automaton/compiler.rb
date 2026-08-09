@@ -127,7 +127,10 @@ module Flexr
             destination = ids[closure]
             unless destination
               destination = sets.length
-              raise CompileError.new("DFA state limit exceeded", diagnostic: Diagnostics.error("FLEXR-E006", "DFA state limit exceeded")) if destination >= 100_000
+              limit = @spec.options.fetch(:max_dfa_states, 100_000)
+              if destination >= limit
+                raise CompileError.new("DFA state limit exceeded", diagnostic: Diagnostics.error("FLEXR-E006", "DFA state limit exceeded"))
+              end
               ids[closure] = destination
               sets << closure
               queue << closure

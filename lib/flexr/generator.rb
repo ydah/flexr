@@ -64,11 +64,11 @@ module Flexr
         "token_kind: #{@options.fetch(:token_kind, parsed.config[:token_kind]).inspect}, " \
         "encoding: #{encoding_expression(parsed.config[:encoding])}, " \
         "declared_tokens: #{parsed.config[:declared_tokens].inspect}, " \
-        "options: #{(parsed.config[:options] || {}).inspect}, " \
+        "options: #{effective_options(parsed).inspect}, " \
         "eof_rules: #{eof_rules_expression(parsed.config[:eof_rules] || {})}, " \
         "states: #{parsed.states.keys.reject { |name| name == :initial }.inspect}, " \
         "inclusive_states: #{parsed.states.transform_values { |value| value[:inclusive] }.inspect}, " \
-        "compiled: #{compiled_expression(compiled)} }"
+        "compiled: #{compiled_expression(compiled, compression: table_compression(parsed))} }"
     end
 
     def compile_parsed(parsed)
@@ -84,14 +84,14 @@ module Flexr
         class_name: parsed.class_name, superclass: "Flexr::Lexer",
         backend: @options.fetch(:backend, parsed.config[:backend]),
         token_kind: @options.fetch(:token_kind, parsed.config[:token_kind]),
-        encoding: parsed.config[:encoding], options: parsed.config[:options] || {},
+        encoding: parsed.config[:encoding], options: effective_options(parsed),
         declared_tokens: parsed.config[:declared_tokens], states: states, rules: rules,
         eof_rules: parsed.config[:eof_rules] || {}, verbatim: parsed.source
       )
       Automaton::Compiler.new(spec).compile
     end
 
-    def compiled_expression(compiled)
+    def compiled_expression(compiled, compression: :none)
       machines = compiled.machines.map do |name, machine|
         dfa = machine.dfa
         data = {
@@ -102,6 +102,9 @@ module Flexr
           start: dfa.start,
           rule_ids: dfa.rule_ids
         }
+        if %i[rows full].include?(compression)
+          data[:packed] = Codegen::TablePacker.pack(dfa.transitions)
+        end
         "#{name.inspect} => { state_name: #{machine.state_name.inspect}, dfa: #{data.inspect} }"
       end
       "{ machines: { #{machines.join(', ')} }, states: #{compiled.states.inspect}, stats: #{compiled.stats.inspect} }"
@@ -109,6 +112,19 @@ module Flexr
 
     def standalone?(parsed)
       @options.fetch(:standalone, parsed.config[:options]&.key?(:standalone) || false)
+    end
+
+    def effective_options(parsed)
+      options = (parsed.config[:options] || {}).dup
+      %i[accel max_dfa_states warn_level table_compression table_format].each do |name|
+        options[name] = @options[name] if @options.key?(name)
+      end
+      options[:standalone] = true if standalone?(parsed)
+      options
+    end
+
+    def table_compression(parsed)
+      @options.fetch(:table_compression, parsed.config[:options]&.fetch(:table_compression, :none) || :none).to_sym
     end
 
     def embedded_runtime

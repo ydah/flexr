@@ -3,9 +3,9 @@
 module Flexr
   module Automaton
     class DFA
-      attr_reader :transitions, :accepts, :ec, :class_count, :start, :states, :rule_ids
+      attr_reader :transitions, :accepts, :ec, :class_count, :start, :states, :rule_ids, :packed
 
-      def initialize(transitions:, accepts:, ec:, class_count:, start:, rule_ids:)
+      def initialize(transitions:, accepts:, ec:, class_count:, start:, rule_ids:, packed: nil)
         @transitions = transitions.freeze
         @accepts = accepts.freeze
         @ec = ec.freeze
@@ -13,10 +13,17 @@ module Flexr
         @start = start
         @states = transitions.length
         @rule_ids = rule_ids.freeze
+        @packed = packed
       end
 
       def transition(state, byte)
-        @transitions[state][@ec[byte]]
+        class_id = @ec[byte]
+        return @transitions[state][class_id] unless @packed
+
+        index = @packed.fetch(:base).fetch(state) + class_id
+        return @packed.fetch(:default).fetch(state) unless @packed.fetch(:check)[index] == class_id
+
+        @packed.fetch(:next).fetch(index)
       end
 
       def accept?(bytes)
