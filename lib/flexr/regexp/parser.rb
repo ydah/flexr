@@ -25,7 +25,7 @@ module Flexr
 
       def parse
         node = parse_expression
-        raise_syntax("unexpected `#{current}`") unless eof? || current == ")"
+        raise_syntax("unexpected `#{current}`") unless eof?
         node
       end
 
@@ -289,8 +289,7 @@ module Flexr
           else
             read_exact(2)
           end
-          @escaped_value = true
-          @last_codepoint = Integer(digits, 16)
+          set_codepoint(digits)
           return
         when "u"
           digits = if consume("{")
@@ -299,8 +298,7 @@ module Flexr
           else
             read_exact(4)
           end
-          @escaped_value = true
-          @last_codepoint = Integer(digits, 16)
+          set_codepoint(digits)
           return
         when "G", "K", "b", "B", "A", "z", "Z", "1", "2", "3", "4", "5", "6", "7", "8", "9"
           raise unsupported("\\#{char}", "use a state or followed_by: instead")
@@ -450,6 +448,20 @@ module Flexr
 
       def read_codepoint
         @last_codepoint
+      end
+
+      def set_codepoint(digits)
+        unless digits.match?(/\A[0-9a-fA-F]+\z/)
+          raise_syntax("invalid escape")
+        end
+
+        codepoint = digits.to_i(16)
+        if codepoint > 0x10ffff || codepoint.between?(0xd800, 0xdfff)
+          raise_syntax("invalid Unicode codepoint")
+        end
+
+        @escaped_value = true
+        @last_codepoint = codepoint
       end
 
       def skip_extended_space

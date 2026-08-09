@@ -193,13 +193,15 @@ module Flexr
           if rule.patterns.empty?
             raise CompileError, "rule #{rule.index} has no pattern"
           end
-          regexp = rule.patterns.first
-          regexp = ::Regexp.new(::Regexp.escape(regexp)) if regexp.is_a?(String)
-          next unless regexp.is_a?(::Regexp) && regexp.match?("")
           next if @spec.options[:allow_empty_match]
 
-          diagnostic = Diagnostics.error("FLEXR-E005", "rule #{rule.index} can match an empty string")
-          raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+          rule.patterns.each do |pattern|
+            regexp = pattern.is_a?(String) ? ::Regexp.new(::Regexp.escape(pattern)) : pattern
+            next unless regexp.is_a?(::Regexp) && regexp.match?("")
+
+            diagnostic = Diagnostics.error("FLEXR-E005", "rule #{rule.index} can match an empty string")
+            raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+          end
         end
       end
     end

@@ -60,7 +60,7 @@ module Flexr
       Automaton::Compiler.new(spec).compile.machines.fetch(:initial).dfa
     end
 
-    def parse_pattern(pattern)
+    def parse_pattern(pattern, options: {})
       regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
       ast = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding,
                                unicode: options[:unicode] == true).parse

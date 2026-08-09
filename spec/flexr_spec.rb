@@ -43,6 +43,22 @@ RSpec.describe Flexr do
     end
   end
 
+  it "parses public patterns and rejects malformed regexp sources" do
+    expect(Flexr.parse_pattern(/a+/)).to be_a(Flexr::Regexp::AST::Seq)
+
+    expect { Flexr::Regexp::Parser.new("a)").parse }
+      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E001") }
+    expect { Flexr::Regexp::Parser.new("\\x{}").parse }
+      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E001") }
+  end
+
+  it "rejects empty alternatives in every pattern of a rule" do
+    lexer_class = Class.new(Flexr::Lexer) { rule([/a/, ""]) { emit :TOKEN } }
+
+    expect { lexer_class.new("a").tokens }
+      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E005") }
+  end
+
   it "generates source while preserving constants and actions" do
     path = File.expand_path("fixtures/generated.flexr.rb", __dir__)
     output = File.join(Dir.tmpdir, "flexr-generated-test.rb")
@@ -54,6 +70,31 @@ RSpec.describe Flexr do
     expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])
   ensure
     FileUtils.rm_f(output) if output
+  end
+
+  it "removes nested DSL spans as one source transformation" do
+    spec = File.join(Dir.tmpdir, "flexr-state-source-#{Process.pid}.flexr.rb")
+    output = File.join(Dir.tmpdir, "flexr-state-source-#{Process.pid}.rb")
+    File.write(spec, <<~RUBY)
+      require "flexr"
+      module NestedSourceFixture
+        class Lexer < Flexr::Lexer
+          rule(/</) { more; push :tag; skip }
+          state :tag do
+            rule(/[^>]+/) { more; skip }
+            rule(/>/) { pop; emit :TAG }
+          end
+        end
+      end
+    RUBY
+
+    Flexr::Generator.new(spec, output: output).generate
+    expect { RubyVM::InstructionSequence.compile(File.read(output)) }.not_to raise_error
+    load output
+    expect(NestedSourceFixture::Lexer.new("<value>").tokens).to eq([[:TAG, "<value>"]])
+  ensure
+    FileUtils.rm_f(spec)
+    FileUtils.rm_f(output)
   end
 
   it "supports EOF actions and Unicode properties" do

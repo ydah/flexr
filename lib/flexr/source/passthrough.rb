@@ -7,7 +7,15 @@ module Flexr
 
       def remove_spans(source, spans, insertion:, payload:)
         result = source.dup
-        spans.sort_by(&:first).reverse_each do |start_offset, end_offset|
+        top_level = spans.reject do |span|
+          spans.any? do |outer|
+            next false if outer.equal?(span)
+
+            outer.first <= span.first && span.last <= outer.last &&
+              (outer.first < span.first || span.last < outer.last)
+          end
+        end
+        top_level.sort_by(&:first).reverse_each do |start_offset, end_offset|
           result.slice!(start_offset...end_offset)
         end
         result.insert(insertion, payload)

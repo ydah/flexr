@@ -2,13 +2,13 @@
 
 module Flexr
   module Source
-    RuleDefinition = Struct.new(
+      RuleDefinition = Struct.new(
       :index, :patterns, :trailing, :action_source, :action, :states, :bol_only, :end_anchor,
       :span, keyword_init: true
     )
-    SpecSource = Struct.new(
-      :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
-      :states, keyword_init: true
+      SpecSource = Struct.new(
+        :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
+        :states, keyword_init: true
     )
 
     class PrismReader
@@ -45,10 +45,11 @@ module Flexr
 
         collect_constants(klass.body)
         collect_body(klass.body, [:initial])
+        first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq { |span| span.first },
-                       first_dsl_offset: @spans.map(&:first).min, constants: @constants, states: @states)
+                       first_dsl_offset: first_dsl_offset, constants: @constants, states: @states)
       end
 
       private
@@ -213,6 +214,15 @@ module Flexr
 
         location = node.respond_to?(:location) ? node.location : node
         @source.byteslice(location.start_offset...location.end_offset)
+      end
+
+      def class_body_offset(node)
+        return node.body.location.start_offset if node.body
+
+        ending = node.location.end_offset
+        return ending - 3 if @source.byteslice(ending - 3, 3) == "end"
+
+        ending
       end
     end
   end
