@@ -14,6 +14,12 @@ gem "flexr"
 The runtime and generated lexers have no runtime gem dependencies. The source
 generator uses Prism on Ruby 3.3 and newer.
 
+| Path | Ruby requirement | Dependencies |
+|---|---:|---|
+| Runtime mode | 3.1+ | none |
+| Generated lexer | 3.1+ | none |
+| `flexr` generator | 3.3+ recommended | Prism (default gem) |
+
 ## Quick start
 
 ```ruby
@@ -31,6 +37,10 @@ CalculatorLexer.new("12 + 3").tokens
 
 flexr chooses the longest match at the current position. Source order breaks
 ties, which means rule reordering cannot accidentally make a shorter rule win.
+
+The runtime path is useful during development: `require` the specification and
+instantiate its lexer. The generated path is the deployment path and embeds
+the compiled tables.
 
 ## Generating a lexer
 
@@ -77,6 +87,10 @@ acceleration checks the extracted byte regions, and dogfood checks that each
 generated Ruby file is syntactically valid and contains a compiled payload.
 `bench:regression` requires the checked-in baseline and fails when its input
 identity changes or throughput drops by more than 10 percent.
+
+For diagnostics, use `flexr check SPEC.rb --format json`, `flexr stats`,
+`flexr dot`, or `flexr trace`. `--warn-as-error` turns compiler warnings into a
+failed generation/check. `NO_COLOR=1` disables diagnostic colors.
 
 ## License
 
