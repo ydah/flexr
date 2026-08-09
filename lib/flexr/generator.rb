@@ -42,8 +42,10 @@ module Flexr
       validate_diagnostics!(compiled)
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
-      install = "Flexr::Generated.install_compiled!(self, #{payload})\n#{indent}"
-      install = "Flexr::Generated.install_compiled!(self, #{payload})\n#{Codegen::Direct.new(compiled).source(indent: indent)}#{indent}" if
+      install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}#{indent}"
+      install = "#{install}#{generated_action_source(parsed, indent)}#{indent}"
+      install = "#{install}#{Codegen::Direct.new(compiled).source(indent: indent)}#{indent}" if
         effective_backend(parsed) == :direct
       result = Source::Passthrough.remove_spans(parsed.source, parsed.dsl_spans, insertion: parsed.first_dsl_offset, payload: install)
       result = result.gsub(/^\s*require ["']flexr["']\s*\n/, "") if standalone?(parsed)
@@ -255,6 +257,47 @@ module Flexr
       return action.inspect unless action.is_a?(Proc)
 
       "proc { emit(nil, text) }"
+    end
+
+    def generated_action_source(parsed, indent)
+      lines = ["#{indent}def __flexr_generated_execute(rule)", "#{indent}  case rule.index"]
+      parsed.rules.each do |rule|
+        lines << "#{indent}  when #{rule.index}"
+        body = inline_action_body(rule.action)
+        if body.nil?
+          lines << "#{indent}    instance_exec(&rule.action)"
+        else
+          body.lines.each { |line| lines << "#{indent}    #{line.rstrip}" }
+        end
+      end
+      lines << "#{indent}  else"
+      lines << "#{indent}    instance_exec(&rule.action)"
+      lines << "#{indent}  end"
+      lines << "#{indent}end\n"
+      lines.join("\n")
+    end
+
+    def inline_action_body(action)
+      case action
+      when :skip
+        ""
+      when Array
+        return "emit(#{action.fetch(1).inspect}, text)" if action.first == :emit
+
+        nil
+      when String
+        return unless action.start_with?("proc")
+
+        body = action.delete_prefix("proc").strip
+        if body.start_with?("{") && body.end_with?("}")
+          body = body[1...-1]
+          return nil if body.lstrip.start_with?("|")
+          return body.strip
+        end
+        return nil unless body.start_with?("do") && body.end_with?("end")
+
+        body.delete_prefix("do")[0...-3].strip
+      end
     end
 
     def validate_diagnostics!(compiled)

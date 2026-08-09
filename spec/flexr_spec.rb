@@ -154,6 +154,7 @@ RSpec.describe Flexr do
     Flexr::Generator.new(path, output: output).generate
     generated = File.read(output)
     expect(generated).to include("DIGIT = /[0-9]/")
+    expect(generated).to include("def scan_one", "def __flexr_generated_execute")
     expect(generated).not_to include("rule(/")
     load output
     expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])

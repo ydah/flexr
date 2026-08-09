@@ -61,6 +61,7 @@ module Flexr
         end
       )
       klass.__flexr_set_compiled!(compiled)
+      klass.__flexr_mark_generated!
       klass
     end
 

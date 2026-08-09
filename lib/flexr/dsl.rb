@@ -20,6 +20,7 @@ module Flexr
         options: {}, declared_tokens: [], states: @__flexr_states
       )
       @__flexr_compiled = nil
+      @__flexr_generated = false
       @__flexr_compile_mutex = Mutex.new
     end
 
@@ -138,6 +139,14 @@ module Flexr
 
     def __flexr_set_compiled!(compiled)
       @__flexr_compiled = compiled
+    end
+
+    def __flexr_mark_generated!
+      @__flexr_generated = true
+    end
+
+    def __flexr_generated?
+      @__flexr_generated == true
     end
 
     private

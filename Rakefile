@@ -184,13 +184,32 @@ task :fuzz do
   cases = Integer(ENV.fetch("FLEXR_FUZZ_CASES", "10000"), 10)
   random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
   FlexrVerification::EXAMPLES.each do |spec|
-    lexer = FlexrVerification.load_runtime(spec)
+    runtime_lexer = FlexrVerification.load_runtime(spec)
+    parts = runtime_lexer.name.split("::")
+    parent = Object
+    parts[0...-1].each { |part| parent = parent.const_get(part) }
+    parent.send(:remove_const, parts.last) if parent.const_defined?(parts.last, false)
+    generated_path = File.join(Dir.tmpdir, "flexr-fuzz-#{Process.pid}-#{File.basename(spec)}")
+    before = ObjectSpace.each_object(Class).to_a
+    File.binwrite(generated_path, FlexrVerification.generated_source(spec))
+    load generated_path
+    generated_lexer = (ObjectSpace.each_object(Class).to_a - before).find do |klass|
+      klass.respond_to?(:__flexr_spec)
+    end
+    raise "no generated lexer found for #{spec}" unless generated_lexer
+
     cases.times do
       input = Array.new(random.rand(128)) { random.rand(0..127) }.pack("C*").force_encoding(Encoding::UTF_8)
-      lexer.new(input, error_mode: :panic).tokens
+      runtime_tokens = runtime_lexer.new(input, error_mode: :panic).tokens
+      generated_tokens = generated_lexer.new(input, error_mode: :panic).tokens
+      next if runtime_tokens == generated_tokens
+
+      abort "fuzz mode mismatch: #{spec} input=#{input.inspect} runtime=#{runtime_tokens.inspect} generated=#{generated_tokens.inspect}"
     rescue Flexr::LexError, ArgumentError
       # Invalid input and user-defined error actions are expected fuzz outcomes.
     end
+  ensure
+    FileUtils.rm_f(generated_path) if generated_path
   end
   puts "fuzz: #{cases} inputs per example passed"
 end

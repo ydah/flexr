@@ -63,7 +63,11 @@ module Flexr
           return nil
         end
 
-        match = Runtime::Interpreter.new(self).scan
+        match = if generated_runtime? && respond_to?(:scan_one, true)
+          scan_one
+        else
+          Runtime::Interpreter.new(self).scan
+        end
         unless match
           unless eof?
             token = handle_unmatched_byte
@@ -268,6 +272,8 @@ module Flexr
     private
 
     def execute(rule)
+      return __flexr_generated_execute(rule) if generated_runtime? && respond_to?(:__flexr_generated_execute, true)
+
       case rule.action
       when :skip
         nil
@@ -282,6 +288,10 @@ module Flexr
       @more_start = @text_start if @more_requested
       @more_start = nil unless @more_requested
       @more_requested = false
+    end
+
+    def generated_runtime?
+      self.class.respond_to?(:__flexr_generated?) && self.class.__flexr_generated?
     end
 
     def ensure_token_size!
