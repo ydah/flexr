@@ -18,7 +18,10 @@ module FlexrVerification
   EXAMPLES = Dir[File.join(ROOT, "examples/**/*.flexr.rb")].freeze
   EXPECTED_INPUTS = {
     %r{/examples/json/} => '{"answer": 42}',
-    %r{/examples/toy_lang/} => "answer + 12"
+    %r{/examples/toy_lang/} => "answer + 12",
+    %r{/examples/ruby_subset/} => 'class Foo "ok" end',
+    %r{/examples/with_racc/} => "12 + 3",
+    %r{/examples/with_lrama/} => "12 - 3"
   }.freeze
   module_function
 
@@ -123,6 +126,39 @@ task "bench:regression" do
   abort "benchmark regression failed (#{status.exitstatus}): #{stderr}#{stdout}" unless status.success?
 
   puts stdout
+end
+
+namespace :test do
+  task :differential do
+    patterns = [/[a-z]+/, /a(?:b|c)?/, /[0-9]{1,3}/, /[^\n]+/, /foo/]
+    cases = Integer(ENV.fetch("FLEXR_DIFFERENTIAL_CASES", "10000"), 10)
+    random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
+    cases.times do
+      pattern = patterns[random.rand(patterns.length)]
+      input = Array.new(random.rand(10)) { random.rand(32..126) }.pack("C*")
+      expected = Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options).match?(input)
+      actual = Flexr.compile_pattern(pattern).accept?(input)
+      next if expected == actual
+
+      abort "differential mismatch: #{pattern.inspect} #{input.inspect} expected=#{expected} actual=#{actual}"
+    end
+    puts "differential: #{cases} cases passed"
+  end
+end
+
+task :fuzz do
+  cases = Integer(ENV.fetch("FLEXR_FUZZ_CASES", "1000"), 10)
+  random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
+  FlexrVerification::EXAMPLES.each do |spec|
+    lexer = FlexrVerification.load_runtime(spec)
+    cases.times do
+      input = Array.new(random.rand(128)) { random.rand(0..127) }.pack("C*").force_encoding(Encoding::UTF_8)
+      lexer.new(input, error_mode: :panic).tokens
+    rescue Flexr::LexError, ArgumentError
+      # Invalid input and user-defined error actions are expected fuzz outcomes.
+    end
+  end
+  puts "fuzz: #{cases} inputs per example passed"
 end
 
 task default: :spec

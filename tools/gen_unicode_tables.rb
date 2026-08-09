@@ -1,38 +1,140 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Generate compact property range files from an explicitly selected UCD
-# checkout. The generated snapshot is used at runtime; host Regexp data is
-# only used by this build-time tool.
+# Generate the vendored Unicode snapshot from the Unicode Character Database.
+# This tool intentionally never asks the host Ruby Regexp implementation for
+# a property set: changing the Ruby version must not change generated output.
 
-input = ARGV.fetch(0) { abort "usage: gen_unicode_tables.rb UCD_DIRECTORY OUTPUT" }
-output = ARGV.fetch(1) { abort "usage: gen_unicode_tables.rb UCD_DIRECTORY OUTPUT" }
-version = File.read(File.join(input, "ReadMe.txt"))[/(?:Version|version)\s+([0-9.]+)/, 1] || "unknown"
-File.write(File.join(output, "UNICODE_VERSION"), "#{version}\n")
+require "fileutils"
 
-properties = {
-  "L" => "L", "Letter" => "L", "N" => "N", "Number" => "N", "Nd" => "Nd",
-  "Hiragana" => "Hiragana", "Greek" => "Greek", "ASCII" => "ASCII",
-  "Alnum" => "Alnum", "Word" => "Word", "Space" => "Space", "XDigit" => "XDigit",
-  "Cntrl" => "Cntrl", "Lowercase" => "Lowercase", "Uppercase" => "Uppercase"
-}
+input = ARGV.fetch(0) { abort "usage: gen_unicode_tables.rb UCD_DIRECTORY OUTPUT_DIRECTORY" }
+output = ARGV.fetch(1) { abort "usage: gen_unicode_tables.rb UCD_DIRECTORY OUTPUT_DIRECTORY" }
+FileUtils.mkdir_p(output)
 
-ranges_for = lambda do |name|
-  regexp = Regexp.new("\\p{#{name}}")
-  scanner = Regexp.new("(?:#{regexp.source})+")
+def parse_ranges(path, property: nil)
   ranges = []
-  [[0, 0xd7ff], [0xe000, 0x10ffff]].each do |lower, upper|
-    segment = (lower..upper).to_a.pack("U*")
-    segment.scan(scanner) do
-      match = Regexp.last_match
-      first = lower + match.begin(0)
-      ranges << [first, first + match[0].length - 1]
-    end
+  File.foreach(path, encoding: "UTF-8") do |line|
+    body, _comment = line.split("#", 2)
+    fields = body.strip.split(";").map(&:strip)
+    next if fields.empty? || fields.first.empty?
+    next if property && fields[1] != property
+
+    first, last = fields.first.split("..", 2).map { |value| Integer(value, 16) }
+    last ||= first
+    ranges << [first, last]
   end
-  ranges
+  merge_ranges(ranges)
 end
 
-table = properties.to_h { |key, value| [key, ranges_for.call(value)] }
+def merge_ranges(ranges)
+  ranges.sort_by(&:first).each_with_object([]) do |range, merged|
+    if merged.empty? || range.first > merged.last.last + 1
+      merged << range.dup
+    else
+      merged.last[1] = [merged.last.last, range.last].max
+    end
+  end
+end
+
+def unicode_version(input)
+  readme = File.join(input, "ReadMe.txt")
+  text = File.file?(readme) ? File.read(readme) : ""
+  text[/Version[- ]([0-9]+\.[0-9]+\.[0-9]+)/, 1] ||
+    text[/Unicode\s+([0-9]+\.[0-9]+\.[0-9]+)/i, 1] || "unknown"
+end
+
+def category_ranges(path, categories)
+  categories = Array(categories)
+  ranges = []
+  first = last = nil
+  current_category = nil
+  File.foreach(path, encoding: "UTF-8") do |line|
+    body = line.split("#", 2).first
+    fields = body.strip.split(";")
+    next if fields.length < 3
+
+    codepoint = Integer(fields[0], 16)
+    name = fields[1]
+    category = fields[2]
+    if name.end_with?(", First>")
+      first = codepoint
+      current_category = category
+    elsif name.end_with?(", Last>") && first
+      last = codepoint
+      ranges << [first, last] if categories.include?(current_category)
+      first = last = current_category = nil
+    elsif categories.include?(category)
+      ranges << [codepoint, codepoint]
+    end
+  end
+  merge_ranges(ranges)
+end
+
+def property_file_ranges(path, names)
+  names = Array(names)
+  selected = []
+  File.foreach(path, encoding: "UTF-8") do |line|
+    body = line.split("#", 2).first
+    fields = body.strip.split(";").map(&:strip)
+    next if fields.length < 2 || !names.include?(fields[1])
+
+    first, last = fields.first.split("..", 2).map { |value| Integer(value, 16) }
+    last ||= first
+    selected << [first, last]
+  end
+  merge_ranges(selected)
+end
+
+def case_fold_table(path)
+  table = {}
+  File.foreach(path, encoding: "UTF-8") do |line|
+    body = line.split("#", 2).first
+    fields = body.strip.split(";").map(&:strip)
+    next unless fields.length >= 3 && %w[C S].include?(fields[1])
+
+    mapping = fields[2].split.map { |value| Integer(value, 16) }
+    table[Integer(fields[0], 16)] = mapping.first if mapping.length == 1
+  end
+  table
+end
+
+unicode_data = File.join(input, "UnicodeData.txt")
+scripts = File.join(input, "Scripts.txt")
+prop_list = File.join(input, "PropList.txt")
+case_folding = File.join(input, "CaseFolding.txt")
+[unicode_data, scripts, prop_list, case_folding].each do |path|
+  abort "missing UCD file: #{path}" unless File.file?(path)
+end
+
+properties = {
+  "L" => category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo]),
+  "Letter" => category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo]),
+  "N" => category_ranges(unicode_data, %w[Nd Nl No]),
+  "Number" => category_ranges(unicode_data, %w[Nd Nl No]),
+  "Nd" => category_ranges(unicode_data, ["Nd"]),
+  "Hiragana" => property_file_ranges(scripts, ["Hiragana"]),
+  "Greek" => property_file_ranges(scripts, ["Greek"]),
+  "ASCII" => [[0, 0x7f]],
+  "Alnum" => category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]),
+  "Word" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]) + [[0x5f, 0x5f]]),
+  "Space" => property_file_ranges(prop_list, ["White_Space"]),
+  "XDigit" => [[0x30, 0x39], [0x41, 0x46], [0x61, 0x66]],
+  "Cntrl" => [[0, 0x1f], [0x7f, 0x9f]],
+  "Lowercase" => property_file_ranges(prop_list, ["Lowercase"]),
+  "Uppercase" => property_file_ranges(prop_list, ["Uppercase"])
+}
+%w[Cc Cf Cn Co Cs Ll Lm Lo Lt Lu Mc Me Mn Nd Nl No Pc Pd Pe Pf Pi Po Ps Sc Sk Sm So Zl Zp Zs].each do |category|
+  properties[category] = category_ranges(unicode_data, [category])
+end
+{
+  "C" => %w[Cc Cf Cn Co Cs], "M" => %w[Mc Me Mn], "P" => %w[Pc Pd Pe Pf Pi Po Ps],
+  "S" => %w[Sc Sk Sm So], "Z" => %w[Zl Zp Zs], "LC" => %w[Lt Lu Ll]
+}.each do |name, categories|
+  properties[name] = category_ranges(unicode_data, categories)
+end
+
+version = unicode_version(input)
+File.write(File.join(output, "UNICODE_VERSION"), "#{version}\n")
 source = <<~RUBY
   # frozen_string_literal: true
 
@@ -40,10 +142,23 @@ source = <<~RUBY
     module Unicode
       module Data
         VERSION = #{version.inspect}
-        PROPERTIES = #{table.inspect}.freeze
+        PROPERTIES = #{properties.inspect}.freeze
       end
     end
   end
 RUBY
 File.write(File.join(output, "properties.rb"), source)
-puts "Unicode #{version}: generated #{table.length} property tables"
+
+fold_source = <<~RUBY
+  # frozen_string_literal: true
+
+  module Flexr
+    module Unicode
+      module Data
+        CASE_FOLD = #{case_fold_table(case_folding).inspect}.freeze
+      end
+    end
+  end
+RUBY
+File.write(File.join(output, "case_folding.rb"), fold_source)
+puts "Unicode #{version}: generated #{properties.length} property tables"
