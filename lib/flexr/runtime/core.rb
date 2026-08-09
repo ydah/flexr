@@ -224,7 +224,7 @@ module Flexr
       matched_bytes = @match_end - @match_start
       raise ArgumentError, "less must not exceed matched bytes" if count.negative? || count > matched_bytes
 
-      @position = @match_end - count
+      @position = @match_start + count
       @match_end = @position
       @matched = nil
     end
