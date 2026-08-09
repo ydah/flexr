@@ -14,10 +14,11 @@ module Flexr
 
       attr_reader :source
 
-      def initialize(source, options: 0, encoding: Encoding::UTF_8)
+      def initialize(source, options: 0, encoding: Encoding::UTF_8, unicode: false)
         @source = source
         @options = options
         @encoding = encoding
+        @unicode = unicode
         @index = 0
         @class_depth = 0
       end
@@ -313,6 +314,11 @@ module Flexr
       end
 
       def shorthand_ranges(char)
+        if @unicode
+          property = { "d" => "Nd", "w" => "Word", "s" => "Space" }.fetch(char.downcase, nil)
+          return [[AST::Property, char == char.upcase, property]] if property
+        end
+
         base = case char.downcase
         when "d" then [[48, 57]]
         when "w" then [[48, 57], [65, 90], [95, 95], [97, 122]]

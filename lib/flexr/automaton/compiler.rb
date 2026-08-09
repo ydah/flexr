@@ -50,12 +50,14 @@ module Flexr
 
           rule.patterns.each do |pattern|
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding)
+            encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
+            parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
+                                        unicode: @spec.options[:unicode] == true)
             ast = parser.parse
             ast, bol_only, end_anchor = strip_anchors(ast)
             rule.bol_only = true if bol_only
             rule.end_anchor = true if end_anchor
-            normalized_ast = Regexp::Normalizer.new(ast, encoding: regexp.encoding, options: regexp.options).normalize
+            normalized_ast = Regexp::Normalizer.new(ast, encoding: encoding, options: regexp.options).normalize
             normalized << [normalized_ast, rule.index]
           end
         end
@@ -73,7 +75,9 @@ module Flexr
       def validate_reference_patterns(rule)
         rule.patterns.each do |pattern|
           regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-          parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: regexp.encoding)
+          encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
+          parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
+                                      unicode: @spec.options[:unicode] == true)
           ast = parser.parse
           _body, bol_only, end_anchor = strip_anchors(ast)
           rule.bol_only = true if bol_only
