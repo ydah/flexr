@@ -4,6 +4,7 @@ module Flexr
   module Source
       RuleDefinition = Struct.new(
       :index, :patterns, :trailing, :action_source, :action, :states, :bol_only, :end_anchor,
+      :pattern_conditions,
       :span, keyword_init: true
     )
       SpecSource = Struct.new(

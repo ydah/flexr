@@ -53,21 +53,24 @@ module Flexr
           @lexer.utf8_input? ? Encoding::UTF_8 : Encoding::BINARY
         )
         candidates = @lexer.class.__flexr_rules.filter_map do |rule|
+          next unless rule_active?(rule)
           next unless rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
-          next if rule.bol_only && !@lexer.beginning_of_line?
 
-          matches = rule.patterns.filter_map do |pattern|
+          matches = rule.patterns.each_with_index.filter_map do |pattern, pattern_index|
+            condition = rule.pattern_conditions.fetch(pattern_index)
+            next if condition.bol_only && !@lexer.beginning_of_line?
+
             Unicode::ReferenceRegexp.match(
               pattern, data.byteslice(position..), encoding: @lexer.class.__flexr_config.encoding,
               options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
-            )
+            )&.then { |match| [match, condition] }
           end
-          match = matches.max_by { |item| item[0].bytesize }
+          match, condition = matches.max_by { |item| item[0][0].bytesize }
           next unless match&.begin(0)&.zero?
 
           end_position = position + match[0].bytesize
           next unless @lexer.utf8_boundary?(end_position)
-          next if rule.end_anchor && !end_anchor_match?(buffer, end_position)
+          next if condition.end_anchor && !end_anchor_match?(buffer, end_position)
 
           trailing = trailing_length(rule, buffer, end_position)
           next if rule.trailing && trailing.nil?
@@ -91,20 +94,24 @@ module Flexr
           @lexer.utf8_input? ? Encoding::UTF_8 : Encoding::BINARY
         )
         @lexer.class.__flexr_rules.sort_by(&:index).each do |rule|
-          next if rule.bol_only && !@lexer.beginning_of_line?
+          next unless rule_active?(rule)
 
-          matches = rule.patterns.filter_map do |pattern|
+          matches = rule.patterns.each_with_index.filter_map do |pattern, pattern_index|
+            condition = rule.pattern_conditions.fetch(pattern_index)
+            next if condition.bol_only && !@lexer.beginning_of_line?
+
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            regexp.match(subject.byteslice(position..), 0)
+            regexp.match(subject.byteslice(position..), 0)&.then { |match| [match, condition] }
           rescue ArgumentError, RegexpError
             nil
           end
-          match = matches.select { |candidate| candidate.begin(0).zero? }.max_by { |candidate| candidate[0].bytesize }
+          match, condition = matches.select { |candidate| candidate[0].begin(0).zero? }
+            .max_by { |candidate| candidate[0][0].bytesize }
           next unless match
 
           end_position = position + match[0].bytesize
           next unless @lexer.utf8_boundary?(end_position)
-          next if rule.end_anchor && !end_anchor_match?(buffer, end_position)
+          next if condition.end_anchor && !end_anchor_match?(buffer, end_position)
           trailing = trailing_length(rule, buffer, end_position)
           next if rule.trailing && trailing.nil?
 
@@ -129,18 +136,18 @@ module Flexr
       end
 
       def consider_acceptances(machine, state, cursor, position, buffer, best)
-        machine.dfa.accepts[state].each do |rule_index|
-          candidate = @lexer.class.__flexr_rules.fetch(rule_index)
-          next if candidate.bol_only && !@lexer.beginning_of_line?
+        machine.dfa.accepts[state].each do |acceptance|
+          candidate = @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+          next if acceptance.bol_only && !@lexer.beginning_of_line?
           next unless @lexer.utf8_boundary?(cursor)
-          next unless candidate.end_anchor.nil? || end_anchor_match?(buffer, cursor)
+          next unless !acceptance.end_anchor || end_anchor_match?(buffer, cursor)
 
           trailing_size = trailing_length(candidate, buffer, cursor)
           next if candidate.trailing && trailing_size.nil?
 
           total_end = cursor + (trailing_size || 0)
           next if best && total_end < best.total_end_pos
-          next if best && total_end == best.total_end_pos && rule_index > best.rule.index
+          next if best && total_end == best.total_end_pos && acceptance.rule_index > best.rule.index
 
           ensure_token_size!(cursor, position)
           best = Match.new(rule: candidate, start_pos: position, end_pos: cursor,
@@ -159,9 +166,9 @@ module Flexr
         return unless region
 
         accepting = machine.dfa.accepts[state]
-        return if accepting.any? do |rule_index|
-          rule = @lexer.class.__flexr_rules.fetch(rule_index)
-          rule.bol_only || rule.end_anchor || rule.trailing
+        return if accepting.any? do |acceptance|
+          rule = @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+          acceptance.bol_only || acceptance.end_anchor || rule.trailing
         end
 
         region
@@ -174,6 +181,15 @@ module Flexr
       def ensure_token_size!(end_position, position)
         text_start = @lexer.more_text_start || position
         @lexer.defer_token_size_check!(end_position - text_start)
+      end
+
+      def rule_active?(rule)
+        return true if rule.states.include?(:initial) && @lexer.state == :initial
+
+        state = @lexer.class.__flexr_config.states.fetch(@lexer.state)
+        return true if state.inclusive && rule.states.include?(:initial)
+
+        rule.states.include?(@lexer.state)
       end
 
     end

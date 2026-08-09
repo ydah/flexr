@@ -55,7 +55,10 @@ module Flexr
 
     def generated_payload(parsed, compiled)
       definitions = parsed.rules.map do |rule|
-        "{ index: #{rule.index}, patterns: #{rule.patterns.inspect}, trailing: #{rule.trailing.inspect}, " \
+        conditions = Array(rule.pattern_conditions).map do |condition|
+          [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
+        end
+        "{ index: #{rule.index}, patterns: #{rule.patterns.inspect}, pattern_conditions: #{conditions.inspect}, trailing: #{rule.trailing.inspect}, " \
           "action: #{action_expression(rule.action)}, states: #{rule.states.inspect}, " \
           "bol_only: #{rule.bol_only.inspect}, end_anchor: #{rule.end_anchor.inspect} }"
       end
@@ -88,7 +91,12 @@ module Flexr
         declared_tokens: parsed.config[:declared_tokens], states: states, rules: rules,
         eof_rules: parsed.config[:eof_rules] || {}, verbatim: parsed.source
       )
-      Automaton::Compiler.new(spec).compile
+      compiled = Automaton::Compiler.new(spec).compile
+      parsed.rules.each do |rule|
+        compiled_rule = spec.rules.fetch(rule.index)
+        rule.pattern_conditions = compiled_rule.pattern_conditions
+      end
+      compiled
     end
 
     def compiled_expression(compiled, compression: :none)

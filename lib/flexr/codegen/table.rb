@@ -9,7 +9,7 @@ module Flexr
         {
           ec: dfa.ec,
           nxt: dfa.transitions.flatten.map { |value| value || -1 },
-          acc: dfa.accepts.map { |rules| rules.first || -1 },
+          acc: dfa.accepts.map { |rules| rules.first&.rule_index || -1 },
           start: dfa.start,
           states: dfa.states,
           classes: dfa.class_count

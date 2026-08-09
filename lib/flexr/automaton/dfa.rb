@@ -7,12 +7,19 @@ module Flexr
 
       def initialize(transitions:, accepts:, ec:, class_count:, start:, rule_ids:, packed: nil)
         @transitions = transitions.freeze
-        @accepts = accepts.freeze
+        @accepts = accepts.map do |rules|
+          rules.map do |acceptance|
+            next acceptance if acceptance.is_a?(Acceptance)
+
+            Acceptance.new(rule_index: acceptance[0], pattern_index: acceptance[1],
+                           bol_only: acceptance[2], end_anchor: acceptance[3])
+          end.freeze
+        end.freeze
         @ec = ec.freeze
         @class_count = class_count
         @start = start
         @states = transitions.length
-        @rule_ids = rule_ids.freeze
+        @rule_ids = rule_ids.map { |id| id.respond_to?(:rule_index) ? id.rule_index : id }.uniq.sort.freeze
         @packed = packed
       end
 

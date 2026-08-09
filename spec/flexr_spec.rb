@@ -38,6 +38,48 @@ RSpec.describe Flexr do
     expect(lexer_class.new('"hello"').tokens).to eq([[:STRING, "hello"]])
   end
 
+  it "does not let state-local reference rules leak into initial" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      state :word do
+        rule(/\p{L}+/) { emit :WORD }
+      end
+      rule(/./) { emit :CHAR }
+    end
+
+    expect(lexer_class.new("a").tokens).to eq([[:CHAR, "a"]])
+  end
+
+  it "does not let state-local firstmatch rules leak into initial" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      backend :firstmatch
+      option :experimental
+      state :word do
+        rule(/a+/) { emit :WORD }
+      end
+      rule(/./) { emit :CHAR }
+    end
+
+    expect(lexer_class.new("a").tokens).to eq([[:CHAR, "a"]])
+  end
+
+  it "keeps anchor conditions local to each alternative pattern" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule([/^a/, /b/]) { emit :X }
+      rule(/./) { emit :CHAR }
+    end
+
+    expect(lexer_class.new("!b").tokens).to eq([[:CHAR, "!"], [:X, "b"]])
+  end
+
+  it "consumes the separator in mixed inline regexp options" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/(?i-m:a)/) { emit :X }
+      rule(/./) { emit :CHAR }
+    end
+
+    expect(lexer_class.new("A").tokens).to eq([[:X, "A"]])
+  end
+
   it "provides diagnostics for unsupported regexp features" do
     expect { Flexr::Regexp::Parser.new("a(?=b)").parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
       expect(error.diagnostic.code).to eq("FLEXR-E014")

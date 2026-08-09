@@ -248,7 +248,7 @@ module Flexr
 
     private
 
-    def execute(rule)
+      def execute(rule)
       case rule.action
       when :skip
         nil

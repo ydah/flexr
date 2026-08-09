@@ -141,15 +141,18 @@ module Flexr
           add = true
           flags = []
           while ["i", "m", "x", "-"].include?(current)
-            add = false if current == "-"
-            flags << advance unless current == "-"
+            if consume?("-")
+              add = false
+            else
+              flags << [advance, add]
+            end
           end
           if consume?(":")
-            flags.each { |flag| update_option(flag, add) }
+            flags.each { |flag, enabled| update_option(flag, enabled) }
             return true
           end
           if consume?(")")
-            flags.each { |flag| update_option(flag, add) }
+            flags.each { |flag, enabled| update_option(flag, enabled) }
             return :global
           end
           raise_syntax("invalid inline option group")

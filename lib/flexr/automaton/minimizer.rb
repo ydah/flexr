@@ -41,8 +41,9 @@ module Flexr
           dfa.transitions[representative].map { |destination| destination.nil? ? nil : index[groups[destination]] }
         end
         accepts = order.map { |group| dfa.accepts[partitions[group].first] }
+        rule_ids = accepts.flatten.map(&:rule_index).uniq.sort
         DFA.new(transitions: transitions, accepts: accepts, ec: dfa.ec, class_count: dfa.class_count,
-                start: 0, rule_ids: accepts.flatten.uniq.sort)
+                start: 0, rule_ids: rule_ids)
       end
 
       def bfs_groups(dfa, groups, start_group)

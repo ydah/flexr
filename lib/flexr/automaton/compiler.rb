@@ -43,22 +43,24 @@ module Flexr
       def compile_machine(rules)
         normalized = []
         rules.each do |rule|
+          rule.pattern_conditions = []
           if reference_rule?(rule)
             validate_reference_patterns(rule)
             next
           end
 
-          rule.patterns.each do |pattern|
+          rule.patterns.each_with_index do |pattern, pattern_index|
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
             encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
             parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
                                         unicode: @spec.options[:unicode] == true)
             ast = parser.parse
             ast, bol_only, end_anchor = strip_anchors(ast)
-            rule.bol_only = true if bol_only
-            rule.end_anchor = true if end_anchor
+            condition = Acceptance.new(rule_index: rule.index, pattern_index: pattern_index,
+                                       bol_only: bol_only, end_anchor: end_anchor)
+            rule.pattern_conditions[pattern_index] = condition
             normalized_ast = Regexp::Normalizer.new(ast, encoding: encoding, options: regexp.options).normalize
-            normalized << [normalized_ast, rule.index]
+            normalized << [normalized_ast, condition]
           end
         end
         return empty_dfa if normalized.empty?
@@ -77,15 +79,16 @@ module Flexr
       end
 
       def validate_reference_patterns(rule)
-        rule.patterns.each do |pattern|
+        rule.patterns.each_with_index do |pattern, pattern_index|
           regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
           encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
           parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
                                       unicode: @spec.options[:unicode] == true)
           ast = parser.parse
           _body, bol_only, end_anchor = strip_anchors(ast)
-          rule.bol_only = true if bol_only
-          rule.end_anchor = true if end_anchor
+          rule.pattern_conditions[pattern_index] = Acceptance.new(
+            rule_index: rule.index, pattern_index: pattern_index, bol_only: bol_only, end_anchor: end_anchor
+          )
         end
       end
 
@@ -137,8 +140,9 @@ module Flexr
           end
         end
         transitions.each { |row| row.map! { |value| value } }
+        rule_ids = accepts.flatten.map(&:rule_index).uniq.sort
         dfa = DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: class_count, start: 0,
-                      rule_ids: accepts.flatten.uniq.sort)
+                      rule_ids: rule_ids)
         Minimizer.minimize(dfa)
       end
 
@@ -179,7 +183,7 @@ module Flexr
 
           rules.concat(nfa.states[state].accepts)
         end
-        rules.uniq.sort
+        rules.uniq.sort_by { |acceptance| [acceptance.rule_index, acceptance.pattern_index] }
       end
 
       def validate_rules

@@ -18,7 +18,7 @@ module Flexr
         klass.state(state, inclusive: config.fetch(:inclusive_states, {}).fetch(state.to_sym, false)) { nil }
       end
       rules.each do |definition|
-        klass.__flexr_add_generated_rule(definition)
+      klass.__flexr_add_generated_rule(definition)
       end
       config.fetch(:eof_rules, {}).each do |state, action|
         klass.__flexr_add_generated_eof(state, action)
@@ -59,7 +59,13 @@ module Flexr
         index: definition.fetch(:index), patterns: Array(definition.fetch(:patterns)),
         trailing: definition[:trailing], action: action,
         states: Array(definition.fetch(:states)).map(&:to_sym),
-        bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor]
+        bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
+        pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
+          next unless condition
+
+          Automaton::Acceptance.new(rule_index: condition[0], pattern_index: condition[1],
+                                    bol_only: condition[2], end_anchor: condition[3])
+        end
       )
     end
   end

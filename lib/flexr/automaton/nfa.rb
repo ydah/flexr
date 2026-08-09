@@ -4,6 +4,11 @@ module Flexr
   module Automaton
     NFAState = Struct.new(:epsilon, :transitions, :accepts, keyword_init: true)
     NFATransition = Struct.new(:lo, :hi, :to, keyword_init: true)
+    Acceptance = Struct.new(:rule_index, :pattern_index, :bol_only, :end_anchor, keyword_init: true) do
+      def inspect
+        [rule_index, pattern_index, bol_only, end_anchor].inspect
+      end
+    end
 
     class NFA
       attr_reader :states, :start, :byte_classes
@@ -36,10 +41,10 @@ module Flexr
       end
 
       def build(patterns)
-        patterns.each do |pattern, rule_index|
+        patterns.each do |pattern, acceptance|
           start, finish = fragment(pattern)
           @nfa.epsilon(@nfa.start, start)
-          @nfa.states[finish].accepts << rule_index
+          @nfa.states[finish].accepts << acceptance
         end
         @nfa
       end
