@@ -68,7 +68,15 @@ trusted input.
 bundle install
 bundle exec rake test
 bundle exec rake modes:equivalence
+bundle exec rake golden:verify accel:equivalence dogfood:verify
+bundle exec rake bench:regression
 ```
+
+The verification gates are independent: golden checks generated-source digests,
+acceleration checks the extracted byte regions, and dogfood checks that each
+generated Ruby file is syntactically valid and contains a compiled payload.
+`bench:regression` requires the checked-in baseline and fails when its input
+identity changes or throughput drops by more than 10 percent.
 
 ## License
 
