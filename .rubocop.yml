@@ -14,3 +14,18 @@ Metrics/ClassLength:
 
 Style/Documentation:
   Enabled: false
+
+Style/StringLiterals:
+  Enabled: false
+
+Metrics:
+  Enabled: false
+
+Layout:
+  Enabled: false
+
+Naming/MethodParameterName:
+  Enabled: false
+
+Lint/ScriptPermission:
+  Enabled: false
