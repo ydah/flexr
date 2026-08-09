@@ -29,6 +29,7 @@ module Flexr
       @candidate_token_size = 0
       @eof_fired_states = {}
       @on_error = nil
+      @halted = false
     end
 
     attr_reader :filename, :error_mode, :buffer, :max_token_size
@@ -40,7 +41,11 @@ module Flexr
     end
 
     def next_token
+      return nil if @halted
+
       loop do
+        return nil if @halted
+
         if eof? && @pending.nil?
           eof_action = self.class.__flexr_spec.eof_rules[@state]
           if eof_action && !@eof_fired_states[@state]
@@ -182,8 +187,11 @@ module Flexr
         action = @on_error.call(error)
         return @pending = nil if action == :skip
         raise error if action == :raise
-        return @pending = nil if action == :halt
-        emit(:error, text) if action == :token
+        if action == :halt
+          @halted = true
+          return @pending = nil
+        end
+        return emit(:error, text) if action == :token
       end
       case @error_mode
       when :token
