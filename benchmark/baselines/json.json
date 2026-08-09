@@ -10,13 +10,13 @@
   "modes": {
     "runtime": {
       "tokens": 50000,
-      "mb_per_s": 0.25,
-      "tokens_per_s": 90000
+      "mb_per_s": 0.288,
+      "tokens_per_s": 102684
     },
     "generated": {
       "tokens": 50000,
-      "mb_per_s": 0.25,
-      "tokens_per_s": 90000
+      "mb_per_s": 0.28,
+      "tokens_per_s": 99955
     }
   }
 }
