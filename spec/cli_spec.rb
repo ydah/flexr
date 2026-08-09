@@ -32,11 +32,27 @@ RSpec.describe Flexr::CLI do
     expect(errors).to include("unknown option")
   end
 
-  it "returns failure for import because conversion is not implemented" do
-    status, output, _errors = run_cli("import", spec_path)
+  it "imports a basic flex specification into ordinary Ruby" do
+    path = File.join(Dir.tmpdir, "flexr-import-#{Process.pid}.l")
+    File.write(path, <<~LEX)
+      %x STRING
+      %token WORD
+      %%
+      [a-z]+    { return WORD; }
+      "<"       { BEGIN(STRING); }
+      <STRING>[^>]+  ECHO;
+      %%
+      /* footer */
+    LEX
 
-    expect(status).to eq(1)
-    expect(output).to include("FLEXR-TODO")
+    status, output, errors = run_cli("import", path)
+
+    expect(status).to eq(0)
+    expect(output).to include("class Lexer < Flexr::Lexer", "emits :WORD", "begin_state :STRING")
+    expect(output).not_to include("FLEXR-TODO")
+    expect(errors).to be_empty
+  ensure
+    FileUtils.rm_f(path)
   end
 
   it "supports version and rule-filtered explain output" do

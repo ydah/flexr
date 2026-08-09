@@ -144,6 +144,14 @@ RSpec.describe "Flexr runtime" do
     expect(lexer_class.new(input, error_mode: :token).tokens).to eq([[:error, input]])
   end
 
+  it "continues after unmatched bytes in panic mode" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/[a-z]+/) { emit :WORD }
+    end
+
+    expect(lexer_class.new("!ok", error_mode: :panic).tokens).to eq([[:WORD, "ok"]])
+  end
+
   it "accepts a token exactly at max_token_size" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/a+/) { emit :WORD, text }

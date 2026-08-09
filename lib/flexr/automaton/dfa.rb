@@ -43,7 +43,15 @@ module Flexr
 
     class ReferenceDFA
       def initialize(regexp)
-        @regexp = ::Regexp.new("\\A(?:#{regexp.source})\\z", regexp.options)
+        source, options = if regexp.source.include?("\\p{")
+          converted = Unicode::ReferenceRegexp.compiled(
+            regexp, encoding: regexp.encoding, options: regexp.options, unicode: false
+          )
+          [converted.source, converted.options]
+        else
+          [regexp.source, regexp.options]
+        end
+        @regexp = ::Regexp.new("\\A(?:#{source})\\z", options)
       end
 
       def accept?(bytes)

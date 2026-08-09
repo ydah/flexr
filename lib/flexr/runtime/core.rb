@@ -60,7 +60,12 @@ module Flexr
 
         match = Runtime::Interpreter.new(self).scan
         unless match
-          return handle_unmatched_byte unless eof?
+          unless eof?
+            token = handle_unmatched_byte
+            next unless token
+
+            return token
+          end
           return nil
         end
         @match_start = match.start_pos

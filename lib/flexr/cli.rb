@@ -20,7 +20,7 @@ module Flexr
       raise ArgumentError, "a SPEC.rb path is required" unless spec
       raise ArgumentError, "unexpected argument: #{positionals.first}" unless positionals.empty?
 
-      execute(command, spec, options, output, rule_number, benchmark_args, out)
+      execute(command, spec, options, output, rule_number, benchmark_args, out, err)
     rescue ArgumentError => error
       err.puts "error: #{error.message}"
       usage(err, status: EXIT_USAGE)
@@ -99,7 +99,7 @@ module Flexr
       raise ArgumentError, "invalid option value: #{error.message}"
     end
 
-    def execute(command, spec, options, output, rule_number, benchmark_args, out)
+    def execute(command, spec, options, output, rule_number, benchmark_args, out, err)
       case command
       when :check
         check(spec, options, out)
@@ -119,10 +119,14 @@ module Flexr
       when :bench
         run_benchmark(spec, options, benchmark_args, out)
       when :import
-        out.puts "# FLEXR-TODO: import requires manual action translation"
-        out.puts "require \"flexr\""
-        out.puts "class Lexer < Flexr::Lexer; end"
-        EXIT_FAILURE
+        result = Importer.import(spec)
+        if output
+          File.binwrite(output, result.source)
+        else
+          out.write(result.source)
+        end
+        result.warnings.each { |warning| err.puts "warning: #{warning}" }
+        result.complete? ? EXIT_OK : EXIT_FAILURE
       when :generate
         target = output || spec.sub(/\.flexr\.rb\z/, ".rb")
         Generator.new(spec, output: target, eval_mode: options.eval_mode,
