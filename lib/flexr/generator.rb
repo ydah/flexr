@@ -232,7 +232,7 @@ module Flexr
     end
 
     def table_compression(parsed)
-      @options.fetch(:table_compression, parsed.config[:options]&.fetch(:table_compression, :none) || :none).to_sym
+      @options.fetch(:table_compression, parsed.config[:options]&.fetch(:table_compression, :rows) || :rows).to_sym
     end
 
     def embedded_runtime

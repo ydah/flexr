@@ -11,6 +11,7 @@ module Flexr
         "digit" => "Nd", "alpha" => "L", "alnum" => "Alnum",
         "word" => "Word", "space" => "Space"
       }.freeze
+      POSIX_CLASSES = %w[alnum alpha blank cntrl digit graph lower print punct space upper xdigit].freeze
 
       attr_reader :source
 
@@ -217,6 +218,9 @@ module Flexr
       def parse_posix_class
         expect("[:")
         name = read_until(":]")
+        return [[AST::Property, false, "POSIX_#{name}"]] if
+          @encoding != Encoding::BINARY && POSIX_CLASSES.include?(name)
+
         case name
         when "alnum" then [[48, 57], [65, 90], [97, 122]]
         when "alpha" then [[65, 90], [97, 122]]

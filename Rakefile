@@ -156,13 +156,19 @@ end
 
 namespace :test do
   task :differential do
-    patterns = [/[a-z]+/, /a(?:b|c)?/, /[0-9]{1,3}/, /[^\n]+/, /foo/]
-    cases = Integer(ENV.fetch("FLEXR_DIFFERENTIAL_CASES", "10000"), 10)
+    patterns = [/[a-z]+/, /a(?:b|c)?/, /[0-9]{1,3}/, /[^\n]+/, /foo/,
+                /[[:alpha:]]+/, /[[:alnum:]]+/, /\p{L}+/, /\p{Nd}+/]
+    cases = Integer(ENV.fetch("FLEXR_DIFFERENTIAL_CASES", "1000000"), 10)
     random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
+    unicode_inputs = ["", "a", "あ", "é", "ß", "Ω", "١", "　", "aあ", "éΩ"].freeze
     compiled = {}
     cases.times do
       pattern = patterns[random.rand(patterns.length)]
-      input = Array.new(random.rand(10)) { random.rand(32..126) }.pack("C*")
+      input = if random.rand(4).zero?
+        unicode_inputs.sample(random: random)
+      else
+        Array.new(random.rand(10)) { random.rand(32..126) }.pack("C*")
+      end
       expected = Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options).match?(input)
       key = [pattern.source, pattern.options]
       actual = (compiled[key] ||= Flexr.compile_pattern(pattern)).accept?(input)
@@ -175,7 +181,7 @@ namespace :test do
 end
 
 task :fuzz do
-  cases = Integer(ENV.fetch("FLEXR_FUZZ_CASES", "1000"), 10)
+  cases = Integer(ENV.fetch("FLEXR_FUZZ_CASES", "10000"), 10)
   random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
   FlexrVerification::EXAMPLES.each do |spec|
     lexer = FlexrVerification.load_runtime(spec)

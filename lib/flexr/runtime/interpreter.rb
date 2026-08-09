@@ -58,20 +58,26 @@ module Flexr
 
         candidates = @lexer.class.__flexr_rules.filter_map do |rule|
           next unless rule_active?(rule)
-          next unless rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
+          next unless rule.patterns.any? { |pattern| reference_pattern?(pattern) }
 
           matches = rule.patterns.each_with_index.filter_map do |pattern, pattern_index|
             condition = rule.pattern_conditions.fetch(pattern_index)
             next if condition.bol_only && !@lexer.beginning_of_line?
 
-            streamed_match(pattern, buffer, position, reference: true)&.then { |match| [match, condition] }
+            match = streamed_match(pattern, buffer, position, reference: true)
+            next unless match&.begin(0)&.zero?
+
+            end_position = position + match[0].bytesize
+            next unless @lexer.utf8_boundary?(end_position)
+            next if condition.end_anchor && !end_anchor_match?(buffer, end_position)
+
+            [match, condition]
           end
-          match, condition = matches.max_by { |item| item[0][0].bytesize }
+          match, _condition = matches.max_by { |item| item[0][0].bytesize }
           next unless match&.begin(0)&.zero?
 
           end_position = position + match[0].bytesize
           next unless @lexer.utf8_boundary?(end_position)
-          next if condition.end_anchor && !end_anchor_match?(buffer, end_position)
 
           trailing = trailing_length(rule, buffer, end_position)
           next if rule.trailing && trailing.nil?
@@ -85,8 +91,13 @@ module Flexr
 
       def reference_rules?
         @lexer.class.__flexr_rules.any? do |rule|
-          rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
+          rule.patterns.any? { |pattern| reference_pattern?(pattern) }
         end
+      end
+
+      def reference_pattern?(pattern)
+        pattern.is_a?(::Regexp) &&
+          (pattern.source.include?("\\p{") || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
       end
 
       def scan_firstmatch(position)
@@ -136,7 +147,7 @@ module Flexr
         minimum = minimum_match_bytes(pattern)
         loop do
           subject, tail = stream_subject(buffer, position)
-          match = if reference
+          match = if reference && !posix_pattern?(pattern)
             Unicode::ReferenceRegexp.match(
               pattern, subject, encoding: @lexer.class.__flexr_config.encoding,
               options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
@@ -208,6 +219,8 @@ module Flexr
       end
 
       def minimum_match_bytes(pattern)
+        return 1 if posix_pattern?(pattern)
+
         ast = Regexp::Parser.new(pattern.source, options: pattern.options,
                                  encoding: pattern.encoding, unicode: true).parse
         minimum_ast_bytes(ast, ignorecase: pattern.options.anybits?(::Regexp::IGNORECASE))
@@ -239,6 +252,8 @@ module Flexr
       end
 
       def possible_first_byte?(pattern, byte)
+        return true if posix_pattern?(pattern)
+
         ast = Regexp::Parser.new(pattern.source, options: pattern.options,
                                  encoding: pattern.encoding, unicode: true).parse
         binary = !@lexer.utf8_input?
@@ -318,6 +333,10 @@ module Flexr
         ranges = Unicode::Property.ranges(range[2])
         ranges = Unicode::CaseFold.merge(ranges.flat_map { |lo, hi| Unicode::CaseFold.ranges(lo, hi) }) if ignorecase
         range[1] ? complement_codepoint_ranges(ranges) : ranges
+      end
+
+      def posix_pattern?(pattern)
+        pattern.is_a?(::Regexp) && pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
       end
 
       def consider_acceptances(machine, state, cursor, position, buffer, best)

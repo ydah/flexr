@@ -260,7 +260,8 @@ module Flexr
       Runtime::Location.new(
         filename: @filename, byte_begin: @match_start, byte_end: @match_end,
         line_begin: @line, line_end: @line + text.to_s.b.count("\n"),
-        column_begin: column_at(@match_start), column_end: column_at(@match_end)
+        column_resolver: ->(position) { column_at(position) },
+        eager_columns: self.class.__flexr_config.options[:eager_columns] == true
       )
     end
 

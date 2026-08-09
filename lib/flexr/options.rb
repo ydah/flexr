@@ -8,7 +8,7 @@ module Flexr
   ) do
     def self.default
       new(backend: :table, token_kind: :array, accel: :auto, standalone: false,
-          eval_mode: false, table_compression: :none, table_format: :literal,
+          eval_mode: false, table_compression: :rows, table_format: :literal,
           max_dfa_states: 100_000, warn_level: :default, warn_as_error: false,
           color: :auto, format: :human, overrides: {})
     end
