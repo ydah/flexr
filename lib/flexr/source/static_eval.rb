@@ -3,11 +3,14 @@
 module Flexr
   module Source
     class StaticEval
+      MISSING = Object.new.freeze
+
       attr_reader :constants
 
-      def initialize(source, constants: {})
+      def initialize(source, constants: {}, scope: [])
         @source = source
         @constants = constants
+        @scope = Array(scope).map(&:to_s)
       end
 
       def call(node)
@@ -44,7 +47,7 @@ module Flexr
         when "ArrayNode"
           node.elements.map { |element| evaluate(element) }
         when "ConstantReadNode"
-          @constants.fetch(node.name) { raise_resolution("constant #{node.name} is not statically known") }
+          evaluate_constant([node.name.to_s], absolute: false)
         when "ConstantPathNode"
           evaluate_constant_path(node)
         when "SplatNode"
@@ -72,14 +75,45 @@ module Flexr
       end
 
       def evaluate_constant_path(node)
-        name = if node.respond_to?(:name)
-          node.name
-        else
-          node.child.name
-        end
-        return Encoding.const_get(name) if node.respond_to?(:parent) && node.parent&.name == :Encoding
+        source = source_slice(node)
+        absolute = source.start_with?("::")
+        parts = source.delete_prefix("::").split("::").reject(&:empty?)
+        evaluate_constant(parts, absolute: absolute)
+      end
 
-        raise_resolution("constant path is not statically supported")
+      def evaluate_constant(parts, absolute:)
+        candidates = if absolute
+          [parts.join("::")]
+        else
+          @scope.length.downto(0).map do |depth|
+            (@scope.take(depth) + parts).join("::")
+          end
+        end
+
+        candidates.uniq.each do |candidate|
+          value = constant_value(candidate)
+          return value unless value.equal?(MISSING)
+        end
+
+        return ::Encoding.const_get(parts.last) if !absolute && parts.length == 2 && parts.first == "Encoding"
+
+        raise_resolution("constant #{parts.join('::')} is not statically known")
+      rescue NameError
+        raise_resolution("constant #{parts.join('::')} is not statically known")
+      end
+
+      def constant_value(name)
+        return @constants[name] if @constants.key?(name)
+
+        symbol = name.to_sym
+        return @constants[symbol] if @constants.key?(symbol)
+
+        MISSING
+      end
+
+      def source_slice(node)
+        location = node.location
+        @source.byteslice(location.start_offset...location.end_offset)
       end
 
       def evaluate_call(node)

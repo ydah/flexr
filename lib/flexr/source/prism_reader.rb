@@ -19,6 +19,7 @@ module Flexr
         @source = source
         @path = path
         @constants = {}
+        @constant_definitions = {}
         @rules = []
         @spans = []
         @states = { initial: { inclusive: true } }
@@ -44,7 +45,9 @@ module Flexr
         klass, class_name = find_lexer_class(prism.value)
         raise CompileError, "no class inheriting from Flexr::Lexer found" unless klass
 
-        collect_constants(klass.body)
+        @lexer_scope = class_name.to_s.delete_prefix("::").split("::").reject(&:empty?)
+        collect_constants(prism.value)
+        resolve_constants
         collect_body(klass.body, [:initial])
         first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
@@ -92,18 +95,49 @@ module Flexr
         source_slice(node.superclass).delete(" ").sub(/\A::/, "") == "Flexr::Lexer"
       end
 
-      def collect_constants(node)
-        each_node(node) do |child|
-          next unless child.class.name.end_with?("ConstantWriteNode")
+      def collect_constants(node, scope: [])
+        return unless node
 
-          begin
-            @constants[child.name] = static(child.value)
-          rescue StaticResolutionError
-            # Unrelated runtime constants are part of the verbatim class body.
-            # A referenced dynamic constant still fails when the pattern itself
-            # is evaluated, with the normal FLEXR-E017 diagnostic.
-          end
+        kind = node.class.name.split("::").last
+        if %w[ClassNode ModuleNode].include?(kind)
+          nested_scope = scope + namespace_parts(node.constant_path)
+          collect_constants(node.body, scope: nested_scope)
+          return
         end
+
+        if kind.end_with?("ConstantWriteNode")
+          name = qualify_constant(scope, node.name)
+          @constant_definitions[name] = [node.value, scope.dup]
+        end
+
+        node.child_nodes.compact.each { |child| collect_constants(child, scope: scope) }
+      end
+
+      def resolve_constants
+        pending = @constant_definitions.dup
+
+        loop do
+          resolved = false
+          pending.each_key do |name|
+            value_node, scope = pending.fetch(name)
+            value = StaticEval.new(@source, constants: @constants, scope: scope).call(value_node)
+            @constants[name] = value
+            pending.delete(name)
+            resolved = true
+          rescue StaticResolutionError
+            # Keep unresolved definitions out of the table. If a DSL expression
+            # refers to one later, StaticEval emits the normal FLEXR-E017.
+          end
+          break unless resolved
+        end
+      end
+
+      def namespace_parts(node)
+        source_slice(node).delete_prefix("::").split("::").reject(&:empty?)
+      end
+
+      def qualify_constant(scope, name)
+        (scope + [name.to_s]).reject(&:empty?).join("::")
       end
 
       def collect_body(node, states)
@@ -155,9 +189,9 @@ module Flexr
 
       def collect_state(node, parent_states)
         args = positional(node)
-        names = args.map { |argument| static(argument).to_sym }
+        names = args.map { |argument| static(argument, scope: @lexer_scope).to_sym }
         names = parent_states if node.name.to_sym == :all_states
-        inclusive = keyword(node, :inclusive) ? static(keyword(node, :inclusive)) : false
+        inclusive = keyword(node, :inclusive) ? static(keyword(node, :inclusive), scope: @lexer_scope) : false
         names.each { |name| @states[name] = { inclusive: inclusive } }
         block = node.block
         collect_body(block&.body, names)
@@ -165,7 +199,7 @@ module Flexr
 
       def collect_rule(node, states)
         values = positional(node)
-        patterns = static(values.first)
+        patterns = static(values.first, scope: @lexer_scope)
         patterns = [patterns] unless patterns.is_a?(Array)
         unless (@allow_dynamic && patterns.any?(&:nil?)) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) }
           diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, or Array")
@@ -184,7 +218,8 @@ module Flexr
           action_source.start_with?("do") ? "proc #{action_source}" : "proc#{action_source}"
         end
         @rules << RuleDefinition.new(
-          index: @rules.length, patterns: patterns, trailing: options[:followed_by] && static(options[:followed_by]),
+          index: @rules.length, patterns: patterns,
+          trailing: options[:followed_by] && static(options[:followed_by], scope: @lexer_scope),
           action_source: action_source, action: action || action_for(options), states: states.dup,
           bol_only: false, end_anchor: nil,
           span: [node.location.start_offset, node.location.end_offset]
@@ -198,8 +233,8 @@ module Flexr
         "proc { emit(nil, text) }"
       end
 
-      def static(node)
-        StaticEval.new(@source, constants: @constants).call(node)
+      def static(node, scope: @lexer_scope)
+        StaticEval.new(@source, constants: @constants, scope: scope).call(node)
       rescue StaticResolutionError
         raise unless @allow_dynamic
 
