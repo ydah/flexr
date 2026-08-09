@@ -8,6 +8,7 @@ module Flexr
       ALIASES = {
         "L" => "L", "Letter" => "L", "N" => "N", "Number" => "N", "Nd" => "Nd",
         "Hiragana" => "Hiragana", "Greek" => "Greek", "ASCII" => "ASCII",
+        "Any" => "Any", "Assigned" => "Assigned", "Cased_Letter" => "LC",
         "Alnum" => "Alnum", "Word" => "Word", "Space" => "Space", "XDigit" => "XDigit",
         "Cntrl" => "Cntrl", "Lower" => "Lowercase", "Lowercase" => "Lowercase",
         "Upper" => "Uppercase", "Uppercase" => "Uppercase"
@@ -21,12 +22,21 @@ module Flexr
         key = [name.to_s, negate]
         return CACHE[key] if CACHE.key?(key)
 
-        canonical = ALIASES.fetch(name.to_s, name.to_s)
+        canonical = canonical_name(name)
         ranges = Data::PROPERTIES.fetch(canonical) do
           raise CompileError, "unknown Unicode property: #{name}"
         end
         ranges = complement(ranges) if negate
         CACHE[key] = ranges.map(&:dup).freeze
+      end
+
+      def canonical_name(name)
+        raw = name.to_s.strip
+        raw = raw.split("=", 2).last if raw.include?("=")
+        return ALIASES.fetch(raw) if ALIASES.key?(raw)
+
+        compact = raw.delete("-_ ")
+        Data::PROPERTIES.keys.find { |candidate| candidate.delete("-_ ") == compact } || raw
       end
 
       def complement(ranges)

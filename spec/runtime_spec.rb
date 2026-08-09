@@ -67,6 +67,28 @@ RSpec.describe "Flexr runtime" do
     expect(lexer.input.valid_encoding?).to be(true)
   end
 
+  it "does not drain an IO for a short reference match" do
+    input = RuntimeChunkedInput.new("a" * 100_000)
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/\p{L}/) { emit :LETTER }
+    end
+
+    expect(lexer_class.new(input, chunk_size: 1).next_token).to eq([:LETTER, "a"])
+    expect(input.reads.length).to be < 10
+  end
+
+  it "does not drain an IO for a short firstmatch match" do
+    input = RuntimeChunkedInput.new("a" * 100_000)
+    lexer_class = Class.new(Flexr::Lexer) do
+      backend :firstmatch
+      option :experimental
+      rule(/a/) { emit :LETTER }
+    end
+
+    expect(lexer_class.new(input, chunk_size: 1).next_token).to eq([:LETTER, "a"])
+    expect(input.reads.length).to be < 10
+  end
+
   it "enforces max_token_size for reference matches" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/\p{Hiragana}+/) { emit :WORD, text }

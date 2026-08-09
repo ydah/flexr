@@ -5,7 +5,7 @@ module Flexr
     RUNTIME_SOURCES = %w[
       version.rb errors.rb diagnostics.rb ir.rb
       regexp/ast.rb regexp/parser.rb regexp/normalizer.rb regexp/unsupported.rb regexp/char_class.rb
-      unicode/utf8_splitter.rb unicode/data/properties.rb unicode/property.rb unicode/reference_regexp.rb unicode/case_fold.rb
+      unicode/utf8_splitter.rb unicode/data/properties.rb unicode/data/case_folding.rb unicode/property.rb unicode/reference_regexp.rb unicode/case_fold.rb
       automaton/byte_class_set.rb automaton/nfa.rb automaton/dfa.rb automaton/compiler.rb
       automaton/analysis.rb automaton/minimizer.rb automaton/accel.rb
       runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb

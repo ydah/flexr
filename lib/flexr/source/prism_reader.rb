@@ -87,7 +87,13 @@ module Flexr
         each_node(node) do |child|
           next unless child.class.name.end_with?("ConstantWriteNode")
 
-          @constants[child.name] = static(child.value)
+          begin
+            @constants[child.name] = static(child.value)
+          rescue StaticResolutionError
+            # Unrelated runtime constants are part of the verbatim class body.
+            # A referenced dynamic constant still fails when the pattern itself
+            # is evaluated, with the normal FLEXR-E017 diagnostic.
+          end
         end
       end
 

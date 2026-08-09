@@ -50,9 +50,6 @@ module Flexr
       def reference_match(position, buffer)
         return unless reference_rules?
 
-        data = buffer.read_to_end.dup.force_encoding(
-          @lexer.utf8_input? ? Encoding::UTF_8 : Encoding::BINARY
-        )
         candidates = @lexer.class.__flexr_rules.filter_map do |rule|
           next unless rule_active?(rule)
           next unless rule.patterns.any? { |pattern| pattern.is_a?(::Regexp) && pattern.source.include?("\\p{") }
@@ -61,10 +58,7 @@ module Flexr
             condition = rule.pattern_conditions.fetch(pattern_index)
             next if condition.bol_only && !@lexer.beginning_of_line?
 
-            Unicode::ReferenceRegexp.match(
-              pattern, data.byteslice(position..), encoding: @lexer.class.__flexr_config.encoding,
-              options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
-            )&.then { |match| [match, condition] }
+            streamed_match(pattern, buffer, position, reference: true)&.then { |match| [match, condition] }
           end
           match, condition = matches.max_by { |item| item[0][0].bytesize }
           next unless match&.begin(0)&.zero?
@@ -91,9 +85,6 @@ module Flexr
 
       def scan_firstmatch(position)
         buffer = @lexer.buffer
-        subject = buffer.read_to_end.dup.force_encoding(
-          @lexer.utf8_input? ? Encoding::UTF_8 : Encoding::BINARY
-        )
         @lexer.class.__flexr_rules.sort_by(&:index).each do |rule|
           next unless rule_active?(rule)
 
@@ -102,7 +93,7 @@ module Flexr
             next if condition.bol_only && !@lexer.beginning_of_line?
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            regexp.match(subject.byteslice(position..), 0)&.then { |match| [match, condition] }
+            streamed_match(regexp, buffer, position)&.then { |match| [match, condition] }
           rescue ArgumentError, RegexpError
             nil
           end
@@ -127,13 +118,133 @@ module Flexr
         return 0 unless rule.trailing
 
         regexp = rule.trailing
-        segment = buffer.read_to_end.byteslice(position..)
-        match = regexp.match(segment, 0)
+        match = streamed_match(regexp, buffer, position)
         return nil unless match&.begin(0)&.zero?
 
         match[0].bytesize
       rescue ArgumentError
         nil
+      end
+
+      def streamed_match(pattern, buffer, position, reference: false)
+        minimum = minimum_match_bytes(pattern)
+        loop do
+          subject, tail = stream_subject(buffer, position)
+          match = if reference
+            Unicode::ReferenceRegexp.match(
+              pattern, subject, encoding: @lexer.class.__flexr_config.encoding,
+              options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
+            )
+          else
+            pattern.match(subject, 0)
+          end
+          return match if match && match[0].bytesize < subject.bytesize
+          return match if match && %i[eof invalid].include?(tail)
+          return nil if !match && subject.bytesize >= minimum && tail != :incomplete
+          return match unless can_refill_match?(buffer, position, subject.bytesize, tail)
+        rescue ArgumentError, RegexpError
+          return nil
+        end
+      end
+
+      def stream_subject(buffer, position)
+        return [buffer.byteslice(position...buffer.bytesize).to_s.b, buffer.eof_loaded? ? :eof : :end] unless @lexer.utf8_input?
+
+        cursor = position
+        while cursor < buffer.bytesize
+          status, length = utf8_status(buffer, cursor)
+          break unless status == :complete
+
+          cursor += length
+        end
+        tail = if cursor < buffer.bytesize
+          utf8_status(buffer, cursor).first
+        elsif buffer.eof_loaded?
+          :eof
+        else
+          :end
+        end
+        subject = buffer.byteslice(position, cursor - position).to_s.dup.force_encoding(Encoding::UTF_8)
+        [subject, tail]
+      end
+
+      def utf8_status(buffer, position)
+        return [:eof, 0] if position >= buffer.bytesize
+
+        first = buffer.source.getbyte(position)
+        return [:complete, 1] if first <= 0x7f
+        return [:invalid, 1] unless first.between?(0xc2, 0xf4)
+
+        length = if first <= 0xdf
+          2
+        elsif first <= 0xef
+          3
+        else
+          4
+        end
+        return [:incomplete, length] unless buffer.ensure_available?(position + length)
+        return [:invalid, length] unless buffer.valid_utf8_at?(position)
+
+        [:complete, length]
+      end
+
+      def can_refill_match?(buffer, position, subject_size, tail)
+        target = if tail == :incomplete
+          position + subject_size + 1
+        else
+          buffer.bytesize + 1
+        end
+        buffer.ensure_available?(target)
+      end
+
+      def minimum_match_bytes(pattern)
+        ast = Regexp::Parser.new(pattern.source, options: pattern.options,
+                                 encoding: pattern.encoding, unicode: true).parse
+        minimum_ast_bytes(ast)
+      rescue CompileError, RegexpError
+        1
+      end
+
+      def minimum_ast_bytes(node)
+        case node
+        when Regexp::AST::Empty, Regexp::AST::Anchor then 0
+        when Regexp::AST::ByteRange then 1
+        when Regexp::AST::CodepointRange then utf8_length(node.lo)
+        when Regexp::AST::CharClass
+          ranges = node.ranges.flat_map do |range|
+            range.first == Regexp::AST::Property ? Unicode::Property.ranges(range[2], negate: range[1]) : [range]
+          end
+          ranges = complement_codepoint_ranges(ranges) if node.negated
+          ranges.map { |lo, _hi| utf8_length(lo) }.min || 1
+        when Regexp::AST::Seq then node.children.sum { |child| minimum_ast_bytes(child) }
+        when Regexp::AST::Alt then node.children.map { |child| minimum_ast_bytes(child) }.min || 0
+        else minimum_unknown_bytes(node)
+        end
+      end
+
+      def minimum_unknown_bytes(node)
+        return 0 if node.is_a?(Regexp::AST::Star)
+
+        1
+      end
+
+      def utf8_length(codepoint)
+        return 1 if codepoint <= 0x7f
+        return 2 if codepoint <= 0x7ff
+        return 3 if codepoint <= 0xffff
+
+        4
+      end
+
+      def complement_codepoint_ranges(ranges)
+        result = []
+        cursor = 0
+        ranges.sort_by(&:first).each do |lo, hi|
+          result << [cursor, lo - 1] if cursor < lo
+          cursor = [cursor, hi + 1].max
+        end
+        result << [cursor, 0x10ffff] if cursor <= 0x10ffff
+        result
       end
 
       def consider_acceptances(machine, state, cursor, position, buffer, best)

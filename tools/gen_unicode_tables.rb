@@ -85,6 +85,27 @@ def property_file_ranges(path, names)
   merge_ranges(selected)
 end
 
+def property_names(path)
+  names = {}
+  File.foreach(path, encoding: "UTF-8") do |line|
+    body = line.split("#", 2).first
+    fields = body.strip.split(";").map(&:strip)
+    names[fields[1]] = true if fields.length >= 2 && !fields[1].empty?
+  end
+  names.keys.sort
+end
+
+def complement_ranges(ranges, maximum: 0x10ffff)
+  result = []
+  cursor = 0
+  ranges.each do |first, last|
+    result << [cursor, first - 1] if cursor < first
+    cursor = [cursor, last + 1].max
+  end
+  result << [cursor, maximum] if cursor <= maximum
+  result
+end
+
 def case_fold_table(path)
   table = {}
   File.foreach(path, encoding: "UTF-8") do |line|
@@ -112,8 +133,6 @@ properties = {
   "N" => category_ranges(unicode_data, %w[Nd Nl No]),
   "Number" => category_ranges(unicode_data, %w[Nd Nl No]),
   "Nd" => category_ranges(unicode_data, ["Nd"]),
-  "Hiragana" => property_file_ranges(scripts, ["Hiragana"]),
-  "Greek" => property_file_ranges(scripts, ["Greek"]),
   "ASCII" => [[0, 0x7f]],
   "Alnum" => category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]),
   "Word" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]) + [[0x5f, 0x5f]]),
@@ -132,6 +151,12 @@ end
 }.each do |name, categories|
   properties[name] = category_ranges(unicode_data, categories)
 end
+
+property_names(scripts).each do |script|
+  properties[script] = property_file_ranges(scripts, [script])
+end
+properties["Any"] = [[0, 0x10ffff]]
+properties["Assigned"] = complement_ranges(properties.fetch("Cn"))
 
 version = unicode_version(input)
 File.write(File.join(output, "UNICODE_VERSION"), "#{version}\n")

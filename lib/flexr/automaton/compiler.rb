@@ -108,7 +108,21 @@ module Flexr
         else
           Regexp::AST::Seq.new(children: children, loc: nil)
         end
+        if contains_anchor?(body)
+          diagnostic = Diagnostics.error(
+            "FLEXR-E009", "anchors are only valid at the outermost pattern boundaries",
+            help: "split alternatives into separate rules or move ^/$ outside the alternation"
+          )
+          raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+        end
         [body, bol_only, end_anchor]
+      end
+
+      def contains_anchor?(node)
+        return true if node.is_a?(Regexp::AST::Anchor)
+        return false unless node.respond_to?(:children)
+
+        node.children.any? { |child| contains_anchor?(child) }
       end
 
       def subset_construction(nfa, ec, class_count)

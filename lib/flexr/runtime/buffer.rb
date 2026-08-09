@@ -54,6 +54,10 @@ module Flexr
         source
       end
 
+      def eof_loaded?
+        @eof
+      end
+
       def eof?(position)
         !ensure_available?(position + 1)
       end

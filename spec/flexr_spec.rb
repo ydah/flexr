@@ -91,6 +91,13 @@ RSpec.describe Flexr do
     expect(lexer_class.new("!b").tokens).to eq([[:CHAR, "!"], [:X, "b"]])
   end
 
+  it "diagnoses anchors nested inside regexp alternation" do
+    [/^a|b/, /a|b$/].each do |pattern|
+      expect { Flexr.compile_pattern(pattern) }
+        .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E009") }
+    end
+  end
+
   it "consumes the separator in mixed inline regexp options" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/(?i-m:a)/) { emit :X }
@@ -167,5 +174,36 @@ RSpec.describe Flexr do
 
     lexer_class = Class.new(Flexr::Lexer) { rule(/\p{Hiragana}+/) { emit :WORD } }
     expect(lexer_class.new("あいう").tokens).to eq([[:WORD, "あいう"]])
+  end
+
+  it "supports UCD general-category and script properties" do
+    lexer_class = Class.new(Flexr::Lexer) { rule(/\p{Lu}+/) { emit :UPPER } }
+    expect(lexer_class.new("ABC").tokens).to eq([[:UPPER, "ABC"]])
+
+    latin = Class.new(Flexr::Lexer) { rule(/\p{Latin}+/) { emit :LATIN } }
+    expect(latin.new("abc").tokens).to eq([[:LATIN, "abc"]])
+  end
+
+  it "uses simple case folding equivalence classes from the UCD" do
+    lexer_class = Class.new(Flexr::Lexer) { rule(/k/i) { emit :K } }
+
+    expect(lexer_class.new("K").tokens).to eq([[:K, "K"]])
+  end
+
+  it "preserves unrelated dynamic constants during generation" do
+    spec = File.join(Dir.tmpdir, "flexr-dynamic-constant-#{Process.pid}.flexr.rb")
+    File.write(spec, <<~RUBY)
+      require "flexr"
+      class DynamicConstantLexer < Flexr::Lexer
+        HELPER = Time.now
+        rule(/a/) { emit :A }
+      end
+    RUBY
+
+    generated = Flexr::Generator.new(spec).generate
+    expect(generated).to include("HELPER = Time.now")
+    expect(generated).not_to include("rule(/a/)")
+  ensure
+    FileUtils.rm_f(spec) if spec
   end
 end

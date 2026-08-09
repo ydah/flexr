@@ -7,16 +7,28 @@ module Flexr
 
       def ranges(lo, hi)
         table = Data.const_defined?(:CASE_FOLD, false) ? Data::CASE_FOLD : {}
-        equivalents = table.flat_map do |point, folded|
-          [point, folded].grep(lo..hi)
+        return [[lo, hi]] if table.empty?
+
+        points = {}
+        table.each do |point, folded|
+          next unless point.between?(lo, hi) || folded.between?(lo, hi)
+
+          points[point] = true
+          points[folded] = true
         end
-        if table.empty? && hi - lo <= 4096
-          equivalents.concat((lo..hi).filter_map do |point|
-            folded = point.chr(Encoding::UTF_8).swapcase.ord
-            [point, folded] unless folded == point
-          end.flatten)
+        loop do
+          changed = false
+          table.each do |point, folded|
+            next unless points.key?(point) || points.key?(folded)
+            next if points.key?(point) && points.key?(folded)
+
+            points[point] = true
+            points[folded] = true
+            changed = true
+          end
+          break unless changed
         end
-        merge([[lo, hi]] + equivalents.uniq.map { |point| [point, point] })
+        merge([[lo, hi]] + points.keys.map { |point| [point, point] })
       end
 
       def merge(ranges)
