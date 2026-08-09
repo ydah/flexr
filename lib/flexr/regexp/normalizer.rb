@@ -110,21 +110,7 @@ module Flexr
 
       def casefold_ranges(lo, hi)
         return [[lo, hi]] if @options.nobits?(::Regexp::IGNORECASE)
-        return [[lo, hi]] unless lo <= 0x7f && hi >= 0
-
-        points = (lo..hi).to_a
-        points.concat(points.filter_map do |codepoint|
-          char = codepoint.chr(Encoding::UTF_8)
-          folded = char.swapcase.ord
-          folded <= 0x7f ? folded : nil
-        end)
-        points.sort.each_with_object([]) do |point, result|
-          if result.empty? || point > result.last.last + 1
-            result << [point, point]
-          else
-            result.last[1] = point
-          end
-        end
+        Unicode::CaseFold.ranges(lo, hi)
       end
     end
   end

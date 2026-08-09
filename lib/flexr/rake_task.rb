@@ -19,7 +19,7 @@ module Flexr
 
       output = @output || @spec.sub(/\.flexr\.rb\z/, ".rb")
       Rake::FileTask.define_task(output => @spec) do
-        Generator.new(@spec, output: output).generate
+        Generator.new(@spec, output: output, options: { warn_as_error: @warn_as_error }).generate
       end
       Rake::Task.define_task(@name => output)
     end

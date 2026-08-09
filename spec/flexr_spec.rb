@@ -24,6 +24,26 @@ RSpec.describe Flexr do
     expect(lexer_class.new("abc").tokens).to eq([[:LONG, "abc"]])
   end
 
+  it "uses the direct backend without changing longest-match results" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      backend :direct
+      rule(/[a-z]+/) { emit :WORD }
+      rule(/[0-9]+/) { emit :NUMBER }
+      rule(/[ \t]+/, skip: true)
+    end
+
+    expect(lexer_class.new("abc 12").tokens).to eq([[:WORD, "abc"], [:NUMBER, "12"]])
+  end
+
+  it "reports shadowed rules in compiler diagnostics" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/a/) { skip }
+      rule(/a/) { skip }
+    end
+
+    expect(lexer_class.compile!.diagnostics.map(&:code)).to include("FLEXR-W001")
+  end
+
   it "supports states" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/"/) { push :string }

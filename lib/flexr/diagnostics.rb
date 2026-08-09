@@ -50,10 +50,10 @@ module Flexr
       @items.dup
     end
 
-    def render(format: :human, color: false)
+    def render(format: :human, color: :auto)
       return JSON.generate(@items.map(&:to_h)) if format.to_sym == :json
 
-      @items.map { |item| render_one(item, color: color) }.join("\n")
+      @items.map { |item| render_one(item, color: color_enabled?(color)) }.join("\n")
     end
 
     private
@@ -65,6 +65,13 @@ module Flexr
       lines << "  help: #{item.help}" if item.help
       lines << "  note: #{item.note}" if item.note
       lines.join("\n")
+    end
+
+    def color_enabled?(color)
+      return false if ENV.key?("NO_COLOR") || color == :never || color == false
+      return true if [:always, true].include?(color)
+
+      $stderr.tty?
     end
   end
 

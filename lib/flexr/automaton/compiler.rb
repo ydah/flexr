@@ -2,7 +2,7 @@
 
 module Flexr
   module Automaton
-    CompiledSpec = Struct.new(:machines, :rules, :states, :stats, keyword_init: true)
+    CompiledSpec = Struct.new(:machines, :rules, :states, :stats, :diagnostics, keyword_init: true)
     Machine = Struct.new(:dfa, :state_name, keyword_init: true)
 
     class Compiler
@@ -11,6 +11,7 @@ module Flexr
       end
 
       def compile
+        started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         validate_rules
         state_names = effective_states
         machines = state_names.to_h do |state_name|
@@ -18,7 +19,9 @@ module Flexr
           [state_name, Machine.new(dfa: compile_machine(rules), state_name: state_name)]
         end
         stats = machines.transform_values { |machine| machine.dfa.stats }
-        CompiledSpec.new(machines: machines, rules: @spec.rules, states: state_names, stats: stats)
+        compiled = CompiledSpec.new(machines: machines, rules: @spec.rules, states: state_names, stats: stats)
+        compiled.diagnostics = diagnostics_for(compiled, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at)
+        compiled
       end
 
       private
@@ -131,6 +134,7 @@ module Flexr
             unless destination
               destination = sets.length
               limit = @spec.options.fetch(:max_dfa_states, 100_000)
+              limit = 100_000 unless limit.is_a?(Integer) && limit.positive?
               raise CompileError.new("DFA state limit exceeded", diagnostic: Diagnostics.error("FLEXR-E006", "DFA state limit exceeded")) if destination >= limit
               ids[closure] = destination
               sets << closure
@@ -201,6 +205,104 @@ module Flexr
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
           end
         end
+      end
+
+      def diagnostics_for(compiled, elapsed)
+        diagnostics = []
+        present = compiled.machines.values.flat_map do |machine|
+          machine.dfa.accepts.filter_map { |acceptances| acceptances.min_by(&:rule_index)&.rule_index }
+        end
+        reference_rules = @spec.rules.select { |rule| reference_rule?(rule) && rule_active_anywhere?(rule) }
+        present.concat(reference_rules.map(&:index))
+        diagnostics.concat(@spec.rules.reject { |rule| present.include?(rule.index) }.map do |rule|
+          Diagnostics.warning("FLEXR-W001", "rule #{rule.index} is unreachable")
+        end)
+
+        @spec.states.each_key do |state_name|
+          next if state_name == :initial
+          next unless rules_for(state_name).empty?
+
+          diagnostics << Diagnostics.warning("FLEXR-W002", "state #{state_name.inspect} has no rules")
+        end
+
+        if @spec.backend == :firstmatch && @spec.rules.length > 1
+          diagnostics << Diagnostics.warning(
+            "FLEXR-W010", "firstmatch may change longest-match semantics",
+            help: "use backend :table unless first-match compatibility is required"
+          )
+        end
+
+        max_cells = compiled.stats.values.map { |stat| stat[:states] * stat[:classes] }.max.to_i
+        diagnostics << Diagnostics.warning("FLEXR-W011", "generated transition table is large") if max_cells > 1_000_000
+
+        capture_rules.each do |rule|
+          diagnostics << Diagnostics.warning("FLEXR-W013", "rule #{rule.index} uses a capturing group; flexr treats it as non-capturing")
+        end
+
+        undeclared_tokens.each do |token|
+          diagnostics << Diagnostics.warning("FLEXR-W014", "token #{token.inspect} is not declared by emits")
+        end
+
+        diagnostics.concat(variable_trailing_rules.map do |rule|
+          Diagnostics.warning("FLEXR-W003", "rule #{rule.index} uses variable-length trailing context",
+                              help: "make the body or followed_by expression fixed length when possible")
+        end)
+
+        if @spec.options[:accel] == :regexp
+          diagnostics.concat(@spec.rules.select(&:trailing).map do |rule|
+            Diagnostics.warning("FLEXR-W012", "rule #{rule.index} cannot use region acceleration with trailing context")
+          end)
+        end
+
+        if elapsed > 0.5
+          diagnostics << Diagnostics.warning("FLEXR-W016", format("DFA construction took %.3fs", elapsed),
+                                              help: "use generated mode for production startup")
+        end
+        diagnostics
+      end
+
+      def rule_active_anywhere?(rule)
+        @spec.states.keys.any? { |state_name| rules_for(state_name).include?(rule) }
+      end
+
+      def capture_rules
+        @spec.rules.select do |rule|
+          rule.patterns.any? do |pattern|
+            source = pattern.respond_to?(:source) ? pattern.source : pattern.to_s
+            source.match?(/(?<!\\)\((?!\?)/)
+          end
+        end
+      end
+
+      def undeclared_tokens
+        return [] if Array(@spec.declared_tokens).empty?
+
+        emitted = @spec.rules.flat_map do |rule|
+          action = rule.action
+          if action.is_a?(Array) && action.first == :emit
+            [action.last]
+          elsif action.is_a?(String)
+            action.scan(/\bemit\s*\(?\s*:([A-Za-z_]\w*)/).flatten.map(&:to_sym)
+          else
+            []
+          end
+        end
+        declared = Array(@spec.declared_tokens)
+        emitted.uniq.reject { |token| declared.include?(token) }
+      end
+
+      def variable_trailing_rules
+        @spec.rules.select do |rule|
+          next false unless rule.trailing
+
+          rule.patterns.any? { |pattern| variable_pattern?(pattern) } && variable_pattern?(rule.trailing)
+        end
+      end
+
+      def variable_pattern?(pattern)
+        source = pattern.respond_to?(:source) ? pattern.source : pattern.to_s
+        source = source.gsub(/\\./, "")
+        source.match?(/[+*]|\{\d+,\d*\}/)
       end
     end
   end

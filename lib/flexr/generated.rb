@@ -45,7 +45,8 @@ module Flexr
         machines: machines,
         rules: klass.__flexr_rules,
         states: payload.fetch(:compiled).fetch(:states).map(&:to_sym),
-        stats: payload.fetch(:compiled).fetch(:stats)
+        stats: payload.fetch(:compiled).fetch(:stats),
+        diagnostics: []
       )
       klass.__flexr_set_compiled!(compiled)
       klass

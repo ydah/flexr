@@ -174,14 +174,12 @@ module Flexr
       end
 
       def fold_ranges(ranges)
-        values = ranges.flat_map do |lo, hi|
-          points = (lo..hi).to_a
-          points + points.filter_map do |codepoint|
-            swapped = codepoint.chr(Encoding::UTF_8).swapcase.ord
-            swapped == codepoint ? nil : swapped
-          end
+        folded = ranges.flat_map do |range|
+          next [range] if range.first.is_a?(Module)
+
+          Unicode::CaseFold.ranges(range.first, range.last)
         end
-        merge_ranges(values.uniq.sort.map { |value| [value, value] })
+        merge_ranges(folded)
       end
 
       def parse_class

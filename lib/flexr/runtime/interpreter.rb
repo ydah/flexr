@@ -19,6 +19,7 @@ module Flexr
         state = machine.dfa.start
         best = reference_match(position, buffer)
         cursor = position
+        best = consider_acceptances(machine, state, cursor, position, buffer, best) if @lexer.class.__flexr_config.options[:allow_empty_match]
         accelerated = acceleration_enabled?
 
         while buffer.ensure_available?(cursor + 1)
@@ -35,7 +36,7 @@ module Flexr
           end
 
           byte = buffer.getbyte(cursor)
-          state = machine.dfa.transition(state, byte)
+          state = transition(machine.dfa, state, byte)
           break unless state
 
           cursor += 1
@@ -158,6 +159,12 @@ module Flexr
 
       def acceleration_enabled?
         @lexer.class.__flexr_config.options.fetch(:accel, :auto) != :none && !@lexer.utf8_input?
+      end
+
+      def transition(dfa, state, byte)
+        return dfa.transition_direct(state, byte) if @lexer.class.__flexr_config.backend == :direct
+
+        dfa.transition(state, byte)
       end
 
       def acceleration_region(machine, state)

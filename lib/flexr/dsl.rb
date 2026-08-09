@@ -79,7 +79,10 @@ module Flexr
 
     def encoding(value)
       encoding = value.is_a?(Encoding) ? value : Encoding.find(value.to_s)
-      raise ArgumentError, "flexr supports UTF-8 and BINARY only" unless [Encoding::UTF_8, Encoding::BINARY].include?(encoding)
+      unless [Encoding::UTF_8, Encoding::BINARY].include?(encoding)
+        diagnostic = Diagnostics.error("FLEXR-E011", "flexr supports UTF-8 and BINARY only")
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+      end
 
       @__flexr_config.encoding = encoding
     end

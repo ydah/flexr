@@ -28,9 +28,17 @@ module Flexr
         return @transitions[state][class_id] unless @packed
 
         index = @packed.fetch(:base).fetch(state) + class_id
-        return @packed.fetch(:default).fetch(state) unless @packed.fetch(:check)[index] == class_id
+        return @packed.fetch(:default).fetch(state) unless @packed.fetch(:check)[index] == state
 
         @packed.fetch(:next).fetch(index)
+      end
+
+      # Direct dispatch deliberately keeps the class lookup and row access in
+      # one small method.  The interpreter uses this route for `backend:
+      # :direct`, leaving the packed/table path independent for equivalence
+      # testing and future generated case dispatch.
+      def transition_direct(state, byte)
+        @transitions[state][@ec[byte]]
       end
 
       def accept?(bytes)

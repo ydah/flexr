@@ -35,6 +35,7 @@ module Flexr
 
     def generate_static(parsed)
       compiled = compile_parsed(parsed)
+      validate_diagnostics!(compiled)
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n#{indent}"
@@ -110,7 +111,8 @@ module Flexr
           start: dfa.start,
           rule_ids: dfa.rule_ids
         }
-        data[:packed] = Codegen::TablePacker.pack(dfa.transitions) if %i[rows full].include?(compression)
+        pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
+        data[:packed] = Codegen::TablePacker.pack(dfa.transitions) if pack_tables
         "#{name.inspect} => { state_name: #{machine.state_name.inspect}, dfa: #{data.inspect} }"
       end
       "{ machines: { #{machines.join(', ')} }, states: #{compiled.states.inspect}, stats: #{compiled.stats.inspect} }"
@@ -122,7 +124,7 @@ module Flexr
 
     def effective_options(parsed)
       options = (parsed.config[:options] || {}).dup
-      %i[accel max_dfa_states warn_level table_compression table_format].each do |name|
+      %i[accel max_dfa_states table_compression table_format].each do |name|
         options[name] = @options[name] if @options.key?(name)
       end
       options[:standalone] = true if standalone?(parsed)
@@ -153,6 +155,17 @@ module Flexr
       return action.inspect unless action.is_a?(Proc)
 
       "proc { emit(nil, text) }"
+    end
+
+    def validate_diagnostics!(compiled)
+      return unless @options[:warn_as_error]
+
+      diagnostic = Array(compiled.diagnostics).find do |item|
+        item.warning? && (@options.fetch(:warn_level, :default) == :all || item.code != "FLEXR-W016")
+      end
+      return unless diagnostic
+
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
     end
 
     def generate_from_runtime(source)

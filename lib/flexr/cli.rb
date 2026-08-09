@@ -55,23 +55,23 @@ module Flexr
         when "-o", "--output"
           output = required_argument!(args, argument)
         when "-b", "--backend"
-          options.backend = required_argument!(args, argument).to_sym
+          options.set(:backend, required_argument!(args, argument).to_sym)
         when "--token-kind"
-          options.token_kind = required_argument!(args, argument).to_sym
+          options.set(:token_kind, required_argument!(args, argument).to_sym)
         when "--accel"
-          options.accel = required_argument!(args, argument).to_sym
+          options.set(:accel, required_argument!(args, argument).to_sym)
         when "--standalone"
-          options.standalone = true
+          options.set(:standalone, true)
         when "--eval"
           options.eval_mode = true
         when "--table-compression"
-          options.table_compression = required_argument!(args, argument).to_sym
+          options.set(:table_compression, required_argument!(args, argument).to_sym)
         when "--table-format"
-          options.table_format = required_argument!(args, argument).to_sym
+          options.set(:table_format, required_argument!(args, argument).to_sym)
         when "--max-dfa-states"
-          options.max_dfa_states = Integer(required_argument!(args, argument), 10)
+          options.set(:max_dfa_states, Integer(required_argument!(args, argument), 10))
         when "-W", "--warn"
-          options.warn_level = required_argument!(args, argument).to_sym
+          options.set(:warn_level, required_argument!(args, argument).to_sym)
         when "--warn-as-error"
           options.warn_as_error = true
         when "--color"
@@ -112,8 +112,7 @@ module Flexr
       when :explain
         print_explanation(spec, rule_number, out)
       when :trace
-        out.write generate(spec, options)
-        EXIT_OK
+        print_trace(spec, options, out)
       when :bench
         run_benchmark(spec, options, benchmark_args, out)
       when :import
@@ -134,29 +133,79 @@ module Flexr
     end
 
     def check(spec, options, out)
-      if options.eval_mode
-        generate(spec, options)
-      else
-        compile(read_spec(spec))
+      compiled = if options.eval_mode
+                   generate(spec, options)
+                   nil
+                 else
+                   compile(read_spec(spec), overrides: options.overrides)
+                 end
+      diagnostics = compiled ? Array(compiled.diagnostics) : []
+      diagnostics.select! do |diagnostic|
+        options.warn_level == :all || (options.warn_level == :default && diagnostic.code != "FLEXR-W016")
       end
-      out.puts "[]" if options.format == :json
+      set = DiagnosticSet.new
+      diagnostics.each { |diagnostic| set << diagnostic }
+      if options.format == :json
+        out.puts set.render(format: :json)
+      elsif !diagnostics.empty?
+        out.puts set.render(format: :human, color: options.color)
+      end
+      return EXIT_FAILURE if options.warn_as_error && diagnostics.any?(&:warning?)
+
       EXIT_OK
     end
 
-    def print_stats(spec, _options, out)
-      out.puts JSON.pretty_generate(compile(read_spec(spec)).stats)
+    def print_stats(spec, options, out)
+      compiled = compile(read_spec(spec))
+      stats = compiled.stats.transform_keys(&:to_s).transform_values do |stat|
+        stat.merge(table_cells: stat[:states] * stat[:classes])
+      end
+      compiled.machines.each do |state_name, machine|
+        dfa = machine.dfa
+        stat = stats.fetch(state_name.to_s)
+        stat[:table_entries] = dfa.transitions.sum { |row| row.compact.length }
+        stat[:acceleration_regions] = Automaton::Accel.extract(dfa).length
+      end
+      stats[:diagnostics] = Array(compiled.diagnostics).map(&:to_h) if options.format == :json
+      out.puts JSON.pretty_generate(stats)
       EXIT_OK
     end
 
     def print_dot(spec, _options, out)
-      dfa = compile(read_spec(spec)).machines.fetch(:initial).dfa
+      compiled = compile(read_spec(spec))
       out.puts "digraph flexr {"
-      dfa.transitions.each_index do |state|
-        shape = dfa.accepts[state].empty? ? "circle" : "doublecircle"
-        out.puts "  #{state} [shape=#{shape}];"
-        dfa.transitions[state].compact.uniq.each { |destination| out.puts "  #{state} -> #{destination};" }
+      compiled.machines.each do |state_name, machine|
+        dfa = machine.dfa
+        dfa.transitions.each_index do |state|
+          node = "#{state_name}_#{state}"
+          shape = dfa.accepts[state].empty? ? "circle" : "doublecircle"
+          label = dfa.accepts[state].map(&:rule_index).uniq.join(",")
+          label = "#{node}\\naccept=#{label}" unless label.empty?
+          out.puts "  #{node} [shape=#{shape}, label=\"#{label}\"];"
+          dfa.transitions[state].compact.uniq.each do |destination|
+            out.puts "  #{node} -> #{state_name}_#{destination};"
+          end
+        end
       end
       out.puts "}"
+      EXIT_OK
+    end
+
+    def print_trace(spec, _options, out)
+      compiled = compile(read_spec(spec))
+      compiled.machines.each do |state_name, machine|
+        dfa = machine.dfa
+        out.puts "state #{state_name} start=#{dfa.start} classes=#{dfa.class_count}"
+        dfa.transitions.each_index do |state|
+          accepts = dfa.accepts[state].map do |acceptance|
+            [acceptance.rule_index, acceptance.pattern_index, acceptance.bol_only, acceptance.end_anchor]
+          end
+          transitions = dfa.transitions[state].each_with_index.filter_map do |destination, class_id|
+            destination && [class_id, destination]
+          end
+          out.puts "  #{state}: accepts=#{accepts.inspect} transitions=#{transitions.inspect}"
+        end
+      end
       EXIT_OK
     end
 
@@ -185,16 +234,19 @@ module Flexr
       Source::PrismReader.new(source, path: spec).read
     end
 
-    def compile(parsed)
+    def compile(parsed, overrides: {})
       klass = Class.new(Flexr::Lexer)
       config = parsed.config
-      klass.backend(config.fetch(:backend, :table))
-      klass.token_kind(config.fetch(:token_kind, :array))
+      klass.backend(overrides.fetch(:backend, config.fetch(:backend, :table)))
+      klass.token_kind(overrides.fetch(:token_kind, config.fetch(:token_kind, :array)))
       klass.encoding(config.fetch(:encoding, Encoding::UTF_8))
-      config.fetch(:options, {}).each do |name, value|
+      config_options = config.fetch(:options, {}).merge(overrides.slice(:experimental, :allow_empty_match))
+      config_options.each do |name, value|
         value ? klass.option(name) : nil
       end
-      klass.accel(config[:options][:accel]) if config.fetch(:options, {}).key?(:accel)
+      klass.__flexr_config.options[:max_dfa_states] = overrides[:max_dfa_states] if overrides[:max_dfa_states]
+      accel = overrides.fetch(:accel, config_options[:accel])
+      klass.accel(accel) if accel
       parsed.states.each do |name, value|
         next if name.to_sym == :initial
 
@@ -212,7 +264,11 @@ module Flexr
     end
 
     def render_error(error, options: nil)
-      return DiagnosticSet.new.tap { |set| set << error.diagnostic }.render(format: options&.format || :human) if error.respond_to?(:diagnostic) && error.diagnostic
+      if error.respond_to?(:diagnostic) && error.diagnostic
+        return DiagnosticSet.new.tap { |set| set << error.diagnostic }.render(
+          format: options&.format || :human, color: options&.color || :auto
+        )
+      end
 
       if options&.format == :json
         JSON.generate([{ code: "FLEXR-E000", severity: "error", message: error.message }])

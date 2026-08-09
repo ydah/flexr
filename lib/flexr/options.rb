@@ -3,14 +3,20 @@
 module Flexr
   Options = Struct.new(
     :backend, :token_kind, :accel, :standalone, :eval_mode, :table_compression,
-    :table_format, :max_dfa_states, :warn_level, :warn_as_error, :color, :format,
+    :table_format, :max_dfa_states, :warn_level, :warn_as_error, :color, :format, :overrides,
     keyword_init: true
   ) do
     def self.default
       new(backend: :table, token_kind: :array, accel: :auto, standalone: false,
           eval_mode: false, table_compression: :none, table_format: :literal,
           max_dfa_states: 100_000, warn_level: :default, warn_as_error: false,
-          color: :auto, format: :human)
+          color: :auto, format: :human, overrides: {})
+    end
+
+    def set(name, value)
+      self[name] = value
+      self.overrides ||= {}
+      overrides[name] = value
     end
 
     def validate!
@@ -27,16 +33,7 @@ module Flexr
     end
 
     def generator_options
-      {
-        backend: backend,
-        token_kind: token_kind,
-        accel: accel,
-        standalone: standalone,
-        table_compression: table_compression,
-        table_format: table_format,
-        max_dfa_states: max_dfa_states,
-        warn_level: warn_level
-      }
+      (overrides || {}).merge(warn_as_error: warn_as_error, color: color)
     end
 
     private

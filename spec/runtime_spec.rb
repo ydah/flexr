@@ -170,4 +170,22 @@ RSpec.describe "Flexr runtime" do
 
     expect(lexer_class.new("aaaa", max_token_size: 2).tokens).to eq([[:WORD, "aa"], [:WORD, "aa"]])
   end
+
+  it "forces progress for explicitly allowed empty matches" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      option :allow_empty_match
+      rule(//, skip: true)
+    end
+
+    expect(lexer_class.new("abc").tokens).to eq([])
+  end
+
+  it "reports reject as an unsupported runtime action" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/a/) { reject }
+    end
+
+    expect { lexer_class.new("a").tokens }
+      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E013") }
+  end
 end

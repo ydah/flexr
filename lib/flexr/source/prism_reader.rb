@@ -158,6 +158,13 @@ module Flexr
         end
         options = keywords(node)
         action_source = node.block && source_slice(node.block)
+        if action_source&.match?(/\breject\b/)
+          diagnostic = Diagnostics.error(
+            "FLEXR-E013", "reject is not supported by flexr",
+            help: "use a state transition and less(n) to express the fallback"
+          )
+          raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+        end
         action = if action_source
           action_source.start_with?("do") ? "proc #{action_source}" : "proc#{action_source}"
         end

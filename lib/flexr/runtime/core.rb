@@ -74,8 +74,10 @@ module Flexr
         @matched = nil
         @more_requested = false
         @position = match.end_pos
+        empty_match = match.end_pos == match.start_pos
         execute(match.rule)
         finalize_more
+        force_empty_match_progress! if empty_match && self.class.__flexr_config.options[:allow_empty_match]
         ensure_token_size!
         update_position
         token = @pending
@@ -197,6 +199,14 @@ module Flexr
       emit(nil, text)
     end
 
+    def reject
+      diagnostic = Diagnostics.error(
+        "FLEXR-E013", "reject is not supported by flexr",
+        help: "use a state transition and less(n) to express the fallback"
+      )
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+    end
+
     def push(name)
       ensure_state!(name)
       if @state_stack.length >= @max_state_stack
@@ -248,7 +258,7 @@ module Flexr
 
     private
 
-      def execute(rule)
+    def execute(rule)
       case rule.action
       when :skip
         nil
@@ -271,6 +281,15 @@ module Flexr
       return if actual_size <= @max_token_size
 
       raise Runtime::TokenTooLargeError, "token exceeds max_token_size"
+    end
+
+    def force_empty_match_progress!
+      return if eof?
+
+      byte = @buffer.byteslice(@position, 1).to_s.b
+      @position += 1
+      @line += 1 if byte == "\n"
+      @bol = byte == "\n"
     end
 
     def update_position

@@ -21,7 +21,7 @@ module Flexr
           entries.each do |class_id|
             index = offset + class_id
             next_table[index] = row[class_id]
-            check[index] = class_id
+            check[index] = state
             occupied[index] = true
           end
         end
