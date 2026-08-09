@@ -51,6 +51,17 @@ module FlexrVerification
 
   def verify_acceleration(spec)
     lexer = load_runtime(spec)
+    random = Random.new(17)
+    inputs = [input_for(spec)] + Array.new(32) do
+      Array.new(random.rand(48..96)) { random.rand(32..126) }.pack("C*")
+    end
+    options = lexer.__flexr_config.options
+    original_accel = options.fetch(:accel, :auto)
+    accelerated = inputs.map { |input| lexer.new(input, error_mode: :panic).tokens }
+    options[:accel] = :none
+    reference = inputs.map { |input| lexer.new(input, error_mode: :panic).tokens }
+    raise "acceleration token mismatch in #{spec}" unless accelerated == reference
+
     lexer.compile!.machines.each_value do |machine|
       Flexr::Automaton::Accel.extract(machine.dfa).each do |region|
         256.times do |byte|
@@ -62,6 +73,8 @@ module FlexrVerification
         end
       end
     end
+  ensure
+    options[:accel] = original_accel if options && original_accel
   end
 
   def verify_dogfood(spec)
@@ -72,6 +85,19 @@ module FlexrVerification
     raise "dogfood syntax check failed for #{spec}: #{stderr}" unless status.success?
     raise "generated lexer missing compiled payload: #{spec}" unless source.include?("install_compiled!")
     raise "generated lexer contains an unfinished TODO: #{spec}" if source.include?("FLEXR-TODO")
+
+    script = <<~RUBY
+      load ARGV.fetch(0)
+      lexer = ObjectSpace.each_object(Class).find { |klass| klass.respond_to?(:__flexr_spec) && klass != Flexr::Lexer }
+      abort "no generated lexer" unless lexer
+      p lexer.new(ARGV.fetch(1)).tokens
+    RUBY
+    runtime_output, runtime_error, runtime_status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script,
+                                                                      spec, input_for(spec))
+    generated_output, generated_error, generated_status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script,
+                                                                         generated_path, input_for(spec))
+    raise "dogfood token mismatch for #{spec}: #{runtime_error}#{generated_error}" unless
+      runtime_status.success? && generated_status.success? && runtime_output == generated_output
   ensure
     FileUtils.rm_f(generated_path) if generated_path
   end
