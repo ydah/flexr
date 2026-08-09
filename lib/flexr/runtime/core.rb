@@ -2,16 +2,18 @@
 
 module Flexr
   module Runtime
-    def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024)
-      input = Runtime::Buffer.new(input).source unless input.is_a?(String)
-      raise ArgumentError, "input must be a String or IO" unless input.is_a?(String)
+    def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024,
+                   max_state_stack: 1024, chunk_size: Runtime::Buffer::DEFAULT_CHUNK_SIZE)
+      raise ArgumentError, "max_token_size must be non-negative" if max_token_size.to_i.negative?
+      raise ArgumentError, "max_state_stack must be non-negative" if max_state_stack.to_i.negative?
 
       self.class.compile!
-      @input = input
-      @binary_input = input.dup.force_encoding(Encoding::BINARY)
+      @buffer = Runtime::Buffer.new(input, chunk_size: chunk_size)
+      @input = input.is_a?(String) ? input : nil
       @filename = filename
       @error_mode = error_mode
-      @max_token_size = max_token_size
+      @max_token_size = max_token_size.to_i
+      @max_state_stack = max_state_stack.to_i
       @position = 0
       @line = 1
       @state = :initial
@@ -20,44 +22,56 @@ module Flexr
       @matched = nil
       @match_start = 0
       @match_end = 0
+      @text_start = 0
       @bol = true
       @more_start = nil
-      @eof_fired = false
+      @more_requested = false
+      @candidate_token_size = 0
+      @eof_fired_states = {}
       @on_error = nil
     end
 
-    attr_reader :input, :filename, :error_mode
+    attr_reader :filename, :error_mode, :buffer, :max_token_size
 
     attr_writer :on_error
+
+    def input
+      @buffer.source
+    end
 
     def next_token
       loop do
         if eof? && @pending.nil?
           eof_action = self.class.__flexr_spec.eof_rules[@state]
-          if eof_action && !@eof_fired
-            @eof_fired = true
+          if eof_action && !@eof_fired_states[@state]
+            @eof_fired_states[@state] = true
+            @match_start = @position
+            @match_end = @position
+            @text_start = @position
+            @matched = nil
             instance_exec(&eof_action)
             token = @pending
             @pending = nil
             return token if token
+            next
           end
           return nil
         end
 
         match = Runtime::Interpreter.new(self).scan
         unless match
-          return handle_unmatched_byte if !eof?
+          return handle_unmatched_byte unless eof?
           return nil
         end
-        if match.end_pos - match.start_pos > @max_token_size
-          raise Runtime::TokenTooLargeError, "token exceeds max_token_size"
-        end
-
         @match_start = match.start_pos
         @match_end = match.end_pos
+        @text_start = @more_start || @match_start
         @matched = nil
+        @more_requested = false
         @position = match.end_pos
         execute(match.rule)
+        finalize_more
+        ensure_token_size!
         update_position
         token = @pending
         @pending = nil
@@ -93,15 +107,35 @@ module Flexr
     def text
       return @matched if @matched
 
-      @matched = @input.byteslice(@match_start...@match_end)
+      @matched = @buffer.byteslice(@text_start...@match_end)
     end
 
     def text_bytesize
-      @match_end - @match_start
+      @match_end - @text_start
     end
 
     def byte_pos
       @position
+    end
+
+    def more_text_start
+      @more_start
+    end
+
+    def defer_token_size_check!(size)
+      @candidate_token_size = [@candidate_token_size, size].max
+    end
+
+    def utf8_input?
+      self.class.__flexr_config.encoding == Encoding::UTF_8
+    end
+
+    def valid_utf8_at?(position)
+      !utf8_input? || @buffer.valid_utf8_at?(position)
+    end
+
+    def utf8_boundary?(position)
+      !utf8_input? || @buffer.utf8_boundary?(position)
     end
 
     def lineno
@@ -119,7 +153,7 @@ module Flexr
     end
 
     def binary_input
-      @binary_input
+      @buffer.source.b
     end
 
     def emit(type, value = text)
@@ -160,6 +194,13 @@ module Flexr
 
     def push(name)
       ensure_state!(name)
+      if @state_stack.length >= @max_state_stack
+        raise Runtime::StateStackOverflowError.new(
+          "state stack exceeds max_state_stack (#{@max_state_stack})",
+          filename: @filename, byte_pos: @position, line: @line, text: text
+        )
+      end
+
       @state_stack << @state
       @state = name.to_sym
     end
@@ -180,20 +221,22 @@ module Flexr
     alias state= begin_state
 
     def less(count)
-      raise ArgumentError, "less must not exceed matched bytes" if count.negative? || count > text_bytesize
+      matched_bytes = @match_end - @match_start
+      raise ArgumentError, "less must not exceed matched bytes" if count.negative? || count > matched_bytes
 
       @position = @match_end - count
       @match_end = @position
+      @matched = nil
     end
 
     def more
-      @more_start ||= @match_start
+      @more_requested = true
     end
 
     def last_location
       Runtime::Location.new(
         filename: @filename, byte_begin: @match_start, byte_end: @match_end,
-        line_begin: @line, line_end: @line + text.count("\n"),
+        line_begin: @line, line_end: @line + text.to_s.b.count("\n"),
         column_begin: column_at(@match_start), column_end: column_at(@match_end)
       )
     end
@@ -211,19 +254,34 @@ module Flexr
       end
     end
 
+    def finalize_more
+      @more_start = @text_start if @more_requested
+      @more_start = nil unless @more_requested
+      @more_requested = false
+    end
+
+    def ensure_token_size!
+      actual_size = @match_end - @text_start
+      @candidate_token_size = 0
+      return if actual_size <= @max_token_size
+
+      raise Runtime::TokenTooLargeError, "token exceeds max_token_size"
+    end
+
     def update_position
-      consumed = @input.byteslice(@match_start...@match_end).to_s
+      consumed = @buffer.byteslice(@match_start...@match_end).to_s.b
       @line += consumed.count("\n")
-      @bol = consumed.end_with?("\n") || (@match_end == 0)
+      @bol = consumed.end_with?("\n") || @match_end.zero?
     end
 
     def handle_unmatched_byte
-      bad = @input.byteslice(@position, 1)
+      bad = @buffer.byteslice(@position, 1)
       @match_start = @position
       @match_end = @position + 1
+      @text_start = @match_start
       @position += 1
-      @line += 1 if bad == "\n"
-      @bol = bad == "\n"
+      @line += 1 if bad.to_s.b == "\n"
+      @bol = bad.to_s.b == "\n"
       error!("unexpected byte #{bad.inspect}")
       token = @pending
       @pending = nil
@@ -231,7 +289,7 @@ module Flexr
     end
 
     def eof?
-      @position >= @binary_input.bytesize
+      @buffer.eof?(@position)
     end
 
     def ensure_state!(name)
@@ -242,7 +300,7 @@ module Flexr
     end
 
     def column_at(position)
-      prefix = @input.byteslice(0...position).to_s
+      prefix = @buffer.byteslice(0...position).to_s.b
       last_newline = prefix.rindex("\n")
       position - (last_newline ? last_newline + 1 : 0) + 1
     end
