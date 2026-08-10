@@ -73,19 +73,19 @@ module Flexr
         conditions = Array(rule.pattern_conditions).map do |condition|
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
-        "{ index: #{rule.index}, patterns: #{rule.patterns.inspect}, pattern_conditions: #{conditions.inspect}, trailing: #{rule.trailing.inspect}, " \
+        "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
           "action: #{action_expression(rule.action)}, states: #{rule.states.inspect}, " \
-          "bol_only: #{rule.bol_only.inspect}, end_anchor: #{rule.end_anchor.inspect} }"
+          "bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
       "{ rules: [#{definitions.join(', ')}], " \
-        "backend: #{effective_backend(parsed).inspect}, " \
-        "token_kind: #{@options.fetch(:token_kind, parsed.config[:token_kind]).inspect}, " \
+        "backend: #{ruby_literal(effective_backend(parsed))}, " \
+        "token_kind: #{ruby_literal(@options.fetch(:token_kind, parsed.config[:token_kind]))}, " \
         "encoding: #{encoding_expression(parsed.config[:encoding])}, " \
-        "declared_tokens: #{parsed.config[:declared_tokens].inspect}, " \
-        "options: #{effective_options(parsed).inspect}, " \
+        "declared_tokens: #{ruby_literal(parsed.config[:declared_tokens])}, " \
+        "options: #{ruby_literal(effective_options(parsed))}, " \
         "eof_rules: #{eof_rules_expression(parsed.config[:eof_rules] || {})}, " \
-        "states: #{parsed.states.keys.reject { |name| name == :initial }.inspect}, " \
-        "inclusive_states: #{parsed.states.transform_values { |value| value[:inclusive] }.inspect}, " \
+        "states: #{ruby_literal(parsed.states.keys.reject { |name| name == :initial })}, " \
+        "inclusive_states: #{ruby_literal(parsed.states.transform_values { |value| value[:inclusive] })}, " \
         "compiled: #{compiled_expression(compiled, compression: table_compression(parsed),
                                          backend: effective_backend(parsed))} }"
     end
@@ -224,13 +224,13 @@ module Flexr
           data[:transitions] = dfa.transitions
         end
         data[:direct] = Codegen::Direct.new(compiled).generate(state: name) if backend == :direct
-        "#{name.inspect} => { state_name: #{machine.state_name.inspect}, dfa: #{data.inspect} }"
+        "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)} }"
       end
       # W016 is derived from wall-clock compilation time and must not make
       # generated source (or its golden digest) vary between runs.
       diagnostics = compiled.diagnostics.reject { |diagnostic| diagnostic.code == "FLEXR-W016" }.map(&:to_h)
-      "{ machines: { #{machines.join(', ')} }, states: #{compiled.states.inspect}, " \
-        "stats: #{compiled.stats.inspect}, diagnostics: #{diagnostics.inspect} }"
+      "{ machines: { #{machines.join(', ')} }, states: #{ruby_literal(compiled.states)}, " \
+        "stats: #{ruby_literal(compiled.stats)}, diagnostics: #{ruby_literal(diagnostics)} }"
     end
 
     def standalone?(parsed)
@@ -261,13 +261,13 @@ module Flexr
     end
 
     def eof_rules_expression(rules)
-      pairs = rules.map { |state, action| "#{state.inspect} => #{action_expression(action)}" }
+      pairs = rules.map { |state, action| "#{ruby_literal(state)} => #{action_expression(action)}" }
       "{ #{pairs.join(', ')} }"
     end
 
     def action_expression(action)
       return action if action.is_a?(String) && action.start_with?("proc")
-      return action.inspect unless action.is_a?(Proc)
+      return ruby_literal(action) unless action.is_a?(Proc)
 
       "proc { emit(nil, text) }"
     end
@@ -296,7 +296,7 @@ module Flexr
       when :skip
         ""
       when Array
-        return "emit(#{action.fetch(1).inspect}, text)" if action.first == :emit
+        return "emit(#{ruby_literal(action.fetch(1))}, text)" if action.first == :emit
 
         nil
       when String
@@ -312,6 +312,30 @@ module Flexr
         return nil unless body.start_with?("do") && body.end_with?("end")
 
         body.delete_prefix("do")[0...-3].strip
+      end
+    end
+
+    # Hash#inspect changed from hash rockets to keyword-style labels in Ruby
+    # 4. Generated source and its golden digests must be identical on every
+    # supported Ruby, so serialize the small set of Ruby literals used in the
+    # generated payload ourselves.
+    def ruby_literal(value)
+      case value
+      when Hash
+        return "{}" if value.empty?
+
+        entries = value.map do |key, nested|
+          if key.is_a?(Symbol) && key.to_s.match?(/\A[a-zA-Z_]\w*\z/)
+            "#{key}: #{ruby_literal(nested)}"
+          else
+            "#{ruby_literal(key)} => #{ruby_literal(nested)}"
+          end
+        end
+        "{#{entries.join(', ')}}"
+      when Array
+        "[#{value.map { |item| ruby_literal(item) }.join(', ')}]"
+      else
+        value.inspect
       end
     end
 

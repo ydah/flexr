@@ -12,6 +12,10 @@ RSpec.describe Flexr::Runtime::Location do
   end
 
   def token_and_reference
+    token_and_reference_without_lexer_scope
+  end
+
+  def token_and_reference_without_lexer_scope
     lexer = lexer_class.new("あ")
     [lexer.next_token, WeakRef.new(lexer)]
   end
