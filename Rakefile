@@ -70,6 +70,10 @@ module FlexrVerification
     path.to_s.tr("\\", "/")
   end
 
+  def normalized_source(source)
+    source.gsub(/\r\n?/, "\n")
+  end
+
   def random_unicode_string(random, max_codepoints: 8)
     codepoints = Array.new(random.rand(max_codepoints + 1)) do
       loop do
@@ -261,8 +265,8 @@ task "generated:verify" do
   abort "missing committed tokenizer generated file: #{FlexrVerification::TOKENIZER_GENERATED}" unless
     File.file?(FlexrVerification::TOKENIZER_GENERATED)
 
-  expected = File.binread(FlexrVerification::TOKENIZER_GENERATED)
-  actual = FlexrVerification.generated_source(FlexrVerification::TOKENIZER_SPEC)
+  expected = FlexrVerification.normalized_source(File.binread(FlexrVerification::TOKENIZER_GENERATED))
+  actual = FlexrVerification.normalized_source(FlexrVerification.generated_source(FlexrVerification::TOKENIZER_SPEC))
   abort "committed tokenizer generated file is stale" unless expected == actual
 
   puts "generated: committed tokenizer is reproducible"
