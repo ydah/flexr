@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-require "open3"
-require "rbconfig"
+require "objspace"
 
 RSpec.describe Flexr::Runtime::Location do
   def lexer_class(eager: false)
@@ -28,33 +27,11 @@ RSpec.describe Flexr::Runtime::Location do
   end
 
   it "does not retain the lexer through a lazy location" do
-    script = <<~RUBY
-      require "flexr"
-      require "weakref"
+    lexer = lexer_class.new("あ")
+    location = lexer.next_token.location
 
-      def lexer_class
-        Class.new(Flexr::Lexer) do
-          token_kind :struct
-          rule(/./) { emit :CHAR }
-        end
-      end
-
-      def token_and_reference
-        lexer = lexer_class.new("あ")
-        token = lexer.next_token
-        reference = WeakRef.new(lexer)
-        lexer = nil
-        [token, reference]
-      end
-
-      token, reference = token_and_reference
-      GC.start
-      abort "lexer retained" if reference.weakref_alive?
-      abort "unexpected columns" unless [token.location.column_begin, token.location.column_end] == [1, 2]
-    RUBY
-    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script)
-
-    expect(status).to be_success, stderr
+    expect(ObjectSpace.reachable_objects_from(location)).not_to include(lexer)
+    expect(location.instance_variable_get(:@column_values)).to eq([1, 2])
   end
 
   it "spans the complete token assembled with more" do
