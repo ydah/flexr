@@ -46,7 +46,8 @@ module FlexrVerification
   module_function
 
   def input_for(spec)
-    EXPECTED_INPUTS.find { |pattern, _| spec.match?(pattern) }&.last || raise("no verification input for #{spec}")
+    normalized = normalized_path(spec)
+    EXPECTED_INPUTS.find { |pattern, _| normalized.match?(pattern) }&.last || raise("no verification input for #{spec}")
   end
 
   def golden_path(spec)
@@ -59,7 +60,13 @@ module FlexrVerification
   end
 
   def relative_spec(spec)
-    spec.delete_prefix("#{ROOT}/")
+    normalized_spec = normalized_path(spec)
+    normalized_root = normalized_path(ROOT)
+    normalized_spec.delete_prefix("#{normalized_root}/")
+  end
+
+  def normalized_path(path)
+    path.to_s.tr("\\", "/")
   end
 
   def random_unicode_string(random, max_codepoints: 8)
@@ -90,7 +97,8 @@ module FlexrVerification
   end
 
   def runtime_class_name(spec)
-    RUNTIME_CLASS_NAMES.find { |pattern, _class_name| spec.match?(pattern) }&.last
+    normalized = normalized_path(spec)
+    RUNTIME_CLASS_NAMES.find { |pattern, _class_name| normalized.match?(pattern) }&.last
   end
 
   def constantize(class_name)

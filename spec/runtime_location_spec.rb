@@ -17,7 +17,11 @@ RSpec.describe Flexr::Runtime::Location do
 
   def token_and_reference_without_lexer_scope
     lexer = lexer_class.new("あ")
-    [lexer.next_token, WeakRef.new(lexer)]
+    token = lexer.next_token
+    reference = WeakRef.new(lexer)
+    # Ruby may conservatively scan this stack slot during GC on some versions.
+    lexer = nil # rubocop:disable Lint/UselessAssignment
+    [token, reference]
   end
 
   it "defers column computation by default" do
