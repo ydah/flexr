@@ -48,6 +48,8 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake golden:verify
       - run: bundle exec rake dogfood:verify
+      - run: bundle exec rake unicode:verify
+      - run: bundle exec rake direct:verify
       - run: bundle exec rake examples:check
       - run: bundle exec rake coverage
       - run: bundle exec rake bench:regression
@@ -65,7 +67,23 @@ jobs:
       - run: bundle exec rake test:differential
       - run: bundle exec rake fuzz
 
-  generated-compatibility:
+  generated-ruby31:
+    name: generated-only / ruby 3.1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.1"
+          bundler-cache: true
+      - name: Load a generated lexer without the generator
+        run: >-
+          bundle exec ruby -Ilib -e
+          'require "flexr"; load "spec/fixtures/generated.rb";
+          lexer = GeneratedFixture::Lexer.new("42");
+          abort "generated lexer mismatch" unless lexer.tokens == [[:INT, 42]]'
+
+  generated-alt-compatibility:
     name: generated-only / ${{ matrix.ruby }}
     runs-on: ubuntu-latest
     strategy:

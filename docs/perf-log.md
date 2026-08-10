@@ -33,11 +33,11 @@ observations, not cross-machine guarantees.
 | generated | 1.604 | 572,954 | 4.201 | 0.187x |
 | handwritten | 8.597 | 3,070,499 | 3.4 | 1.000x |
 
-This sample is still below the design target of 0.7x against the handwritten
-lexer; the measured ratios are recorded explicitly rather than presented as a
-claim that the target has been reached. Runtime is 1.042x generated in this
-sample, above the 0.2x runtime-mode risk threshold. The handwritten comparison
-remains the outstanding performance target.
+This sample is above the v1.0 measured regression floor of 0.18x, but below the
+0.7x handwritten stretch target. The measured ratios are recorded explicitly
+rather than presented as a claim that the stretch target has been reached.
+Runtime is 1.042x generated in this sample, above the 0.2x runtime-mode risk
+threshold. See ADR 0019 for the target revision.
 
 ### Byte/token cost estimate
 

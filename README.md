@@ -49,9 +49,10 @@ benchmark input (140,000 bytes, three measured iterations): runtime `1.691
 MB/s`, generated `1.604 MB/s`, and the handwritten `StringScanner` baseline
 `8.597 MB/s`. Runtime is `1.042x` generated; generated is `0.187x` the
 handwritten baseline. These are measurements on one machine, not guarantees;
-run `ruby -Ilib benchmark/run.rb` for your environment. The handwritten
-0.7x design target remains unmet, so no target-reaching performance claim is
-made.
+run `ruby -Ilib benchmark/run.rb` for your environment. Generated mode is above
+the v1.0 measured regression floor of 0.18x, while the 0.7x handwritten
+comparison remains a stretch target; no target-reaching performance claim is
+made. See [ADR 0019](docs/adr/0019-measured-performance-floor.md).
 
 ## Generating a lexer
 
