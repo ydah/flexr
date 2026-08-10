@@ -190,8 +190,8 @@ RSpec.describe "Flexr runtime" do
 
     error = begin
       lexer_class.new("aaaa", max_token_size: 2).tokens
-    rescue Flexr::Runtime::TokenTooLargeError => caught
-      caught
+    rescue Flexr::Runtime::TokenTooLargeError => e
+      e
     end
 
     expect(error.code).to eq("FLEXR-E012")
