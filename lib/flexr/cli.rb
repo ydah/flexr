@@ -177,19 +177,49 @@ module Flexr
       out.puts "digraph flexr {"
       compiled.machines.each do |state_name, machine|
         dfa = machine.dfa
+        accelerated_states = Automaton::Accel.extract(dfa).to_h { |region| [region.state, true] }
         dfa.transitions.each_index do |state|
-          node = "#{state_name}_#{state}"
-          shape = dfa.accepts[state].empty? ? "circle" : "doublecircle"
+          node_name = "#{state_name}_#{state}"
+          node = dot_quote(node_name)
+          accepting = !dfa.accepts[state].empty?
           label = dfa.accepts[state].map(&:rule_index).uniq.join(",")
-          label = "#{node}\\naccept=#{label}" unless label.empty?
-          out.puts "  #{node} [shape=#{shape}, label=\"#{label}\"];"
+          label = "#{node_name}\naccept=#{label}" unless label.empty?
+          attributes = dot_node_attributes(label, accepting: accepting, accelerated: accelerated_states[state])
+          out.puts "  #{node} [#{attributes}];"
           dfa.transitions[state].compact.uniq.each do |destination|
-            out.puts "  #{node} -> #{state_name}_#{destination};"
+            out.puts "  #{node} -> #{dot_quote("#{state_name}_#{destination}")};"
           end
         end
       end
       out.puts "}"
       EXIT_OK
+    end
+
+    def dot_node_attributes(label, accepting:, accelerated:)
+      attributes = { shape: accepting ? "doublecircle" : "circle", label: dot_quote(label) }
+      if accepting
+        attributes[:color] = dot_quote("#2E7D32")
+        attributes[:penwidth] = 2
+      end
+      if accelerated
+        attributes[:color] = dot_quote("#D97706")
+        attributes[:style] = "filled"
+        attributes[:fillcolor] = dot_quote("#FEF3C7")
+      end
+      attributes.map { |name, value| "#{name}=#{value}" }.join(", ")
+    end
+
+    def dot_quote(value)
+      escaped = value.to_s.each_char.with_object(+'') do |character, result|
+        result << case character
+                  when "\\" then "\\\\"
+                  when '"' then '\\"'
+                  when "\n" then "\\n"
+                  when "\r" then "\\r"
+                  else character
+                  end
+      end
+      "\"#{escaped}\""
     end
 
     def print_trace(spec, options, out)
