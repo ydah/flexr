@@ -81,8 +81,9 @@ module Flexr
       end
 
       def accept?(bytes)
-        @regexp.match?(bytes)
-      rescue ArgumentError
+        data = bytes.dup.force_encoding(@regexp.encoding)
+        @regexp.match?(data)
+      rescue ArgumentError, EncodingError
         false
       end
 

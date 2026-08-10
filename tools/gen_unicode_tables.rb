@@ -44,7 +44,11 @@ def unicode_version(input)
 end
 
 def category_ranges(path, categories)
-  categories = Array(categories)
+  unicode_data_ranges(path, categories: Array(categories))
+end
+
+def unicode_data_ranges(path, categories: nil)
+  selected_categories = categories && Array(categories)
   ranges = []
   first = last = nil
   current_category = nil
@@ -61,9 +65,9 @@ def category_ranges(path, categories)
       current_category = category
     elsif name.end_with?(", Last>") && first
       last = codepoint
-      ranges << [first, last] if categories.include?(current_category)
+      ranges << [first, last] if selected_categories.nil? || selected_categories.include?(current_category)
       first = last = current_category = nil
-    elsif categories.include?(category)
+    elsif selected_categories.nil? || selected_categories.include?(category)
       ranges << [codepoint, codepoint]
     end
   end
@@ -139,18 +143,22 @@ properties = {
   "Space" => property_file_ranges(prop_list, ["White_Space"]),
   "XDigit" => [[0x30, 0x39], [0x41, 0x46], [0x61, 0x66]],
   "Cntrl" => [[0, 0x1f], [0x7f, 0x9f]],
-  "Lowercase" => property_file_ranges(prop_list, ["Lowercase"]),
-  "Uppercase" => property_file_ranges(prop_list, ["Uppercase"])
+  "Lowercase" => merge_ranges(category_ranges(unicode_data, ["Ll"]) +
+                               property_file_ranges(prop_list, ["Other_Lowercase"])),
+  "Uppercase" => merge_ranges(category_ranges(unicode_data, ["Lu"]) +
+                               property_file_ranges(prop_list, ["Other_Uppercase"]))
 }
 %w[Cc Cf Cn Co Cs Ll Lm Lo Lt Lu Mc Me Mn Nd Nl No Pc Pd Pe Pf Pi Po Ps Sc Sk Sm So Zl Zp Zs].each do |category|
   properties[category] = category_ranges(unicode_data, [category])
 end
+properties["Cn"] = complement_ranges(unicode_data_ranges(unicode_data))
 {
   "C" => %w[Cc Cf Cn Co Cs], "M" => %w[Mc Me Mn], "P" => %w[Pc Pd Pe Pf Pi Po Ps],
   "S" => %w[Sc Sk Sm So], "Z" => %w[Zl Zp Zs], "LC" => %w[Lt Lu Ll]
 }.each do |name, categories|
   properties[name] = category_ranges(unicode_data, categories)
 end
+properties["C"] = merge_ranges(properties.fetch("C") + properties.fetch("Cn"))
 
 property_names(scripts).each do |script|
   properties[script] = property_file_ranges(scripts, [script])

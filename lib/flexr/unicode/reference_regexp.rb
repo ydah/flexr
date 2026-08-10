@@ -10,8 +10,9 @@ module Flexr
 
       def match(pattern, subject, encoding:, options: 0, unicode: false)
         regexp = compiled(pattern, encoding: encoding, options: options, unicode: unicode)
+        subject = subject.dup.force_encoding(regexp.encoding)
         regexp.match(subject, 0)
-      rescue RegexpError, ArgumentError
+      rescue RegexpError, ArgumentError, EncodingError
         nil
       end
 
@@ -60,7 +61,19 @@ module Flexr
       end
 
       def codepoint_class(ranges)
+        ranges = scalar_ranges(ranges)
+        return "(?!)" if ranges.empty?
+
         "[#{ranges.sort_by(&:first).map { |lo, hi| codepoint_escape(lo, hi) }.join}]"
+      end
+
+      def scalar_ranges(ranges)
+        ranges.flat_map do |lo, hi|
+          result = []
+          result << [lo, [hi, 0xd7ff].min] if lo <= 0xd7ff
+          result << [[lo, 0xe000].max, hi] if hi >= 0xe000
+          result
+        end
       end
 
       def codepoint_escape(lo, hi)

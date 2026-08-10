@@ -41,6 +41,27 @@ RSpec.describe "Unicode POSIX and property matching" do
     end
   end
 
+  it "keeps core Unicode properties complete and UTF-8-safe" do
+    covers = lambda do |name, codepoint|
+      Flexr::Unicode::Property.ranges(name).any? { |lo, hi| codepoint.between?(lo, hi) }
+    end
+
+    expect(covers.call("Cn", 0x18db8)).to be(true)
+    expect(covers.call("Assigned", 0x18db8)).to be(false)
+    expect(covers.call("Lowercase", 0x61)).to be(true)
+    expect(covers.call("Uppercase", 0x41)).to be(true)
+
+    [/\p{Cn}/, /\p{Lowercase}/, /\p{Uppercase}/, /\p{Cs}/, /\p{C}/].each do |pattern|
+      expect { Flexr.compile_pattern(pattern) }.not_to raise_error
+    end
+  end
+
+  it "does not raise when a reference DFA receives valid UTF-8 bytes" do
+    dfa = Flexr.compile_pattern(/\p{L}/)
+
+    expect(dfa.accept?("あ".b)).to be(true)
+  end
+
   it "keeps valid property alternatives when another candidate fails its anchor" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule([/\p{L}$/, /\p{L}/]) { emit :LETTER, text }
