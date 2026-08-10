@@ -117,13 +117,15 @@ module Flexr
         run_benchmark(spec, options, benchmark_args, out)
       when :import
         result = Importer.import(spec)
+        result.warnings.each { |warning| err.puts "warning: #{warning}" }
+        return EXIT_FAILURE unless result.complete?
+
         if output
           File.binwrite(output, result.source)
         else
           out.write(result.source)
         end
-        result.warnings.each { |warning| err.puts "warning: #{warning}" }
-        result.complete? ? EXIT_OK : EXIT_FAILURE
+        EXIT_OK
       when :generate
         target = output || spec.sub(/\.flexr\.rb\z/, ".rb")
         Generator.new(spec, output: target, eval_mode: options.eval_mode,

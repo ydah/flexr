@@ -241,12 +241,12 @@ module Flexr
 
       complete = true
       unless translated.match?(/\A\s*(?:emit\b|skip\b|echo\b|more\b|less\b|begin_state\b|[A-Za-z_]\w*\s*=|#|\z)/)
-        warn_incomplete("manual action translation required: #{body.strip}")
+        warn_incomplete("FLEXR-TODO: manual action translation required: #{body.strip}")
         translated = "# FLEXR-TODO: translate imported action: #{body.strip.inspect}\n  skip"
         complete = false
       end
       if returns.any? && translated.scan(/\bemit\b/).empty?
-        warn_incomplete("could not translate flex return action: #{body.strip}")
+        warn_incomplete("FLEXR-TODO: could not translate flex return action: #{body.strip}")
         translated = "# FLEXR-TODO: translate imported action: #{body.strip.inspect}\n  skip"
         complete = false
       end

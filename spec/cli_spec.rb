@@ -64,6 +64,26 @@ RSpec.describe Flexr::CLI do
     FileUtils.rm_f(path)
   end
 
+  it "writes a complete import to the requested output path" do
+    path = File.join(Dir.tmpdir, "flexr-complete-import-#{Process.pid}.l")
+    output_path = "#{path}.rb"
+    File.write(path, <<~LEX)
+      %token WORD
+      %%
+      [a-z]+    { return WORD; }
+    LEX
+
+    status, output, errors = run_cli("import", path, "-o", output_path)
+
+    expect(status).to eq(0)
+    expect(output).to be_empty
+    expect(errors).to be_empty
+    expect(File.read(output_path)).to include("class Lexer < Flexr::Lexer", "emits :WORD")
+  ensure
+    FileUtils.rm_f(path)
+    FileUtils.rm_f(output_path)
+  end
+
   it "keeps flex yylineno imports complete because Flexr tracks lines by default" do
     path = File.join(Dir.tmpdir, "flexr-yylineno-import-#{Process.pid}.l")
     File.write(path, <<~LEX)
@@ -154,7 +174,7 @@ RSpec.describe Flexr::CLI do
     FileUtils.rm_f(path)
   end
 
-  it "fails incomplete imports instead of silently accepting untranslated C" do
+  it "reports incomplete imports without emitting generated Ruby" do
     path = File.join(Dir.tmpdir, "flexr-incomplete-import-#{Process.pid}.l")
     File.write(path, <<~LEX)
       %%
@@ -164,10 +184,39 @@ RSpec.describe Flexr::CLI do
     status, output, errors = run_cli("import", path)
 
     expect(status).to eq(1)
-    expect(output).to include("FLEXR-TODO")
-    expect(errors).to include("manual action translation required")
+    expect(output).to be_empty
+    expect(errors).to include("FLEXR-TODO", "manual action translation required")
   ensure
     FileUtils.rm_f(path)
+  end
+
+  it "does not create or overwrite an output file for an incomplete import" do
+    path = File.join(Dir.tmpdir, "flexr-incomplete-output-#{Process.pid}.l")
+    output_path = "#{path}.rb"
+    missing_output_path = "#{path}.missing.rb"
+    File.write(path, <<~LEX)
+      %%
+      .    { printf("%s", yytext); }
+    LEX
+    File.write(output_path, "keep this existing output\n")
+
+    status, output, errors = run_cli("import", path, "-o", output_path)
+
+    expect(status).to eq(1)
+    expect(output).to be_empty
+    expect(errors).to include("FLEXR-TODO", "manual action translation required")
+    expect(File.read(output_path)).to eq("keep this existing output\n")
+
+    status, output, errors = run_cli("import", path, "-o", missing_output_path)
+
+    expect(status).to eq(1)
+    expect(output).to be_empty
+    expect(errors).to include("FLEXR-TODO", "manual action translation required")
+    expect(File).not_to exist(missing_output_path)
+  ensure
+    FileUtils.rm_f(path)
+    FileUtils.rm_f(output_path)
+    FileUtils.rm_f(missing_output_path)
   end
 
   it "supports version and rule-filtered explain output" do
