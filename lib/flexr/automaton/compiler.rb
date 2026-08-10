@@ -263,7 +263,8 @@ module Flexr
           next if state_name == :initial
           next unless rules_for(state_name).empty?
 
-          diagnostics << Diagnostics.warning("FLEXR-W002", "state #{state_name.inspect} has no rules")
+          diagnostics << Diagnostics.warning("FLEXR-W002", "state #{state_name.inspect} has no rules",
+                                              help: "add a rule to the state or remove the unused state")
         end
 
         firstmatch_conflicts(@spec.rules).each do |left, right|
@@ -274,14 +275,28 @@ module Flexr
         end
 
         max_cells = compiled.stats.values.map { |stat| stat[:states] * stat[:classes] }.max.to_i
-        diagnostics << Diagnostics.warning("FLEXR-W011", "generated transition table is large") if max_cells > 1_000_000
+        if max_cells > 1_000_000
+          diagnostics << Diagnostics.warning(
+            "FLEXR-W011",
+            "generated transition table is large",
+            help: "use backend :direct, table compression, or split the specification"
+          )
+        end
 
         capture_rules.each do |rule|
-          diagnostics << Diagnostics.warning("FLEXR-W013", "rule #{rule.index} uses a capturing group; flexr treats it as non-capturing")
+          diagnostics << Diagnostics.warning(
+            "FLEXR-W013",
+            "rule #{rule.index} uses a capturing group; flexr treats it as non-capturing",
+            help: "rewrite capturing groups as (?:...) and extract text in the action"
+          )
         end
 
         undeclared_tokens.each do |token|
-          diagnostics << Diagnostics.warning("FLEXR-W014", "token #{token.inspect} is not declared by emits")
+          diagnostics << Diagnostics.warning(
+            "FLEXR-W014",
+            "token #{token.inspect} is not declared by emits",
+            help: "add the token to emits or remove the declaration if it is intentionally private"
+          )
         end
 
         diagnostics.concat(variable_trailing_rules.map do |rule|
@@ -291,7 +306,11 @@ module Flexr
 
         if @spec.options.fetch(:accel, :auto) != :none
           diagnostics.concat(@spec.rules.select(&:trailing).map do |rule|
-            Diagnostics.warning("FLEXR-W012", "rule #{rule.index} cannot use region acceleration with trailing context")
+            Diagnostics.warning(
+              "FLEXR-W012",
+              "rule #{rule.index} cannot use region acceleration with trailing context",
+              help: "remove trailing context or set accel: :none when the trade-off is intentional"
+            )
           end)
         end
 

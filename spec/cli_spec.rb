@@ -189,4 +189,29 @@ RSpec.describe Flexr::CLI do
   ensure
     FileUtils.rm_f(path)
   end
+
+  it "includes actionable help for compiler warnings" do
+    path = File.join(Dir.tmpdir, "flexr-warning-help-#{Process.pid}.flexr.rb")
+    File.write(path, <<~RUBY)
+      require "flexr"
+      class WarningHelpLexer < Flexr::Lexer
+        emits :DECLARED
+        state :unused do
+        end
+        rule(/(a)/) { emit :UNDECLARED }
+      end
+    RUBY
+
+    status, output, errors = run_cli("check", path, "--format", "json", "--warn", "all")
+    diagnostics = JSON.parse(output)
+    codes = diagnostics.to_h { |diagnostic| [diagnostic.fetch("code"), diagnostic] }
+
+    expect(status).to eq(0)
+    expect(codes.fetch("FLEXR-W002").fetch("help")).not_to be_empty
+    expect(codes.fetch("FLEXR-W013").fetch("help")).not_to be_empty
+    expect(codes.fetch("FLEXR-W014").fetch("help")).not_to be_empty
+    expect(errors).to be_empty
+  ensure
+    FileUtils.rm_f(path) if path
+  end
 end
