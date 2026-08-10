@@ -138,7 +138,9 @@ module Flexr
     end
 
     def validate_firstmatch_equivalence!(spec, compiled)
-      return if spec.rules.any? { |rule| rule.trailing || rule.patterns.any? { |pattern| reference_pattern?(pattern) } }
+      return if spec.rules.any? do |rule|
+        rule.trailing || rule.patterns.any? { |pattern| reference_pattern?(pattern, unicode: spec.options[:unicode] == true) }
+      end
 
       machine = compiled.machines.fetch(:initial).dfa
       random = Random.new(17)
@@ -155,9 +157,11 @@ module Flexr
       end
     end
 
-    def reference_pattern?(pattern)
-      pattern.is_a?(::Regexp) &&
-        (pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
+    def reference_pattern?(pattern, unicode: false)
+      return false unless pattern.is_a?(::Regexp)
+      return true if pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
+
+      unicode && pattern.encoding != Encoding::BINARY && pattern.source.match?(/\\[dDwWsS]/)
     end
 
     def table_match(dfa, input)

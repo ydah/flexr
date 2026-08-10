@@ -83,8 +83,11 @@ module Flexr
       end
 
       def reference_pattern?(pattern)
-        pattern.is_a?(::Regexp) &&
-          (pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
+        return false unless pattern.is_a?(::Regexp)
+        return true if pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
+
+        @spec.options[:unicode] == true && @spec.encoding != Encoding::BINARY &&
+          pattern.source.match?(/\\[dDwWsS]/)
       end
 
       def validate_reference_patterns(rule)

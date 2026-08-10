@@ -51,7 +51,8 @@ module Flexr
   class << self
     def compile_pattern(pattern, options: {})
       regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
-      return Automaton::ReferenceDFA.new(regexp) if reference_pattern?(regexp)
+      return Automaton::ReferenceDFA.new(regexp, unicode: options[:unicode] == true) if
+        reference_pattern?(regexp, unicode: options[:unicode] == true)
       encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
       rule = IR::Rule.new(index: 0, patterns: [regexp], action: :skip, states: [:initial])
       state = IR::State.new(name: :initial, inclusive: true, id: 0)
@@ -63,8 +64,10 @@ module Flexr
       Automaton::Compiler.new(spec).compile.machines.fetch(:initial).dfa
     end
 
-    def reference_pattern?(regexp)
-      regexp.source.match?(/\\[pP]\{/) || regexp.source.match?(/\[:(?:\^)?[a-z]+:\]/)
+    def reference_pattern?(regexp, unicode: false)
+      return true if regexp.source.match?(/\\[pP]\{/) || regexp.source.match?(/\[:(?:\^)?[a-z]+:\]/)
+
+      unicode && regexp.encoding != Encoding::BINARY && regexp.source.match?(/\\[dDwWsS]/)
     end
 
     def parse_pattern(pattern, options: {})

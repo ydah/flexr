@@ -165,6 +165,31 @@ RSpec.describe Flexr do
     FileUtils.rm_f(output) if output
   end
 
+  it "keeps generated Unicode shorthand rules on the reference path" do
+    path = File.join(Dir.tmpdir, "flexr-unicode-shorthand-#{Process.pid}.flexr.rb")
+    output = "#{path}.generated.rb"
+    File.write(path, <<~RUBY)
+      require "flexr"
+
+      class UnicodeShorthandGeneratedFixture < Flexr::Lexer
+        option :unicode
+        rule(/\\w+/) { emit :WORD }
+        rule(/./) { emit :CHAR }
+      end
+    RUBY
+
+    Flexr::Generator.new(path, output: output).generate
+    load output
+
+    expect(UnicodeShorthandGeneratedFixture.new("abc١!").tokens)
+      .to eq([[:WORD, "abc١"], [:CHAR, "!"]])
+  ensure
+    Object.send(:remove_const, :UnicodeShorthandGeneratedFixture) if
+      Object.const_defined?(:UnicodeShorthandGeneratedFixture, false)
+    FileUtils.rm_f(path) if path
+    FileUtils.rm_f(output) if output
+  end
+
   it "uses acceleration in generated binary lexers" do
     path = File.join(Dir.tmpdir, "flexr-generated-accel-#{Process.pid}.flexr.rb")
     output = "#{path}.generated.rb"

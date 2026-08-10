@@ -96,8 +96,11 @@ module Flexr
       end
 
       def reference_pattern?(pattern)
-        pattern.is_a?(::Regexp) &&
-          (pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
+        return false unless pattern.is_a?(::Regexp)
+        return true if pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
+
+        @lexer.class.__flexr_config.options[:unicode] == true && @lexer.utf8_input? &&
+          pattern.source.match?(/\\[dDwWsS]/)
       end
 
       def scan_firstmatch(position)

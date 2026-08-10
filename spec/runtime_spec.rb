@@ -37,6 +37,16 @@ RSpec.describe "Flexr runtime" do
     expect(lexer_class.new("1a").tokens).to eq([[:MIXED, "1"], [:MIXED, "a"]])
   end
 
+  it "uses the vendored UCD reference path for Unicode shorthands" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      option :unicode
+      rule(/\w+/) { emit :WORD }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer_class.new("abc١!").tokens).to eq([[:WORD, "abc١"], [:OTHER, "!"]])
+  end
+
   it "uses the vendored UCD for Unicode trailing context" do
     newly_assigned = [0x18db8].pack("U")
     lexer_class = Class.new(Flexr::Lexer) do
