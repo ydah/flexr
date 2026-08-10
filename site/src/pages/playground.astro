@@ -1,0 +1,64 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+<SiteLayout
+  title="Playground"
+  description="Explore flexr's longest-match decision model with an interactive, fixture-backed lexer preview."
+>
+  <main class="playground-shell">
+    <a class="back-link" href={base}>← Back to flexr</a>
+    <header class="playground-header">
+      <div class="eyebrow">Interactive preview · flexr 1.0</div>
+      <h1>See the decision, not just the token.</h1>
+      <p>
+        Choose a fixture, edit its input, and inspect which rule wins at each position. This
+        preview is static and fixture-backed: it does not execute arbitrary Ruby in your browser.
+        Use the repository examples and CLI for full runtime and generation behavior.
+      </p>
+      <div class="playground-notice" role="note">
+        Safe boundary: this page sends no source or input to a server. Arbitrary actions and
+        <code>--eval</code> are intentionally unavailable here.
+      </div>
+    </header>
+
+    <section class="workbench" aria-label="flexr playground workbench">
+      <div class="workbench-panel">
+        <div class="panel-heading"><span>Specification fixture</span><small>read-only model</small></div>
+        <select id="preset" aria-label="Choose a playground fixture">
+          <option value="longest">Longest match</option>
+          <option value="calculator">Calculator</option>
+          <option value="json">JSON tokens</option>
+        </select>
+        <textarea id="spec" aria-label="Lexer specification" readonly></textarea>
+        <div class="workbench-actions">
+          <button class="button button-secondary" type="button" data-action="check">Check</button>
+          <button class="button button-secondary" type="button" data-action="generate">Show generated shape</button>
+        </div>
+      </div>
+
+      <div class="workbench-panel">
+        <div class="panel-heading"><span>Input</span><small>edit, then run</small></div>
+        <textarea id="input" class="input-area" aria-label="Input to tokenize"></textarea>
+        <div class="workbench-actions">
+          <button class="button button-primary" type="button" data-action="run">Run preview</button>
+          <button class="button button-secondary" type="button" data-action="compare">Compare modes</button>
+          <button class="button button-secondary" type="button" data-action="share">Copy share link</button>
+        </div>
+        <p id="status" class="workbench-status" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="workbench-panel full">
+        <div class="panel-heading"><span>Tokens</span><small>output</small></div>
+        <div id="tokens" class="workbench-output"><p class="output-empty">Run a fixture to see its token stream.</p></div>
+      </div>
+
+      <div class="workbench-panel full">
+        <div class="panel-heading"><span>Match decisions</span><small>why the winner won</small></div>
+        <div id="decisions" class="workbench-output"><p class="output-empty">Each input position will show its accepted candidates and the winning rule.</p></div>
+      </div>
+    </section>
+  </main>
+  <script is:inline src={`${base}playground.js`} defer></script>
+</SiteLayout>

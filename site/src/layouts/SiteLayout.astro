@@ -1,0 +1,21 @@
+---
+export interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const siteTitle = `${title} · flexr`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <title>{siteTitle}</title>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

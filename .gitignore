@@ -11,3 +11,7 @@
 Gemfile.lock
 .rspec_status
 *.gem
+site/node_modules
+site/dist
+site/.astro
+.pnpm-store
