@@ -115,6 +115,6 @@ module GeneratedFixture
         instance_exec(&rule.action)
       end
     end
-    
+
   end
 end
