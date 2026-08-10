@@ -88,9 +88,20 @@ RSpec.describe "verification tooling" do
     result = baseline.merge(
       "modes" => baseline.fetch("modes").merge(
         "handwritten" => baseline.fetch("modes").fetch("handwritten").merge("mb_per_s" => 0.001)
-      )
+      ),
+      "relative_to_handwritten" => { "runtime" => 0.18, "generated" => 0.18 }
     )
 
     expect(Flexr::Benchmarking::Baseline.check(baseline_path, result, threshold: 0.1)).to eq(0)
+  end
+
+  it "enforces the measured handwritten performance floor" do
+    baseline_path = File.join(root, "benchmark/baselines/json.json")
+    baseline = JSON.parse(File.read(baseline_path))
+    result = baseline.merge(
+      "relative_to_handwritten" => { "runtime" => 0.179, "generated" => 0.18 }
+    )
+
+    expect(Flexr::Benchmarking::Baseline.check(baseline_path, result, threshold: 0.1)).to eq(1)
   end
 end

@@ -212,7 +212,8 @@ module Flexr
     end
 
     module Baseline
-      REGRESSION_MODES = %w[runtime generated].freeze
+      PERFORMANCE_FLOOR = 0.18
+      FLOOR_MODES = %w[runtime generated].freeze
 
       module_function
 
@@ -224,11 +225,11 @@ module Flexr
         return 2 unless baseline["schema"] == 1
         return 1 unless identity_matches?(baseline, result)
 
-        REGRESSION_MODES.each do |mode|
-          metrics = baseline.fetch("modes").fetch(mode)
-          expected = Float(metrics.fetch("mb_per_s"))
-          actual = Float(result.fetch("modes").fetch(mode).fetch("mb_per_s"))
-          return 1 if actual < expected * (1.0 - threshold)
+        baseline_ratios = baseline.fetch("relative_to_handwritten")
+        FLOOR_MODES.each do |mode|
+          actual = Float(result.fetch("relative_to_handwritten").fetch(mode))
+          expected = Float(baseline_ratios.fetch(mode)) * (1.0 - threshold)
+          return 1 if actual < [PERFORMANCE_FLOOR, expected].max
         end
         0
       rescue JSON::ParserError, KeyError, TypeError, ArgumentError
