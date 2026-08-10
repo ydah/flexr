@@ -55,6 +55,79 @@ RSpec.describe Flexr::CLI do
     FileUtils.rm_f(path)
   end
 
+  it "keeps flex yylineno imports complete because Flexr tracks lines by default" do
+    path = File.join(Dir.tmpdir, "flexr-yylineno-import-#{Process.pid}.l")
+    File.write(path, <<~LEX)
+      %option yylineno
+      %%
+      .    { value = lineno; return TOKEN; }
+    LEX
+
+    status, output, errors = run_cli("import", path)
+
+    expect(status).to eq(0)
+    expect(output).to include("value = lineno", "emit :TOKEN")
+    expect(errors).to be_empty
+  ensure
+    FileUtils.rm_f(path)
+  end
+
+  it "keeps unknown flex options explicit and incomplete" do
+    path = File.join(Dir.tmpdir, "flexr-unknown-option-import-#{Process.pid}.l")
+    File.write(path, <<~LEX)
+      %option yylineno noyywrap
+      %%
+      .    ;
+    LEX
+
+    status, _output, errors = run_cli("import", path)
+
+    expect(status).to eq(1)
+    expect(errors).to include("unsupported flex option noyywrap")
+  ensure
+    FileUtils.rm_f(path)
+  end
+
+  it "reports a concrete Rexical first-match counterexample" do
+    path = File.join(Dir.tmpdir, "flexr-rexical-import-#{Process.pid}.rex")
+    File.write(path, <<~REX)
+      class RexicalFixture
+        rule
+          /a/  { return A; }
+          /aa/ { return AA; }
+        end
+      end
+    REX
+
+    status, output, errors = run_cli("import", path)
+
+    expect(status).to eq(0)
+    expect(output).to include("emit :A", "emit :AA")
+    expect(errors).to include("Rexical uses first-match semantics",
+                              "Rexical rules 0 and 1",
+                              '"aa" is a counterexample')
+  ensure
+    FileUtils.rm_f(path)
+  end
+
+  it "does not claim a Rexical semantic difference without a witness" do
+    path = File.join(Dir.tmpdir, "flexr-rexical-no-witness-#{Process.pid}.rex")
+    File.write(path, <<~REX)
+      rule
+        /a/ { return A; }
+        /b/ { return B; }
+      end
+    REX
+
+    status, _output, errors = run_cli("import", path)
+
+    expect(status).to eq(0)
+    expect(errors).to include("Rexical uses first-match semantics")
+    expect(errors).not_to include("counterexample")
+  ensure
+    FileUtils.rm_f(path)
+  end
+
   it "fails incomplete imports instead of silently accepting untranslated C" do
     path = File.join(Dir.tmpdir, "flexr-incomplete-import-#{Process.pid}.l")
     File.write(path, <<~LEX)

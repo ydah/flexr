@@ -61,6 +61,7 @@ module Flexr
       raise CompileError, "rexical specification has no rule section" unless match
 
       parse_rules(match[1].lines.map { |line| normalize_rexical_line(line) }.join)
+      warn_rexical_semantic_differences
       header = @source.lines.take_while { |line| !line.match?(/^\s*(?:macro|rule)\b/) }.join
       add_comment_block(header, "rexical header") unless header.strip.empty?
     end
@@ -79,7 +80,7 @@ module Flexr
           @declared_tokens ||= []
           @declared_tokens.concat(::Regexp.last_match(1).split.map(&:to_sym))
         when /^%option\s+(.+)/
-          warn_incomplete("ignored flex option #{::Regexp.last_match(1)}")
+          parse_flex_options(::Regexp.last_match(1))
         when /^%[A-Za-z]/
           warn_incomplete("unsupported flex declaration: #{stripped}")
         when /^([A-Za-z_]\w*)\s+(.+)/
@@ -147,7 +148,7 @@ module Flexr
       expression = normalize_pattern(expanded)
       action_expression, complete = translate_action(action)
       @complete = false unless complete
-      @rules << { states: states, pattern: expression, action: action_expression }
+      @rules << { states: states, pattern: expression, raw_pattern: expanded, action: action_expression }
       @last_action = action_expression
     end
 
@@ -318,6 +319,129 @@ module Flexr
     def warn_incomplete(message)
       @warnings << message
       @complete = false
+    end
+
+    def parse_flex_options(text)
+      text.split(/[\s,]+/).reject(&:empty?).each do |option|
+        next if option == "yylineno"
+
+        warn_incomplete("unsupported flex option #{option}")
+      end
+    end
+
+    def warn_rexical_semantic_differences
+      @rules.each_index do |first_index|
+        ((first_index + 1)...@rules.length).each do |second_index|
+          first = @rules[first_index]
+          second = @rules[second_index]
+          next unless rexical_rules_overlap?(first, second)
+
+          counterexample = rexical_counterexample(first[:raw_pattern], second[:raw_pattern])
+          next unless counterexample
+
+          input, first_length, second_length = counterexample
+          @warnings << <<~WARNING.chomp
+            Rexical rules #{first_index} and #{second_index} differ under first-match vs longest-match: #{input.inspect} is a counterexample; first-match selects rule #{first_index} (#{first_length} bytes), while longest-match selects rule #{second_index} (#{second_length} bytes)
+          WARNING
+        end
+      end
+    end
+
+    def rexical_rules_overlap?(first, second)
+      first_states = first[:states].empty? ? [:initial] : first[:states]
+      second_states = second[:states].empty? ? [:initial] : second[:states]
+      first_states.intersect?(second_states)
+    end
+
+    def rexical_counterexample(first_pattern, second_pattern)
+      # Candidate generation is deliberately conservative; warnings require an actual match witness.
+      regexps = [first_pattern, second_pattern].map { |pattern| ::Regexp.new(pattern) }
+      rexical_candidate_inputs([first_pattern, second_pattern]).each do |input|
+        matches = regexps.map { |regexp| regexp.match(input) }
+        next unless matches.all? do |match|
+          next false unless match
+
+          match.begin(0).zero? && !match[0].empty?
+        end
+
+        lengths = matches.map { |match| match[0].bytesize }
+        return [input, *lengths] if lengths[0] < lengths[1]
+      end
+      nil
+    rescue RegexpError, ArgumentError
+      nil
+    end
+
+    def rexical_candidate_inputs(patterns)
+      characters = (%w[x a b 0 1 _] + patterns.flat_map { |pattern| rexical_candidate_characters(pattern) }).uniq.first(24)
+      fragments = patterns.flat_map { |pattern| rexical_literal_fragments(pattern) }
+        .reject(&:empty?).uniq.first(24)
+      seeds = (fragments + characters).uniq
+      candidates = []
+
+      seeds.each do |seed|
+        candidates.push(seed, seed * 2, seed * 3)
+      end
+      fragments.each do |fragment|
+        characters.each do |character|
+          candidates << "#{fragment}#{character}"
+          candidates << "#{character}#{fragment}"
+        end
+      end
+      fragments.combination(2) { |left, right| candidates << "#{left}#{right}" }
+
+      candidates.uniq.each_with_index
+        .sort_by { |candidate, index| [candidate.bytesize, index] }.map(&:first)
+    end
+
+    def rexical_candidate_characters(pattern)
+      escaped = pattern.scan(/\\x([0-9A-Fa-f]{2})|\\(.)/).filter_map do |hex, character|
+        if hex
+          byte = hex.to_i(16)
+          [byte].pack("C").force_encoding(Encoding::UTF_8) if byte < 0x80
+        else
+          { "n" => "\n", "r" => "\r", "t" => "\t", "f" => "\f", "v" => "\v" }[character] ||
+            (character unless %w[d D w W s S A Z b B p P G K].include?(character))
+        end
+      end
+      pattern.each_char.grep(/[A-Za-z0-9_]/) + escaped
+    end
+
+    def rexical_literal_fragments(pattern)
+      fragments = []
+      current = +""
+      in_class = false
+      escaped = false
+      flush = lambda do
+        fragments << current unless current.empty?
+        current = +""
+      end
+
+      pattern.each_char do |character|
+        if escaped
+          if { "n" => "\n", "r" => "\r", "t" => "\t", "f" => "\f", "v" => "\v" }.key?(character)
+            current << { "n" => "\n", "r" => "\r", "t" => "\t", "f" => "\f", "v" => "\v" }.fetch(character)
+          elsif character.match?(/[dDwWsSAZbBpPGK]/)
+            flush.call
+          else
+            current << character
+          end
+          escaped = false
+        elsif character == "\\"
+          escaped = true
+        elsif in_class
+          in_class = false if character == "]"
+        elsif character == "["
+          flush.call
+          in_class = true
+        elsif character.match?(/[A-Za-z0-9_]/)
+          current << character
+        else
+          flush.call
+        end
+      end
+      flush.call unless current.empty?
+      fragments
     end
 
     def split_rule_line(line)
