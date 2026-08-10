@@ -8,3 +8,5 @@ after converting a specification; flexr will choose a longer match.
 `FLEXR-TODO` and the command exits unsuccessfully, so an incomplete import is
 never reported as a finished migration. Rewrite those actions in Ruby and run
 the generated specification through `flexr check` before using it.
+When an output path is supplied, flexr does not create or overwrite that file
+unless every imported action was translated successfully.

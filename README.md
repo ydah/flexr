@@ -93,6 +93,8 @@ bundle exec rake modes:equivalence
 bundle exec rake golden:verify accel:equivalence dogfood:verify examples:check
 bundle exec rake generated:verify unicode:verify
 bundle exec rake bench:regression
+bundle exec rake test:differential
+bundle exec rake fuzz
 bundle exec rake coverage
 ```
 
@@ -101,6 +103,10 @@ acceleration checks the extracted byte regions, and dogfood checks that each
 generated Ruby file is syntactically valid and contains a compiled payload.
 `bench:regression` requires the checked-in baseline and fails when its input
 identity changes or throughput drops by more than 10 percent.
+`test:differential` runs one million deterministic comparisons against the
+reference matcher, and `fuzz` runs 10,000 runtime/generated equivalence inputs
+per example. CI runs both verification tasks on every push, pull request, and
+scheduled run.
 `coverage` reports line coverage for `lib/flexr` and fails below the 95% CI
 gate.
 
