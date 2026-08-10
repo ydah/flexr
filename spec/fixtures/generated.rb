@@ -22,9 +22,12 @@ module GeneratedFixture
       return nil unless valid_utf8_at?(position)
       cursor = position
       current = dfa.start
-      best = __flexr_generated_acceptance(dfa, current, position, position, nil)
-      while buffer.ensure_available?(cursor + 1)
-        if self.class.__flexr_config.options.fetch(:accel, :auto) != :none && !utf8_input?
+      direct = dfa.direct
+      source = buffer.source
+      best = nil
+      accelerate = self.class.__flexr_config.options.fetch(:accel, :auto) != :none && !utf8_input?
+      while cursor < source.bytesize || buffer.ensure_available?(cursor + 1)
+        if accelerate
           region = __flexr_generated_acceleration_region(dfa, current)
           accelerated_end = __flexr_generated_accelerate(region, cursor) if region
           if accelerated_end && accelerated_end > cursor
@@ -33,15 +36,25 @@ module GeneratedFixture
             next
           end
         end
-        byte = buffer.getbyte(cursor)
-        current = if self.class.__flexr_config.backend == :direct
-          dfa.transition_direct(current, byte)
+        byte = source.getbyte(cursor)
+        current = if direct
+          class_id = dfa.ec[byte]
+          value = direct[:nxt][(current * direct[:classes]) + class_id]
+          value >= 0 ? value : nil
         else
           dfa.transition(current, byte)
         end
         break unless current
         cursor += 1
-        best = __flexr_generated_acceptance(dfa, current, position, cursor, best)
+        acceptance = dfa.accepts[current].first
+        if acceptance
+          rule = self.class.__flexr_rules.fetch(acceptance.rule_index)
+          best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
+          best.rule = rule
+          best.start_pos = position
+          best.end_pos = cursor
+          best.total_end_pos = cursor
+        end
       end
       best
     end
@@ -77,7 +90,8 @@ module GeneratedFixture
     end
     def __flexr_generated_fast_path?
       return @__flexr_generated_fast_path if defined?(@__flexr_generated_fast_path)
-      @__flexr_generated_fast_path = if self.class.__flexr_config.backend == :firstmatch
+      @__flexr_generated_fast_path = if self.class.__flexr_config.backend == :firstmatch ||
+                                      self.class.__flexr_config.options[:allow_empty_match] == true
         false
       else
         self.class.__flexr_rules.none? do |rule|
@@ -92,7 +106,6 @@ module GeneratedFixture
     def __flexr_generated_acceptance(dfa, state, start_position, cursor, best)
       dfa.accepts[state].each do |acceptance|
         next if acceptance.bol_only && !beginning_of_line?
-        next unless utf8_boundary?(cursor)
         next if acceptance.end_anchor && !(buffer.eof?(cursor) || buffer.getbyte(cursor) == 0x0a)
         rule = self.class.__flexr_rules.fetch(acceptance.rule_index)
         defer_token_size_check!(cursor - start_position)

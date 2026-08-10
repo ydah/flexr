@@ -44,8 +44,9 @@ module Flexr
           lines << "#{indent}  best = __flexr_generated_acceptance(dfa, current, position, position, nil)"
           false
         end
+        lines << "#{indent}  accelerate = self.class.__flexr_config.options.fetch(:accel, :auto) != :none && !utf8_input?"
         lines << "#{indent}  while cursor < source.bytesize || buffer.ensure_available?(cursor + 1)"
-        lines << "#{indent}    if self.class.__flexr_config.options.fetch(:accel, :auto) != :none && !utf8_input?"
+        lines << "#{indent}    if accelerate"
         lines << "#{indent}      region = __flexr_generated_acceleration_region(dfa, current)"
         lines << "#{indent}      accelerated_end = __flexr_generated_accelerate(region, cursor) if region"
         lines << "#{indent}      if accelerated_end && accelerated_end > cursor"
