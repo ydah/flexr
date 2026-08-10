@@ -10,13 +10,19 @@
   "modes": {
     "runtime": {
       "tokens": 50000,
-      "mb_per_s": 0.256,
-      "tokens_per_s": 91493
+      "mb_per_s": 0.449,
+      "tokens_per_s": 160490,
+      "allocations_per_token": 41.6
     },
     "generated": {
       "tokens": 50000,
-      "mb_per_s": 0.178,
-      "tokens_per_s": 63639
+      "mb_per_s": 0.415,
+      "tokens_per_s": 148384,
+      "allocations_per_token": 44.4
     }
+  },
+  "relative_to_handwritten": {
+    "runtime": 0.084,
+    "generated": 0.077
   }
 }

@@ -6,6 +6,7 @@ require "json"
 require "tempfile"
 
 require_relative "../lib/flexr"
+require_relative "baselines/json_handwritten"
 
 module Flexr
   module Benchmarking
@@ -92,7 +93,11 @@ module Flexr
       out.puts "spec: #{result.fetch('spec')}"
       out.puts "input_bytes: #{result.fetch('input_bytes')}, tokens: #{result.fetch('tokens')}"
       result.fetch("modes").each do |mode, metrics|
-        out.puts "#{mode}: #{metrics.fetch('mb_per_s')} MB/s, #{metrics.fetch('tokens_per_s')} tokens/s"
+        out.puts "#{mode}: #{metrics.fetch('mb_per_s')} MB/s, #{metrics.fetch('tokens_per_s')} tokens/s, " \
+          "#{metrics.fetch('allocations_per_token')} allocations/token"
+      end
+      if (ratios = result["relative_to_handwritten"])
+        out.puts "relative_to_handwritten: runtime=#{ratios.fetch('runtime')}x, generated=#{ratios.fetch('generated')}x"
       end
     end
 
@@ -122,7 +127,16 @@ module Flexr
           "tokens" => runtime.fetch("tokens"),
           "iterations" => @options.fetch(:iterations),
           "modes" => { "runtime" => runtime, "generated" => generated }
-        }
+        }.tap do |result|
+          next unless source_path.match?(%r{/examples/json/})
+
+          handwritten = measure_class(FlexrBenchmark::JsonHandwrittenLexer, input)
+          result["modes"]["handwritten"] = handwritten
+          result["relative_to_handwritten"] = {
+            "runtime" => (runtime.fetch("mb_per_s") / handwritten.fetch("mb_per_s")).round(3),
+            "generated" => (generated.fetch("mb_per_s") / handwritten.fetch("mb_per_s")).round(3)
+          }
+        end
       end
 
       private
@@ -138,18 +152,26 @@ module Flexr
 
       def measure(source_path, input, generated:)
         klass = generated ? load_generated(source_path) : load_runtime(source_path)
+        measure_class(klass, input)
+      end
+
+      def measure_class(klass, input)
         iterations = @options.fetch(:iterations)
         iterations.times { klass.new(input).tokens }
+        GC.start
+        allocated_before = GC.stat.fetch(:total_allocated_objects)
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         tokens = nil
         iterations.times { tokens = klass.new(input).tokens }
         elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+        allocated = GC.stat.fetch(:total_allocated_objects) - allocated_before
         bytes_per_second = input.bytesize * iterations / [elapsed, Float::EPSILON].max
         token_count = tokens.length
         {
           "tokens" => token_count,
           "mb_per_s" => (bytes_per_second / 1_000_000).round(3),
-          "tokens_per_s" => (token_count * iterations / [elapsed, Float::EPSILON].max).round
+          "tokens_per_s" => (token_count * iterations / [elapsed, Float::EPSILON].max).round,
+          "allocations_per_token" => (allocated.to_f / [token_count * iterations, 1].max).round(3)
         }
       end
 
