@@ -21,6 +21,7 @@ RSpec.describe Flexr::Runtime::Location do
     reference = WeakRef.new(lexer)
     # Ruby may conservatively scan this stack slot during GC on some versions.
     lexer = nil # rubocop:disable Lint/UselessAssignment
+    GC.start
     [token, reference]
   end
 
