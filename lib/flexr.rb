@@ -64,7 +64,7 @@ module Flexr
     end
 
     def reference_pattern?(regexp)
-      regexp.source.include?("\\p{") || regexp.source.match?(/\[:(?:\^)?[a-z]+:\]/)
+      regexp.source.match?(/\\[pP]\{/) || regexp.source.match?(/\[:(?:\^)?[a-z]+:\]/)
     end
 
     def parse_pattern(pattern, options: {})

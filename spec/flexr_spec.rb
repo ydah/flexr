@@ -154,11 +154,66 @@ RSpec.describe Flexr do
     Flexr::Generator.new(path, output: output).generate
     generated = File.read(output)
     expect(generated).to include("DIGIT = /[0-9]/")
-    expect(generated).to include("def scan_one", "def __flexr_generated_execute")
+    expect(generated).to include(
+      "def scan_one", "def __flexr_generated_execute", "def __flexr_generated_accelerate",
+      "Flexr::Automaton::Accel.extract"
+    )
     expect(generated).not_to include("rule(/")
     load output
     expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])
   ensure
+    FileUtils.rm_f(output) if output
+  end
+
+  it "uses acceleration in generated binary lexers" do
+    path = File.join(Dir.tmpdir, "flexr-generated-accel-#{Process.pid}.flexr.rb")
+    output = "#{path}.generated.rb"
+    File.write(path, <<~RUBY)
+      require "flexr"
+
+      class BinaryAccelFixture < Flexr::Lexer
+        encoding Encoding::BINARY
+        rule(/a+/) { emit :A }
+        rule(/./) { emit :CHAR }
+      end
+    RUBY
+
+    load path
+    Object.send(:remove_const, :BinaryAccelFixture)
+    Flexr::Generator.new(path, output: output).generate
+    load output
+
+    expect(Flexr::Automaton::Accel).to receive(:extract).and_call_original
+    expect(BinaryAccelFixture.new("a".b * 100).tokens).to eq([[:A, "a".b * 100]])
+  ensure
+    Object.send(:remove_const, :BinaryAccelFixture) if Object.const_defined?(:BinaryAccelFixture, false)
+    FileUtils.rm_f(path) if path
+    FileUtils.rm_f(output) if output
+  end
+
+  it "preserves captured locals in generated action blocks" do
+    path = File.join(Dir.tmpdir, "flexr-captured-action-#{Process.pid}.flexr.rb")
+    output = "#{path}.generated.rb"
+    File.write(path, <<~RUBY)
+      require "flexr"
+
+      class CapturedActionFixture < Flexr::Lexer
+        value = 42
+        rule(/a/) { emit :A, value }
+      end
+    RUBY
+
+    load path
+    runtime_tokens = CapturedActionFixture.new("a").tokens
+    Object.send(:remove_const, :CapturedActionFixture)
+    generated = Flexr::Generator.new(path, output: output).generate
+    expect(generated).to include("instance_exec(&rule.action)")
+    load output
+
+    expect(CapturedActionFixture.new("a").tokens).to eq(runtime_tokens)
+  ensure
+    Object.send(:remove_const, :CapturedActionFixture) if Object.const_defined?(:CapturedActionFixture, false)
+    FileUtils.rm_f(path) if path
     FileUtils.rm_f(output) if output
   end
 

@@ -69,7 +69,7 @@ module Flexr
 
     class ReferenceDFA
       def initialize(regexp)
-        source, options = if regexp.source.include?("\\p{")
+        source, options = if regexp.source.match?(/\\[pP]\{/) || regexp.source.match?(/\[:(?:\^)?[a-z]+:\]/)
           converted = Unicode::ReferenceRegexp.compiled(
             regexp, encoding: regexp.encoding, options: regexp.options, unicode: false
           )

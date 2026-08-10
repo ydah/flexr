@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weakref"
+
 RSpec.describe Flexr::Runtime::Location do
   def lexer_class(eager: false)
     Class.new(Flexr::Lexer) do
@@ -7,6 +9,11 @@ RSpec.describe Flexr::Runtime::Location do
       option :eager_columns if eager
       rule(/./) { emit :CHAR }
     end
+  end
+
+  def token_and_reference
+    lexer = lexer_class.new("あ")
+    [lexer.next_token, WeakRef.new(lexer)]
   end
 
   it "defers column computation by default" do
@@ -22,5 +29,14 @@ RSpec.describe Flexr::Runtime::Location do
 
     expect(location[:column_begin]).to eq(1)
     expect(location[:column_end]).to eq(2)
+  end
+
+  it "does not retain the lexer through a lazy location" do
+    token, reference = token_and_reference
+    GC.start
+
+    expect(reference.weakref_alive?).to be_falsy
+    expect(token.location.column_begin).to eq(1)
+    expect(token.location.column_end).to eq(2)
   end
 end

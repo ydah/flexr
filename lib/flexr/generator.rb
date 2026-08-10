@@ -263,7 +263,7 @@ module Flexr
       lines = ["#{indent}def __flexr_generated_execute(rule)", "#{indent}  case rule.index"]
       parsed.rules.each do |rule|
         lines << "#{indent}  when #{rule.index}"
-        body = inline_action_body(rule.action)
+        body = inline_action_body(rule)
         if body.nil?
           lines << "#{indent}    instance_exec(&rule.action)"
         else
@@ -277,7 +277,8 @@ module Flexr
       lines.join("\n")
     end
 
-    def inline_action_body(action)
+    def inline_action_body(rule)
+      action = rule.action
       case action
       when :skip
         ""
@@ -286,6 +287,7 @@ module Flexr
 
         nil
       when String
+        return nil if rule.action_source
         return unless action.start_with?("proc")
 
         body = action.delete_prefix("proc").strip

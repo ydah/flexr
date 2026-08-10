@@ -23,6 +23,24 @@ RSpec.describe "Unicode POSIX and property matching" do
     end
   end
 
+  it "uses the vendored UCD as the POSIX and property oracle" do
+    cases = [
+      [/[[:alpha:]]/, [0x345].pack("U")],
+      [/\p{L}/, [0x18db8].pack("U")],
+      [/\P{Cn}/, [0xea944].pack("U")]
+    ]
+
+    cases.each do |pattern, input|
+      reference = Flexr::Unicode::ReferenceRegexp.compiled(
+        pattern, encoding: pattern.encoding, options: pattern.options, unicode: false
+      )
+      match = reference.match(input, 0)
+      expected = match&.begin(0) == 0 && match[0].bytesize == input.bytesize
+
+      expect(Flexr.compile_pattern(pattern).accept?(input)).to eq(expected)
+    end
+  end
+
   it "keeps valid property alternatives when another candidate fails its anchor" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule([/\p{L}$/, /\p{L}/]) { emit :LETTER, text }

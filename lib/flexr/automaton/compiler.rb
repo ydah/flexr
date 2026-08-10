@@ -84,7 +84,7 @@ module Flexr
 
       def reference_pattern?(pattern)
         pattern.is_a?(::Regexp) &&
-          (pattern.source.include?("\\p{") || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
+          (pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
       end
 
       def validate_reference_patterns(rule)

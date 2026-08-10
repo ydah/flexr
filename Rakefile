@@ -42,6 +42,16 @@ module FlexrVerification
     spec.delete_prefix("#{ROOT}/")
   end
 
+  def random_unicode_string(random, max_codepoints: 8)
+    codepoints = Array.new(random.rand(max_codepoints + 1)) do
+      loop do
+        codepoint = random.rand(0x11_0000)
+        break codepoint unless codepoint.between?(0xd800, 0xdfff)
+      end
+    end
+    codepoints.pack("U*")
+  end
+
   def load_runtime(spec)
     before = ObjectSpace.each_object(Class).to_a
     load spec
@@ -160,16 +170,28 @@ namespace :test do
                 /[[:alpha:]]+/, /[[:alnum:]]+/, /\p{L}+/, /\p{Nd}+/]
     cases = Integer(ENV.fetch("FLEXR_DIFFERENTIAL_CASES", "1000000"), 10)
     random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
-    unicode_inputs = ["", "a", "あ", "é", "ß", "Ω", "١", "　", "aあ", "éΩ"].freeze
+    unicode_inputs = ["", "a", "あ", "é", "ß", "Ω", "١", "　", "aあ", "éΩ", [0x18db8].pack("U")].freeze
     compiled = {}
     cases.times do
       pattern = patterns[random.rand(patterns.length)]
-      input = if random.rand(4).zero?
-        unicode_inputs.sample(random: random)
+      input = if random.rand(3).zero?
+        random.rand(2).zero? ? unicode_inputs.sample(random: random) : FlexrVerification.random_unicode_string(random)
       else
         Array.new(random.rand(10)) { random.rand(32..126) }.pack("C*")
       end
-      expected = Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options).match?(input)
+      expected = if Flexr.reference_pattern?(pattern)
+        reference = Flexr::Unicode::ReferenceRegexp.compiled(
+          pattern, encoding: pattern.encoding, options: pattern.options, unicode: false
+        )
+        match = reference.match(input, 0)
+        if match
+          match.begin(0).zero? && match[0].bytesize == input.bytesize
+        else
+          false
+        end
+      else
+        Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options).match?(input)
+      end
       key = [pattern.source, pattern.options]
       actual = (compiled[key] ||= Flexr.compile_pattern(pattern)).accept?(input)
       next if expected == actual
@@ -199,13 +221,23 @@ task :fuzz do
     raise "no generated lexer found for #{spec}" unless generated_lexer
 
     cases.times do
-      input = Array.new(random.rand(128)) { random.rand(0..127) }.pack("C*").force_encoding(Encoding::UTF_8)
+      input = case random.rand(4)
+      when 0
+        Array.new(random.rand(128)) { random.rand(0..127) }.pack("C*").force_encoding(Encoding::UTF_8)
+      when 1
+        FlexrVerification.random_unicode_string(random, max_codepoints: 32)
+      when 2
+        Array.new(random.rand(128)) { random.rand(0..255) }.pack("C*").force_encoding(Encoding::UTF_8)
+      else
+        (FlexrVerification.random_unicode_string(random, max_codepoints: 16) +
+          Array.new(random.rand(64)) { random.rand(32..126) }.pack("C*")).force_encoding(Encoding::UTF_8)
+      end
       runtime_tokens = runtime_lexer.new(input, error_mode: :panic).tokens
       generated_tokens = generated_lexer.new(input, error_mode: :panic).tokens
       next if runtime_tokens == generated_tokens
 
       abort "fuzz mode mismatch: #{spec} input=#{input.inspect} runtime=#{runtime_tokens.inspect} generated=#{generated_tokens.inspect}"
-    rescue Flexr::LexError, ArgumentError
+    rescue Flexr::LexError, ArgumentError, EncodingError
       # Invalid input and user-defined error actions are expected fuzz outcomes.
     end
   ensure

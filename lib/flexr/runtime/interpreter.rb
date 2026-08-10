@@ -97,7 +97,7 @@ module Flexr
 
       def reference_pattern?(pattern)
         pattern.is_a?(::Regexp) &&
-          (pattern.source.include?("\\p{") || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
+          (pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
       end
 
       def scan_firstmatch(position)
@@ -147,7 +147,7 @@ module Flexr
         minimum = minimum_match_bytes(pattern)
         loop do
           subject, tail = stream_subject(buffer, position)
-          match = if reference && !posix_pattern?(pattern)
+          match = if reference
             Unicode::ReferenceRegexp.match(
               pattern, subject, encoding: @lexer.class.__flexr_config.encoding,
               options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
