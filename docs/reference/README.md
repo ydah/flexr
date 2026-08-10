@@ -1,36 +1,23 @@
 # Reference
 
-## DSL
+This section describes behavior rather than teaching a sequence. Start with
+the [DSL](dsl.md) when writing a specification, the [runtime](runtime.md) when
+consuming tokens, or the [CLI](cli.md) when validating and generating files.
 
-- `rule(pattern, skip: true, emit: :TOKEN, followed_by: regexp)` registers a
-  longest-match rule. `Regexp`, `String`, and arrays of either are accepted.
-- `state(:name, inclusive: false) { ... }` creates an exclusive or inclusive
-  start condition. Actions can call `push`, `pop`, and `begin_state`.
-- `emits :TOKEN` documents token names and lets `check` diagnose undeclared
-  emissions. `token_kind` accepts `:array`, `:struct`, and `:yield`.
-- `on_eof { ... }` installs a state-specific EOF action.
+## Reference pages
 
-## CLI
-
-```sh
-flexr check lexer.flexr.rb
-flexr stats lexer.flexr.rb --format json
-flexr dot lexer.flexr.rb > lexer.dot
-flexr trace lexer.flexr.rb
-flexr lexer.flexr.rb -o lexer.rb
-```
-
-`--eval` executes trusted specification code when static evaluation cannot
-resolve a pattern. Never run it on an untrusted file.
-
-Unicode properties use flexr's vendored UCD snapshot (`15.1.0`), not the host
-Ruby's Unicode tables. This keeps generated output reproducible across Ruby
-versions; updating the snapshot is a minor-version compatibility change.
-
-## Supported regular expressions
-
-The DFA subset includes literals, alternation, grouping, character classes,
-Unicode properties, anchors at the pattern edges, and greedy `*`, `+`, `?`, and
-`{n,m}`. Lookaround, backreferences, lazy/possessive quantifiers, `\b`, and
-conditional expressions are rejected with `FLEXR-E014`; use `followed_by:` or a
-state transition as the replacement.
+- [DSL](dsl.md) — class-level specification methods and defaults.
+- [Runtime](runtime.md) — initialization, token iteration, input sources, and
+  limits.
+- [Actions](actions.md) — methods available inside rule and EOF actions.
+- [Tokens and locations](tokens-and-locations.md) — exact return shapes and
+  offsets.
+- [Errors](errors.md) — exception and input-recovery behavior.
+- [Regexp compatibility](regexp.md) — supported syntax and alternatives.
+- [CLI](cli.md) — commands, options, output, and exit statuses.
+- [Diagnostics](diagnostics.md) — diagnostic code catalog.
+- [Generated artifacts](generated-artifacts.md) — static evaluation, output
+  headers, dependencies, and standalone files.
+- [Public API](public-api.md) — stable, experimental, and internal boundaries.
+- [Compatibility](compatibility.md) — Ruby, Unicode, backend, and artifact
+  compatibility commitments.

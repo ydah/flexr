@@ -1,4 +1,4 @@
 # Static evaluation
 
-Literals, arrays, constants, `.freeze`, and `Regexp.union` are static. Dynamic
-method calls receive `FLEXR-E017`; runtime mode still supports them.
+This legacy path is kept for existing links. Read [Generate a lexer](../how-to/generate-a-lexer.md)
+and [Generated artifacts](../reference/generated-artifacts.md).

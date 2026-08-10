@@ -1,5 +1,5 @@
 # Performance
 
-Measure before changing backends. `token_kind :yield` avoids the token array
-when consuming through `each_token`; region extraction is available through
-`Flexr::Automaton::Accel`.
+This legacy path is kept for existing links. Read [Tune performance](../how-to/tune-performance.md),
+the [backend explanation](../explanation/backends.md), and the
+[performance log](../perf-log.md).

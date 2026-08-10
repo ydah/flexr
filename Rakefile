@@ -21,6 +21,7 @@ module FlexrVerification
   TOKENIZER_GENERATED = File.join(ROOT, "lib/flexr/regexp/tokenizer.rb").freeze
   VERIFICATION_SPECS = (EXAMPLES + [TOKENIZER_SPEC]).freeze
   EXPECTED_INPUTS = {
+    %r{/examples/calculator/} => "if ifx == = 12 + 3",
     %r{/examples/json/} => '{"answer": 42}',
     %r{/examples/toy_lang/} => "answer + 12",
     %r{/examples/ruby_subset/} => 'class Foo "ok" end',
@@ -36,6 +37,7 @@ module FlexrVerification
     "\\xffa".b
   ].freeze
   RUNTIME_CLASS_NAMES = {
+    %r{/examples/calculator/} => "CalculatorExample::Lexer",
     %r{/examples/json/} => "JsonExample::Lexer",
     %r{/examples/toy_lang/} => "ToyLang::Lexer",
     %r{/examples/ruby_subset/} => "RubySubset::Lexer",
@@ -455,6 +457,12 @@ end
 
 task :coverage do
   sh RbConfig.ruby, "-Ilib", "tools/coverage.rb"
+end
+
+namespace :docs do
+  task :verify do
+    ruby "tools/docs_verify.rb"
+  end
 end
 
 task default: :spec

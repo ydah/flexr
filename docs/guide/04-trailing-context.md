@@ -1,4 +1,5 @@
 # Trailing context
 
-`rule(/name/, followed_by: /\(/)` selects the rule using both parts but
-consumes only `name`.
+This legacy path is kept for existing links. Read
+[Use trailing context](../how-to/use-trailing-context.md) and the
+[regexp reference](../reference/regexp.md).

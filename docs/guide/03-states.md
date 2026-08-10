@@ -1,5 +1,4 @@
 # States
 
-Use `state :name do ... end`, then `push`, `pop`, or `begin_state` in an action.
-State blocks are exclusive by default; `inclusive: true` also keeps initial
-rules active.
+This legacy path is kept for existing links. Read [Use states](../how-to/use-states.md)
+and the [DSL reference](../reference/dsl.md).

@@ -52,6 +52,7 @@ jobs:
       - run: bundle exec rake unicode:verify
       - run: bundle exec rake direct:verify
       - run: bundle exec rake examples:check
+      - run: bundle exec rake docs:verify
       - run: bundle exec rake coverage
       # The throughput baseline is host-specific; run its gate on one canonical
       # environment instead of comparing different OS/CPU combinations.

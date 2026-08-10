@@ -1,16 +1,14 @@
 # Internals
 
-Both runtime and generated modes construct the same `IR::Spec`. The compiler
-parses each supported regexp into an AST, expands Unicode code points to UTF-8
-byte ranges, builds a Thompson NFA, determinizes it by byte class, and applies
-deterministic minimization. The interpreter then records the last accepting
-position to preserve leftmost-longest matching.
+This is maintainer-facing material. The public contract is in
+[reference/public-api.md](../reference/public-api.md); implementation choices
+are explained in the [architecture decisions](../adr/) and
+[explanation pages](../explanation/).
 
-Generated files retain ordinary Ruby surrounding the DSL calls and embed the
-compiled machines. The runtime source and the generated source intentionally
-remain separate execution paths; `rake modes:equivalence` checks their token
-streams against one another.
+Both runtime and generated modes compile the same byte-oriented model: regexp
+AST, Thompson NFA, byte-class DFA, deterministic minimization, and last-accept
+tracking. Generated output embeds compiled tables and generated dispatch code;
+runtime mode uses the interpreter and optional acceleration paths.
 
-The packed table format stores row defaults plus displaced exceptions. The
-direct backend uses an uncompressed row lookup, while `firstmatch` is retained
-only for explicit compatibility use and requires `option :experimental`.
+The internal names `Flexr::IR`, `Flexr::Automaton`, `Flexr::Codegen`, and
+`__flexr_*` are not compatibility-stable.
