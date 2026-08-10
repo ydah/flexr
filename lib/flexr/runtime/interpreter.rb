@@ -438,7 +438,7 @@ module Flexr
       def accelerate(region, buffer, position)
         mode = @lexer.class.__flexr_config.options.fetch(:accel, :auto)
         binary = buffer.source.b
-        match_end = if mode == :strscan && defined?(StringScanner)
+        match_end = if %i[strscan auto].include?(mode) && defined?(StringScanner)
           scanner = StringScanner.new(binary)
           scanner.pos = position
           length = scanner.skip(region.regexp)
