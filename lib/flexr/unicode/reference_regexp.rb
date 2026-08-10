@@ -17,7 +17,7 @@ module Flexr
       end
 
       def compiled(pattern, encoding:, options: 0, unicode: false)
-        key = [pattern.source, pattern.options, encoding, unicode]
+        key = [pattern.source, pattern.options, encoding, options, unicode]
         return CACHE[key] if CACHE.key?(key)
 
         parser = Regexp::Parser.new(pattern.source, options: pattern.options, encoding: encoding, unicode: unicode)

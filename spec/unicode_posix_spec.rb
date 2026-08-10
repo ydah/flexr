@@ -41,6 +41,22 @@ RSpec.describe "Unicode POSIX and property matching" do
     end
   end
 
+  it "keeps cached reference regexps distinct for explicit options" do
+    pattern = /a/
+    options = { encoding: pattern.encoding, unicode: false }
+
+    without_ignorecase = Flexr::Unicode::ReferenceRegexp.compiled(pattern, options: 0, **options)
+    with_ignorecase = Flexr::Unicode::ReferenceRegexp.compiled(
+      pattern, options: Regexp::IGNORECASE, **options
+    )
+
+    expect(without_ignorecase).not_to equal(with_ignorecase)
+    expect(Flexr::Unicode::ReferenceRegexp.compiled(pattern, options: 0, **options))
+      .to equal(without_ignorecase)
+    expect(Flexr::Unicode::ReferenceRegexp.compiled(pattern, options: Regexp::IGNORECASE, **options))
+      .to equal(with_ignorecase)
+  end
+
   it "supports inner-negated POSIX classes" do
     cases = {
       "[[:^alpha:]]" => [["1", true], ["a", false]],
