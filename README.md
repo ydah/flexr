@@ -45,9 +45,9 @@ the compiled tables.
 ## Measured performance
 
 The local CRuby 4.0.0 sample on 2026-08-10 used the deterministic JSON
-benchmark input (140,000 bytes, three measured iterations): runtime `0.889
-MB/s`, generated `0.936 MB/s`, and the handwritten `StringScanner` baseline
-`8.772 MB/s`. These are measurements on one machine, not guarantees; run
+benchmark input (140,000 bytes, three measured iterations): runtime `0.887
+MB/s`, generated `0.922 MB/s`, and the handwritten `StringScanner` baseline
+`8.573 MB/s`. These are measurements on one machine, not guarantees; run
 `ruby -Ilib benchmark/run.rb` for your environment. The current sample is
 below the design target, so no target-reaching performance claim is made.
 

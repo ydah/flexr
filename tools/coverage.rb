@@ -12,7 +12,7 @@ totals = files.map do |file|
   lines = result.fetch(file, {}).fetch(:lines, [])
   executable = lines.count { |count| !count.nil? }
   covered = lines.count { |count| count&.positive? }
-  uncovered = lines.each_index.select { |index| lines[index].zero? }
+  uncovered = lines.each_index.select { |index| lines[index]&.zero? }
   [file, covered, executable, uncovered]
 end
 covered = totals.sum { |_, count, _, _| count }
