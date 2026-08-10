@@ -49,6 +49,7 @@ jobs:
       - run: bundle exec rake golden:verify
       - run: bundle exec rake dogfood:verify
       - run: bundle exec rake examples:check
+      - run: bundle exec rake coverage
       - run: bundle exec rake bench:regression
 
   nightly-fuzz:

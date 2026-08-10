@@ -21,7 +21,7 @@ percentage = executable.zero? ? 100.0 : covered.to_f / executable * 100
 
 puts format("coverage: %<percentage>.2f%% (%<covered>d/%<executable>d lines)",
             percentage: percentage, covered: covered, executable: executable)
-puts "coverage target: 95.00% (report only; expand the regression suite before gating this target)"
+puts "coverage target: 95.00% (gate)"
 totals.reject { |_, count, total, _| total.zero? || count == total }.each do |file, count, total, uncovered|
   puts format("  %<file>s: %<count>d/%<total>d", file: file.delete_prefix("#{Dir.pwd}/"), count: count,
               total: total)
@@ -29,3 +29,4 @@ totals.reject { |_, count, total, _| total.zero? || count == total }.each do |fi
 end
 
 exit status unless status.zero?
+exit 1 if percentage < 95.0

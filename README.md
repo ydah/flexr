@@ -45,11 +45,13 @@ the compiled tables.
 ## Measured performance
 
 The local CRuby 4.0.0 sample on 2026-08-10 used the deterministic JSON
-benchmark input (140,000 bytes, three measured iterations): runtime `0.887
-MB/s`, generated `0.922 MB/s`, and the handwritten `StringScanner` baseline
-`8.573 MB/s`. These are measurements on one machine, not guarantees; run
-`ruby -Ilib benchmark/run.rb` for your environment. The current sample is
-below the design target, so no target-reaching performance claim is made.
+benchmark input (140,000 bytes, three measured iterations): runtime `1.691
+MB/s`, generated `1.604 MB/s`, and the handwritten `StringScanner` baseline
+`8.597 MB/s`. Runtime is `1.042x` generated; generated is `0.187x` the
+handwritten baseline. These are measurements on one machine, not guarantees;
+run `ruby -Ilib benchmark/run.rb` for your environment. The handwritten
+0.7x design target remains unmet, so no target-reaching performance claim is
+made.
 
 ## Generating a lexer
 
@@ -97,8 +99,8 @@ acceleration checks the extracted byte regions, and dogfood checks that each
 generated Ruby file is syntactically valid and contains a compiled payload.
 `bench:regression` requires the checked-in baseline and fails when its input
 identity changes or throughput drops by more than 10 percent.
-`coverage` reports line coverage for `lib/flexr`; the 95% planning target is
-reported explicitly and is not yet used as a CI gate.
+`coverage` reports line coverage for `lib/flexr` and fails below the 95% CI
+gate.
 
 For diagnostics, use `flexr check SPEC.rb --format json`, `flexr stats`,
 `flexr dot`, or `flexr trace`. `--warn-as-error` turns compiler warnings into a
