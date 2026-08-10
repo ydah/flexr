@@ -72,7 +72,7 @@ module GeneratedFixture
     def __flexr_generated_accelerate(region, position)
       binary = buffer.source.b
       mode = self.class.__flexr_config.options.fetch(:accel, :auto)
-      match_end = if mode == :strscan && defined?(StringScanner)
+      match_end = if %i[strscan auto].include?(mode) && defined?(StringScanner)
         scanner = StringScanner.new(binary)
         scanner.pos = position
         length = scanner.skip(region.regexp)
@@ -120,7 +120,7 @@ module GeneratedFixture
       end
       best
     end
-        def __flexr_generated_execute(rule)
+    def __flexr_generated_execute(rule)
       case rule.index
       when 0
         emit :INT, text.to_i

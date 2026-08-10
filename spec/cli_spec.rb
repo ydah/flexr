@@ -32,6 +32,15 @@ RSpec.describe Flexr::CLI do
     expect(errors).to include("unknown option")
   end
 
+  it "turns unexpected command failures into a CLI error" do
+    allow(described_class).to receive(:execute).and_raise(RuntimeError, "unexpected test failure")
+
+    status, _output, errors = run_cli("check", spec_path)
+
+    expect(status).to eq(1)
+    expect(errors).to include("error: RuntimeError: unexpected test failure")
+  end
+
   it "imports a basic flex specification into ordinary Ruby" do
     path = File.join(Dir.tmpdir, "flexr-import-#{Process.pid}.l")
     File.write(path, <<~LEX)
@@ -185,6 +194,24 @@ RSpec.describe Flexr::CLI do
     expect(status).to eq(0)
     expect(JSON.parse(output).map { |item| item.fetch("code") }).to include("FLEXR-W001")
     expect(errors).to be_empty
+  ensure
+    FileUtils.rm_f(path)
+  end
+
+  it "renders compiler diagnostics raised during check" do
+    path = File.join(Dir.tmpdir, "flexr-cli-diagnostic-#{Process.pid}.flexr.rb")
+    File.write(path, <<~RUBY)
+      require "flexr"
+      class InvalidCliLexer < Flexr::Lexer
+        rule(/(?=a)/) { emit :A }
+      end
+    RUBY
+
+    status, output, errors = run_cli("check", path)
+
+    expect(status).to eq(1)
+    expect(output).to be_empty
+    expect(errors).to include("FLEXR-E014", "look-around")
   ensure
     FileUtils.rm_f(path)
   end

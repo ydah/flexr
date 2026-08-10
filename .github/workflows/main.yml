@@ -129,4 +129,5 @@ jobs:
           bundle exec ruby -Ilib -e
           'require "flexr"; load "examples/json/lexer.flexr.rb";
           lexer = JsonExample::Lexer.new("{\\"answer\\":42}");
-          abort "runtime lexer mismatch" unless lexer.tokens == [[:LBRACE], [:STRING, "answer"], [:COLON], [:NUMBER, 42.0], [:RBRACE]]'
+          abort "runtime lexer mismatch" unless lexer.tokens == [[:LBRACE, "{"], [:STRING, "answer"],
+          [:COLON, ":"], [:NUMBER, 42.0], [:RBRACE, "}"]]'

@@ -46,6 +46,7 @@ RSpec.describe "flexr dot" do
     expect(dot).to include(Flexr::CLI.dot_quote("quoted state_0"))
     expect(dot).to include(Flexr::CLI.dot_quote("quoted state_1"))
     expect(Flexr::CLI.dot_quote('quoted "state"')).to eq('"quoted \\"state\\""')
+    expect(Flexr::CLI.dot_quote("slash\\path\nline\rreturn")).to eq('"slash\\\\path\\nline\\rreturn"')
   ensure
     FileUtils.rm_f(path) if path
   end

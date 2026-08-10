@@ -28,6 +28,13 @@ module FlexrVerification
     %r{/examples/with_lrama/} => "12 - 3",
     %r{/lib/flexr/regexp/tokenizer\.flexr\.rb\z} => "a|[a-z]+\\p{L}?"
   }.freeze
+  TOKENIZER_REFERENCE_INPUTS = [
+    "a|[a-z]+\\p{L}?",
+    "あa",
+    "aあ",
+    "é|あ",
+    "\\xffa".b
+  ].freeze
   module_function
 
   def input_for(spec)
@@ -58,10 +65,34 @@ module FlexrVerification
   end
 
   def load_runtime(spec)
+    class_name = Flexr::Source::PrismReader.new(
+      File.binread(spec).force_encoding(Encoding::UTF_8), path: spec
+    ).read.class_name
+    existing = constantize(class_name)
+    return existing if runtime_lexer?(existing)
+
     before = ObjectSpace.each_object(Class).to_a
     load spec
-    (ObjectSpace.each_object(Class).to_a - before).find { |klass| klass.respond_to?(:__flexr_spec) } ||
-      raise("no lexer class loaded from #{spec}")
+    loaded = (ObjectSpace.each_object(Class).to_a - before).find { |klass| runtime_lexer?(klass) }
+    return loaded if loaded
+
+    resolved = constantize(class_name)
+    return resolved if runtime_lexer?(resolved)
+
+    raise "no lexer class loaded from #{spec}"
+  end
+
+  def constantize(class_name)
+    return unless class_name
+
+    class_name.split("::").reject(&:empty?).reduce(Object) { |parent, name| parent.const_get(name) }
+  rescue NameError
+    nil
+  end
+
+  def runtime_lexer?(klass)
+    klass.is_a?(Class) && klass != Flexr::Lexer && klass.respond_to?(:__flexr_spec) &&
+      (!klass.respond_to?(:__flexr_generated?) || !klass.__flexr_generated?)
   end
 
   def verify_acceleration(spec)
@@ -127,6 +158,28 @@ module FlexrVerification
     )
     raise "tokenizer reference failed: #{reference_error}" unless reference_status.success?
     raise "tokenizer reference mismatch for #{spec}" unless runtime_output == reference_output
+    verify_tokenizer_reference
+  ensure
+    FileUtils.rm_f(generated_path) if generated_path
+  end
+
+  def verify_tokenizer_reference
+    runtime_lexer = load_runtime(TOKENIZER_SPEC)
+    generated_path = File.join(Dir.tmpdir, "flexr-tokenizer-reference-#{Process.pid}.rb")
+    Flexr::Regexp.send(:remove_const, :SourceLexer) if Flexr::Regexp.const_defined?(:SourceLexer, false)
+    File.binwrite(generated_path, generated_source(TOKENIZER_SPEC))
+    load generated_path
+    generated_lexer = Flexr::Regexp.const_get(:SourceLexer, false)
+
+    TOKENIZER_REFERENCE_INPUTS.each do |input|
+      expected = RegexpTokenizerReference.tokens(input)
+      runtime = runtime_lexer.new(input).tokens
+      generated = generated_lexer.new(input).tokens
+      next if runtime == expected && generated == expected
+
+      raise "tokenizer reference mismatch for #{input.inspect}: " \
+            "runtime=#{runtime.inspect}, generated=#{generated.inspect}, reference=#{expected.inspect}"
+    end
   ensure
     FileUtils.rm_f(generated_path) if generated_path
   end
