@@ -81,4 +81,16 @@ RSpec.describe "verification tooling" do
       expect(Flexr::Benchmarking::Baseline.check(file.path, result, threshold: 0.1)).to eq(1)
     end
   end
+
+  it "does not gate regressions on the host-dependent handwritten reference" do
+    baseline_path = File.join(root, "benchmark/baselines/json.json")
+    baseline = JSON.parse(File.read(baseline_path))
+    result = baseline.merge(
+      "modes" => baseline.fetch("modes").merge(
+        "handwritten" => baseline.fetch("modes").fetch("handwritten").merge("mb_per_s" => 0.001)
+      )
+    )
+
+    expect(Flexr::Benchmarking::Baseline.check(baseline_path, result, threshold: 0.1)).to eq(0)
+  end
 end

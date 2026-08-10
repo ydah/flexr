@@ -212,6 +212,8 @@ module Flexr
     end
 
     module Baseline
+      REGRESSION_MODES = %w[runtime generated].freeze
+
       module_function
 
       def check(path, result, threshold:)
@@ -222,7 +224,8 @@ module Flexr
         return 2 unless baseline["schema"] == 1
         return 1 unless identity_matches?(baseline, result)
 
-        baseline.fetch("modes").each do |mode, metrics|
+        REGRESSION_MODES.each do |mode|
+          metrics = baseline.fetch("modes").fetch(mode)
           expected = Float(metrics.fetch("mb_per_s"))
           actual = Float(result.fetch("modes").fetch(mode).fetch("mb_per_s"))
           return 1 if actual < expected * (1.0 - threshold)
