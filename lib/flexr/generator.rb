@@ -138,7 +138,7 @@ module Flexr
     end
 
     def validate_firstmatch_equivalence!(spec, compiled)
-      return if spec.rules.any? { |rule| rule.trailing || rule.patterns.any? { |pattern| pattern.to_s.include?("\\p{") } }
+      return if spec.rules.any? { |rule| rule.trailing || rule.patterns.any? { |pattern| reference_pattern?(pattern) } }
 
       machine = compiled.machines.fetch(:initial).dfa
       random = Random.new(17)
@@ -153,6 +153,11 @@ module Flexr
 
         raise CompileError, "firstmatch differs from table for #{input.inspect}: #{firstmatch.inspect} vs #{table.inspect}"
       end
+    end
+
+    def reference_pattern?(pattern)
+      pattern.is_a?(::Regexp) &&
+        (pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/))
     end
 
     def table_match(dfa, input)

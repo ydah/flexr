@@ -48,6 +48,18 @@ RSpec.describe "Flexr runtime" do
       .to eq([[:OTHER, "a"], [:OTHER, newly_assigned]])
   end
 
+  it "uses the vendored UCD in the firstmatch backend" do
+    newly_assigned = [0x18db8].pack("U")
+    lexer_class = Class.new(Flexr::Lexer) do
+      backend :firstmatch
+      option :experimental
+      rule(/\p{L}/) { emit :LETTER }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer_class.new(newly_assigned).tokens).to eq([[:OTHER, newly_assigned]])
+  end
+
   it "reports UTF-8 columns in characters" do
     lexer_class = Class.new(Flexr::Lexer) do
       token_kind :struct

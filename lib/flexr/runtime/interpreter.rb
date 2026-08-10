@@ -110,7 +110,8 @@ module Flexr
             next if condition.bol_only && !@lexer.beginning_of_line?
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            streamed_match(regexp, buffer, position)&.then { |match| [match, condition] }
+            streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp))
+              &.then { |match| [match, condition] }
           rescue ArgumentError, RegexpError
             nil
           end
