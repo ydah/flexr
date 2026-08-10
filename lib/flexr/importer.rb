@@ -136,6 +136,13 @@ module Flexr
     end
 
     def add_rule(pattern, action)
+      if pattern.strip == "<<EOF>>"
+        action_expression, complete = translate_action(action)
+        @complete = false unless complete
+        @eof_rules << [[], action_expression]
+        return
+      end
+
       states, pattern = extract_states(pattern)
       if pattern == "<<EOF>>"
         action_expression, complete = translate_action(action)
