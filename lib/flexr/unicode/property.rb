@@ -9,8 +9,10 @@ module Flexr
         "L" => "L", "Letter" => "L", "N" => "N", "Number" => "N", "Nd" => "Nd",
         "Hiragana" => "Hiragana", "Greek" => "Greek", "ASCII" => "ASCII",
         "Any" => "Any", "Assigned" => "Assigned", "Cased_Letter" => "LC",
-        "Alnum" => "Alnum", "Word" => "Word", "Space" => "Space", "XDigit" => "XDigit",
-        "Cntrl" => "Cntrl", "Lower" => "Lowercase", "Lowercase" => "Lowercase",
+        "digit" => "Nd", "alpha" => "L", "alnum" => "Alnum",
+        "word" => "Word", "space" => "Space", "Alnum" => "Alnum", "Word" => "Word",
+        "Space" => "Space", "XDigit" => "XDigit", "Cntrl" => "Cntrl",
+        "Lower" => "Lowercase", "Lowercase" => "Lowercase",
         "Upper" => "Uppercase", "Uppercase" => "Uppercase"
       }.freeze
       # rubocop:disable Style/MutableConstant
@@ -37,10 +39,15 @@ module Flexr
       def canonical_name(name)
         raw = name.to_s.strip
         raw = raw.split("=", 2).last if raw.include?("=")
-        return ALIASES.fetch(raw) if ALIASES.key?(raw)
+        normalized = normalize_name(raw)
+        alias_entry = ALIASES.find { |candidate, _canonical| normalize_name(candidate) == normalized }
+        return alias_entry.last if alias_entry
 
-        compact = raw.delete("-_ ")
-        Data::PROPERTIES.keys.find { |candidate| candidate.delete("-_ ") == compact } || raw
+        Data::PROPERTIES.keys.find { |candidate| normalize_name(candidate) == normalized } || raw
+      end
+
+      def normalize_name(name)
+        name.to_s.delete("-_ ").downcase
       end
 
       def complement(ranges)
@@ -55,11 +62,7 @@ module Flexr
       end
 
       def posix_ranges(name)
-        alpha = merge_ranges(
-          Data::PROPERTIES.fetch("L") +
-          Data::PROPERTIES.fetch("Lowercase") +
-          Data::PROPERTIES.fetch("Uppercase")
-        )
+        alpha = Data::PROPERTIES.fetch("Alphabetic")
         case name
         when "alnum" then merge_ranges(Data::PROPERTIES.fetch("Alnum") + alpha)
         when "alpha" then alpha

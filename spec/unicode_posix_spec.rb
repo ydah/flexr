@@ -41,6 +41,72 @@ RSpec.describe "Unicode POSIX and property matching" do
     end
   end
 
+  it "supports inner-negated POSIX classes" do
+    cases = {
+      "[[:^alpha:]]" => [["1", true], ["a", false]],
+      "[[:^digit:]]" => [["a", true], ["١", false]],
+      "[[:^space:]]" => [["a", true], ["　", false]]
+    }
+
+    cases.each do |source, examples|
+      dfa = Flexr.compile_pattern(Regexp.new(source))
+      examples.each { |input, expected| expect(dfa.accept?(input)).to eq(expected) }
+    end
+  end
+
+  it "keeps Unicode shorthand ASCII-based in BINARY mode" do
+    {
+      "d" => [["5", true], ["A", false]],
+      "w" => [["A", true], ["!", false]],
+      "s" => [[" ", true], ["A", false]]
+    }.each do |shorthand, examples|
+      pattern = Regexp.new("[\\#{shorthand}\\xFF]".b)
+      dfa = Flexr.compile_pattern(pattern, options: { unicode: true })
+      examples.each { |input, expected| expect(dfa.accept?(input.b)).to eq(expected) }
+    end
+  end
+
+  it "resolves Unicode property aliases independent of case and separators" do
+    cases = {
+      "digit" => %w[Nd ١ A],
+      "DIGIT" => %w[Nd ١ A],
+      "alpha" => %w[L あ 1],
+      "ALPHA" => %w[L あ 1],
+      "al-num" => %w[Alnum あ _],
+      "AL_NUM" => %w[Alnum あ _],
+      "word" => ["Word", "_", " "],
+      "WORD" => ["Word", "_", " "],
+      "space" => ["Space", "　", "A"],
+      "SPACE" => ["Space", "　", "A"],
+      "lower-case" => %w[Lowercase a A],
+      "UPPER_CASE" => %w[Uppercase A a]
+    }
+
+    cases.each do |name, (canonical, positive, negative)|
+      expect(Flexr::Unicode::Property.ranges(name))
+        .to eq(Flexr::Unicode::Property.ranges(canonical))
+      dfa = Flexr.compile_pattern(Regexp.new("\\p{#{name}}"))
+      expect(dfa.accept?(positive)).to be(true)
+      expect(dfa.accept?(negative)).to be(false)
+    end
+  end
+
+  it "includes UCD Other_Alphabetic in POSIX alpha and alnum" do
+    other_alphabetic = Flexr::Unicode::Property.ranges("Other_Alphabetic")
+    expect(other_alphabetic).not_to be_empty
+
+    alpha = Flexr.compile_pattern(/[[:alpha:]]/)
+    alnum = Flexr.compile_pattern(/[[:alnum:]]/)
+    not_alpha = Flexr.compile_pattern(/[[:^alpha:]]/)
+    [0x05b0, 0x093a].each do |codepoint|
+      input = [codepoint].pack("U")
+      expect(other_alphabetic.any? { |lo, hi| codepoint.between?(lo, hi) }).to be(true)
+      expect(alpha.accept?(input)).to be(true)
+      expect(alnum.accept?(input)).to be(true)
+      expect(not_alpha.accept?(input)).to be(false)
+    end
+  end
+
   it "keeps core Unicode properties complete and UTF-8-safe" do
     covers = lambda do |name, codepoint|
       Flexr::Unicode::Property.ranges(name).any? { |lo, hi| codepoint.between?(lo, hi) }

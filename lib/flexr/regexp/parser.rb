@@ -217,11 +217,13 @@ module Flexr
 
       def parse_posix_class
         expect("[:")
-        name = read_until(":]")
-        return [[AST::Property, false, "POSIX_#{name}"]] if
+        raw_name = read_until(":]")
+        inner_negated = raw_name.start_with?("^")
+        name = raw_name.delete_prefix("^")
+        return [[AST::Property, inner_negated, "POSIX_#{name}"]] if
           @encoding != Encoding::BINARY && POSIX_CLASSES.include?(name)
 
-        case name
+        ranges = case name
         when "alnum" then [[48, 57], [65, 90], [97, 122]]
         when "alpha" then [[65, 90], [97, 122]]
         when "blank" then [[9, 9], [32, 32]]
@@ -237,6 +239,7 @@ module Flexr
         else
           raise_syntax("unknown POSIX character class: #{name}")
         end
+        inner_negated ? complement_ranges(ranges) : ranges
       end
 
       def parse_class_atom
@@ -308,7 +311,7 @@ module Flexr
       end
 
       def shorthand_ranges(char)
-        if @unicode
+        if @unicode && @encoding != Encoding::BINARY
           property = { "d" => "Nd", "w" => "Word", "s" => "Space" }.fetch(char.downcase, nil)
           return [[AST::Property, char == char.upcase, property]] if property
         end

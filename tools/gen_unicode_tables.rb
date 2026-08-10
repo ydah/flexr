@@ -138,6 +138,9 @@ properties = {
   "Number" => category_ranges(unicode_data, %w[Nd Nl No]),
   "Nd" => category_ranges(unicode_data, ["Nd"]),
   "ASCII" => [[0, 0x7f]],
+  "Alphabetic" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nl]) +
+                                 property_file_ranges(prop_list, ["Other_Alphabetic"])),
+  "Other_Alphabetic" => property_file_ranges(prop_list, ["Other_Alphabetic"]),
   "Alnum" => category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]),
   "Word" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]) + [[0x5f, 0x5f]]),
   "Space" => property_file_ranges(prop_list, ["White_Space"]),
