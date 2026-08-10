@@ -46,11 +46,12 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
-      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}#{indent}"
-      install = "#{install}#{generated_action_source(parsed, indent)}#{indent}"
+      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
+      install = "#{install}#{generated_action_source(parsed, indent)}"
       install = "#{install}#{Codegen::Direct.new(compiled).source(indent: indent)}#{indent}" if
         effective_backend(parsed) == :direct
       result = Source::Passthrough.remove_spans(parsed.source, parsed.dsl_spans, insertion: parsed.first_dsl_offset, payload: install)
+      result = result.gsub(/^[ \t]+(?=\n)/, "")
       result = result.gsub(/^\s*require ["']flexr["']\s*\n/, "") if standalone?(parsed)
       digest = Digest::SHA256.hexdigest(payload)
       header = [

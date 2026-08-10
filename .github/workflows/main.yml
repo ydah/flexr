@@ -47,6 +47,7 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       - run: bundle exec rake golden:verify
+      - run: bundle exec rake generated:verify
       - run: bundle exec rake dogfood:verify
       - run: bundle exec rake unicode:verify
       - run: bundle exec rake direct:verify
@@ -67,6 +68,19 @@ jobs:
       - run: bundle exec rake test:differential
       - run: bundle exec rake fuzz
 
+  dot:
+    name: tooling / Graphviz DOT parser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - name: Install Graphviz
+        run: sudo apt-get update && sudo apt-get install --yes graphviz
+      - run: bundle exec rake dot:verify
+
   generated-ruby31:
     name: generated-only / ruby 3.1
     runs-on: ubuntu-latest
@@ -82,6 +96,14 @@ jobs:
           'require "flexr"; load "spec/fixtures/generated.rb";
           lexer = GeneratedFixture::Lexer.new("42");
           abort "generated lexer mismatch" unless lexer.tokens == [[:INT, 42]]'
+      - name: Load committed regexp tokenizer output
+        run: >-
+          bundle exec ruby -Ilib -e
+          'require "flexr"; load "lib/flexr/regexp/tokenizer.rb";
+          lexer = Flexr::Regexp::SourceLexer.new("a|[a-z]+\\p{L}?");
+          expected = [[:LITERAL, "a"], [:ALTERNATION, "|"], [:CHAR_CLASS, "[a-z]"],
+          [:QUANTIFIER, "+"], [:PROPERTY, "L"], [:QUANTIFIER, "?"]];
+          abort "regexp tokenizer mismatch" unless lexer.tokens == expected'
 
   generated-alt-compatibility:
     name: generated-only / ${{ matrix.ruby }}
@@ -90,7 +112,6 @@ jobs:
       fail-fast: false
       matrix:
         ruby: [jruby, truffleruby]
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
@@ -103,3 +124,9 @@ jobs:
           'require "flexr"; load "spec/fixtures/generated.rb";
           lexer = GeneratedFixture::Lexer.new("42");
           abort "generated lexer mismatch" unless lexer.tokens == [[:INT, 42]]'
+      - name: Run the runtime specification without the generator
+        run: >-
+          bundle exec ruby -Ilib -e
+          'require "flexr"; load "examples/json/lexer.flexr.rb";
+          lexer = JsonExample::Lexer.new("{\\"answer\\":42}");
+          abort "runtime lexer mismatch" unless lexer.tokens == [[:LBRACE], [:STRING, "answer"], [:COLON], [:NUMBER, 42.0], [:RBRACE]]'

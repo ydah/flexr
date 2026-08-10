@@ -60,4 +60,20 @@ RSpec.describe "diagnostic contracts" do
     codes = compiler.send(:diagnostics_for, compiled, 0.501).map(&:code)
     expect(codes).to include("FLEXR-W011", "FLEXR-W016")
   end
+
+  it "does not mistake parentheses inside character classes for captures" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/[()]/) { skip }
+    end
+
+    expect(lexer_class.compile!.diagnostics.map(&:code)).not_to include("FLEXR-W013")
+  end
+
+  it "finds captures after non-capturing groups" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/(?:prefix)(suffix)/) { skip }
+    end
+
+    expect(lexer_class.compile!.diagnostics.map(&:code)).to include("FLEXR-W013")
+  end
 end

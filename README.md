@@ -91,6 +91,7 @@ bundle install
 bundle exec rake test
 bundle exec rake modes:equivalence
 bundle exec rake golden:verify accel:equivalence dogfood:verify examples:check
+bundle exec rake generated:verify unicode:verify
 bundle exec rake bench:regression
 bundle exec rake coverage
 ```
@@ -102,6 +103,9 @@ generated Ruby file is syntactically valid and contains a compiled payload.
 identity changes or throughput drops by more than 10 percent.
 `coverage` reports line coverage for `lib/flexr` and fails below the 95% CI
 gate.
+
+`dot:verify` requires Graphviz and parses the CLI DOT output through
+`dot -Tsvg`; it is run in the dedicated CI tooling job.
 
 For diagnostics, use `flexr check SPEC.rb --format json`, `flexr stats`,
 `flexr dot`, or `flexr trace`. `--warn-as-error` turns compiler warnings into a

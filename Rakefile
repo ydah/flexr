@@ -9,6 +9,7 @@ require "rbconfig"
 require "rspec/core/rake_task"
 require "tmpdir"
 require "flexr"
+require_relative "tools/regexp_tokenizer_reference"
 
 RSpec::Core::RakeTask.new(:spec)
 task test: :spec
@@ -16,7 +17,9 @@ task test: :spec
 module FlexrVerification
   ROOT = File.expand_path(__dir__)
   EXAMPLES = Dir[File.join(ROOT, "examples/**/*.flexr.rb")].freeze
-  DOGFOOD_SPECS = (EXAMPLES + [File.join(ROOT, "lib/flexr/regexp/tokenizer.flexr.rb")]).freeze
+  TOKENIZER_SPEC = File.join(ROOT, "lib/flexr/regexp/tokenizer.flexr.rb").freeze
+  TOKENIZER_GENERATED = File.join(ROOT, "lib/flexr/regexp/tokenizer.rb").freeze
+  VERIFICATION_SPECS = (EXAMPLES + [TOKENIZER_SPEC]).freeze
   EXPECTED_INPUTS = {
     %r{/examples/json/} => '{"answer": 42}',
     %r{/examples/toy_lang/} => "answer + 12",
@@ -99,10 +102,11 @@ module FlexrVerification
     raise "generated lexer contains an unfinished TODO: #{spec}" if source.include?("FLEXR-TODO")
 
     script = <<~RUBY
+      require "json"
       load ARGV.fetch(0)
       lexer = ObjectSpace.each_object(Class).find { |klass| klass.respond_to?(:__flexr_spec) && klass != Flexr::Lexer }
       abort "no generated lexer" unless lexer
-      p lexer.new(ARGV.fetch(1)).tokens
+      puts JSON.generate(lexer.new(ARGV.fetch(1)).tokens)
     RUBY
     runtime_output, runtime_error, runtime_status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script,
                                                                       spec, input_for(spec))
@@ -110,6 +114,19 @@ module FlexrVerification
                                                                          generated_path, input_for(spec))
     raise "dogfood token mismatch for #{spec}: #{runtime_error}#{generated_error}" unless
       runtime_status.success? && generated_status.success? && runtime_output == generated_output
+
+    return unless spec == TOKENIZER_SPEC
+
+    reference_script = <<~RUBY
+      require "json"
+      require "regexp_tokenizer_reference"
+      puts JSON.generate(FlexrVerification::RegexpTokenizerReference.tokens(ARGV.fetch(0)))
+    RUBY
+    reference_output, reference_error, reference_status = Open3.capture3(
+      RbConfig.ruby, "-Itools", "-e", reference_script, input_for(spec)
+    )
+    raise "tokenizer reference failed: #{reference_error}" unless reference_status.success?
+    raise "tokenizer reference mismatch for #{spec}" unless runtime_output == reference_output
   ensure
     FileUtils.rm_f(generated_path) if generated_path
   end
@@ -118,7 +135,7 @@ end
 
 namespace :modes do
   task :equivalence do
-    FlexrVerification::EXAMPLES.each do |spec|
+    FlexrVerification::VERIFICATION_SPECS.each do |spec|
       generated_path = File.join(Dir.tmpdir, "flexr-mode-#{Process.pid}-#{File.basename(spec)}")
       File.binwrite(generated_path, FlexrVerification.generated_source(spec))
       script = <<~RUBY
@@ -139,7 +156,7 @@ namespace :modes do
 end
 
 task "golden:verify" do
-  FlexrVerification::EXAMPLES.each do |spec|
+  FlexrVerification::VERIFICATION_SPECS.each do |spec|
     golden = FlexrVerification.golden_path(spec)
     abort "missing golden file: #{golden}" unless File.file?(golden)
 
@@ -150,11 +167,37 @@ task "golden:verify" do
 end
 
 task "accel:equivalence" do
-  FlexrVerification::EXAMPLES.each { |spec| FlexrVerification.verify_acceleration(spec) }
+  FlexrVerification::VERIFICATION_SPECS.each { |spec| FlexrVerification.verify_acceleration(spec) }
 end
 
 task "dogfood:verify" do
-  FlexrVerification::DOGFOOD_SPECS.each { |spec| FlexrVerification.verify_dogfood(spec) }
+  FlexrVerification::VERIFICATION_SPECS.each { |spec| FlexrVerification.verify_dogfood(spec) }
+end
+
+task "generated:verify" do
+  abort "missing committed tokenizer generated file: #{FlexrVerification::TOKENIZER_GENERATED}" unless
+    File.file?(FlexrVerification::TOKENIZER_GENERATED)
+
+  expected = File.binread(FlexrVerification::TOKENIZER_GENERATED)
+  actual = FlexrVerification.generated_source(FlexrVerification::TOKENIZER_SPEC)
+  abort "committed tokenizer generated file is stale" unless expected == actual
+
+  puts "generated: committed tokenizer is reproducible"
+end
+
+task "dot:verify" do
+  spec = File.join(FlexrVerification::ROOT, "examples/json/lexer.flexr.rb")
+  dot_source, dot_error, dot_status = Open3.capture3(
+    RbConfig.ruby, "-Ilib", "exe/flexr", "dot", spec, chdir: FlexrVerification::ROOT
+  )
+  abort "flexr dot failed: #{dot_error}" unless dot_status.success?
+
+  svg, svg_error, svg_status = Open3.capture3("dot", "-Tsvg", stdin_data: dot_source)
+  abort "dot -Tsvg failed: #{svg_error}" unless svg_status.success? && svg.include?("<svg")
+
+  puts "dot: parsed #{spec} as SVG"
+rescue Errno::ENOENT => e
+  abort "dot executable is required for dot:verify: #{e.message}"
 end
 
 task "direct:verify" do
@@ -172,6 +215,17 @@ end
 
 task "unicode:verify" do
   splitter = Flexr::Unicode::Utf8Splitter
+  properties = Flexr::Unicode::Data::PROPERTIES
+  abort "unexpected vendored Unicode version" unless Flexr::Unicode::VERSION == "15.1.0"
+  properties.each do |name, ranges|
+    previous = -1
+    ranges.each do |lo, hi|
+      abort "invalid #{name} Unicode range #{lo.inspect}..#{hi.inspect}" unless
+        lo.is_a?(Integer) && hi.is_a?(Integer) && lo <= hi && lo > previous && hi <= 0x10_ffff
+
+      previous = hi
+    end
+  end
   scalar_count = 0
   (0..0x10_ffff).each do |codepoint|
     next if codepoint.between?(0xd800, 0xdfff)
@@ -201,7 +255,8 @@ task "unicode:verify" do
       break
     end
   end
-  puts "unicode: #{scalar_count} singleton and 100000 random range cases passed"
+  puts "unicode: UCD #{Flexr::Unicode::VERSION}, #{properties.length} properties, " \
+       "#{scalar_count} singleton and 100000 random range cases passed"
 end
 
 task "bench:regression" do
@@ -254,7 +309,7 @@ end
 task :fuzz do
   cases = Integer(ENV.fetch("FLEXR_FUZZ_CASES", "10000"), 10)
   random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
-  FlexrVerification::EXAMPLES.each do |spec|
+  FlexrVerification::VERIFICATION_SPECS.each do |spec|
     runtime_lexer = FlexrVerification.load_runtime(spec)
     parts = runtime_lexer.name.split("::")
     parent = Object

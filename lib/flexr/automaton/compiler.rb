@@ -352,9 +352,30 @@ module Flexr
         @spec.rules.select do |rule|
           rule.patterns.any? do |pattern|
             source = pattern.respond_to?(:source) ? pattern.source : pattern.to_s
-            source.match?(/(?<!\\)\((?!\?)/)
+            capturing_group?(source)
           end
         end
+      end
+
+      def capturing_group?(source)
+        escaped = false
+        in_class = false
+        source.each_char.with_index do |character, index|
+          if escaped
+            escaped = false
+            next
+          end
+          if character == "\\"
+            escaped = true
+          elsif character == "["
+            in_class = true
+          elsif character == "]"
+            in_class = false
+          elsif character == "(" && !in_class
+            return true unless source[index + 1] == "?"
+          end
+        end
+        false
       end
 
       def undeclared_tokens

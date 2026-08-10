@@ -23,6 +23,10 @@ flexr lexer.flexr.rb -o lexer.rb
 `--eval` executes trusted specification code when static evaluation cannot
 resolve a pattern. Never run it on an untrusted file.
 
+Unicode properties use flexr's vendored UCD snapshot (`15.1.0`), not the host
+Ruby's Unicode tables. This keeps generated output reproducible across Ruby
+versions; updating the snapshot is a minor-version compatibility change.
+
 ## Supported regular expressions
 
 The DFA subset includes literals, alternation, grouping, character classes,

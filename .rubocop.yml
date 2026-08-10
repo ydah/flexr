@@ -4,6 +4,7 @@ AllCops:
   Exclude:
     - "lib/flexr/codegen/**/*"
     - "lib/flexr/unicode/data/**/*"
+    - "lib/flexr/regexp/tokenizer.rb"
     - "spec/fixtures/generated.rb"
     - "vendor/**/*"
 
