@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "stringio"
+require "open3"
+require "rbconfig"
 
 RSpec.describe Flexr::CLI do
   let(:spec_path) { File.expand_path("fixtures/generated.flexr.rb", __dir__) }
@@ -23,6 +25,28 @@ RSpec.describe Flexr::CLI do
     expect(status).to eq(0)
     expect(output).to eq("[]\n")
     expect(errors).to be_empty
+  end
+
+  it "generates a standalone lexer that loads without the flexr gem" do
+    output_path = File.join(Dir.tmpdir, "flexr-standalone-#{Process.pid}.rb")
+
+    status, output, errors = run_cli(spec_path, "--standalone", "-o", output_path)
+
+    expect(status).to eq(0)
+    expect(output).to be_empty
+    expect(errors).to be_empty
+    expect(File.read(output_path)).not_to include('require "flexr"')
+    script = <<~RUBY
+      load ARGV.fetch(0)
+      abort "standalone lexer was not loaded" unless defined?(GeneratedFixture::Lexer)
+      abort "standalone lexer returned the wrong tokens" unless
+        GeneratedFixture::Lexer.new("42").tokens == [[:INT, 42]]
+    RUBY
+    _stdout, stderr, child_status = Open3.capture3(RbConfig.ruby, "-e", script, output_path)
+
+    expect(child_status).to be_success, stderr
+  ensure
+    FileUtils.rm_f(output_path) if output_path
   end
 
   it "returns usage failure for unknown flags" do

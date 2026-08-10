@@ -10,15 +10,15 @@ Gem::Specification.new do |spec|
 
   spec.summary = "Pure Ruby longest-match lexer generator"
   spec.description = "A Ruby DSL and source generator for deterministic byte-oriented lexers."
-  spec.homepage = "https://github.com/yudai-takada/flexr"
+  spec.homepage = "https://github.com/ydah/flexr"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.0"
   spec.metadata["rubygems_mfa_required"] = "true"
   spec.metadata["generator_ruby_version"] = ">= 3.3 (Prism)"
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/yudai-takada/flexr/tree/main"
-  spec.metadata["changelog_uri"] = "https://github.com/yudai-takada/flexr/blob/main/CHANGELOG.md"
-  spec.metadata["bug_tracker_uri"] = "https://github.com/yudai-takada/flexr/issues"
+  spec.metadata["source_code_uri"] = "https://github.com/ydah/flexr/tree/main"
+  spec.metadata["changelog_uri"] = "https://github.com/ydah/flexr/blob/main/CHANGELOG.md"
+  spec.metadata["bug_tracker_uri"] = "https://github.com/ydah/flexr/issues"
 
   gemspec = File.basename(__FILE__)
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
