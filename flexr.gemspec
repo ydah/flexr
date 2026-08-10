@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.authors = ["Yudai Takada"]
   spec.email = ["t.yudai92@gmail.com"]
 
-  spec.summary = "Pure Ruby longest-match lexer generator"
+  spec.summary = "Ruby-native lexer generator with runtime and generated modes"
   spec.description = "A Ruby DSL and source generator for deterministic byte-oriented lexers."
   spec.homepage = "https://github.com/ydah/flexr"
   spec.license = "MIT"

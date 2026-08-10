@@ -3,12 +3,12 @@
 [![CI](https://github.com/ydah/flexr/actions/workflows/main.yml/badge.svg)](https://github.com/ydah/flexr/actions/workflows/main.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 
-Pure-Ruby longest-match lexer generator for parser authors who want ordinary
-Ruby specifications and deterministic generated output.
+Ruby-native lexer generator for parser authors who want ordinary Ruby
+specifications and deterministic generated output.
 
-Write the specification as Ruby, run it directly while developing, and
-generate Ruby for deployment when startup cost or build reproducibility
-matters. Both modes use the same rules and actions.
+Write one specification, run it directly while developing, or generate Ruby
+for deployment when startup cost and build reproducibility matter. Both modes
+use the same rules and actions.
 
 ## Why flexr?
 
