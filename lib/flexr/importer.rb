@@ -354,21 +354,83 @@ module Flexr
     end
 
     def rexical_counterexample(first_pattern, second_pattern)
-      # Candidate generation is deliberately conservative; warnings require an actual match witness.
       regexps = [first_pattern, second_pattern].map { |pattern| ::Regexp.new(pattern) }
+      if (automata = regexps.map { |regexp| rexical_dfa(regexp) }) && automata.all?
+        candidate = rexical_dfa_counterexample(regexps, automata)
+        return candidate if candidate
+      end
+
       rexical_candidate_inputs([first_pattern, second_pattern]).each do |input|
-        matches = regexps.map { |regexp| regexp.match(input) }
-        next unless matches.all? do |match|
-          next false unless match
-
-          match.begin(0).zero? && !match[0].empty?
-        end
-
-        lengths = matches.map { |match| match[0].bytesize }
-        return [input, *lengths] if lengths[0] < lengths[1]
+        lengths = rexical_match_lengths(regexps, input)
+        return lengths if lengths
       end
       nil
     rescue RegexpError, ArgumentError
+      nil
+    end
+
+    def rexical_dfa(regexp)
+      dfa = Flexr.compile_pattern(regexp)
+      return unless dfa.respond_to?(:accepts) && dfa.respond_to?(:transition)
+
+      dfa
+    rescue Flexr::Error, RegexpError, ArgumentError
+      nil
+    end
+
+    def rexical_dfa_counterexample(regexps, automata)
+      first, second = automata
+      queue = [[first.start, second.start, false, +"".b]]
+      visited = { [first.start, second.start, false] => true }
+      bytes = rexical_byte_representatives(first, second)
+
+      until queue.empty?
+        first_state, second_state, first_seen, input = queue.shift
+        bytes.each do |byte|
+          next_first = first_state && first.transition(first_state, byte)
+          next_second = second.transition(second_state, byte)
+          next unless next_second
+
+          next_input = input + byte.chr(Encoding::BINARY)
+          next_first_seen = first_seen || rexical_accepting?(first, next_first)
+          if next_first_seen && rexical_accepting?(second, next_second) &&
+              !rexical_accepting?(first, next_first)
+            lengths = rexical_match_lengths(regexps, next_input)
+            return lengths if lengths
+          end
+
+          key = [next_first, next_second, next_first_seen]
+          next if visited[key]
+
+          visited[key] = true
+          queue << [next_first, next_second, next_first_seen, next_input]
+        end
+      end
+      nil
+    end
+
+    def rexical_byte_representatives(first, second)
+      representatives = {}
+      256.times do |byte|
+        key = [first.ec[byte], second.ec[byte]]
+        representatives[key] ||= byte
+      end
+      representatives.values.sort_by { |byte| [byte.between?(32, 126) ? 0 : 1, byte] }
+    end
+
+    def rexical_accepting?(dfa, state)
+      state && !dfa.accepts.fetch(state).empty?
+    end
+
+    def rexical_match_lengths(regexps, input)
+      matches = regexps.map do |regexp|
+        regexp.match(input.dup.force_encoding(regexp.encoding))
+      end
+      return unless matches.all? { |match| match&.begin(0)&.zero? && !match[0].empty? }
+
+      lengths = matches.map { |match| match[0].bytesize }
+      lengths[0] < lengths[1] ? [input, *lengths] : nil
+    rescue ArgumentError, EncodingError
       nil
     end
 

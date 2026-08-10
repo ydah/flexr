@@ -110,6 +110,23 @@ RSpec.describe Flexr::CLI do
     FileUtils.rm_f(path)
   end
 
+  it "finds Rexical counterexamples beyond the literal candidate bound" do
+    path = File.join(Dir.tmpdir, "flexr-rexical-long-counterexample-#{Process.pid}.rex")
+    File.write(path, <<~REX)
+      rule
+        /a{5}/ { return FIVE; }
+        /a{6}/ { return SIX; }
+      end
+    REX
+
+    status, _output, errors = run_cli("import", path)
+
+    expect(status).to eq(0)
+    expect(errors).to include('"aaaaaa" is a counterexample')
+  ensure
+    FileUtils.rm_f(path)
+  end
+
   it "does not claim a Rexical semantic difference without a witness" do
     path = File.join(Dir.tmpdir, "flexr-rexical-no-witness-#{Process.pid}.rex")
     File.write(path, <<~REX)
