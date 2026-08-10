@@ -9,7 +9,7 @@ module Flexr
         "L" => "L", "Letter" => "L", "N" => "N", "Number" => "N", "Nd" => "Nd",
         "Hiragana" => "Hiragana", "Greek" => "Greek", "ASCII" => "ASCII",
         "Any" => "Any", "Assigned" => "Assigned", "Cased_Letter" => "LC",
-        "digit" => "Nd", "alpha" => "L", "alnum" => "Alnum",
+        "digit" => "Nd", "alpha" => "Alphabetic", "alnum" => "Alnum",
         "word" => "Word", "space" => "Space", "Alnum" => "Alnum", "Word" => "Word",
         "Space" => "Space", "XDigit" => "XDigit", "Cntrl" => "Cntrl",
         "Lower" => "Lowercase", "Lowercase" => "Lowercase",
@@ -28,9 +28,7 @@ module Flexr
         ranges = if canonical.start_with?("POSIX_")
           posix_ranges(canonical.delete_prefix("POSIX_"))
         else
-          Data::PROPERTIES.fetch(canonical) do
-            raise CompileError, "unknown Unicode property: #{name}"
-          end
+          property_ranges(canonical, name)
         end
         ranges = complement(ranges) if negate
         CACHE[key] = ranges.map(&:dup).freeze
@@ -48,6 +46,19 @@ module Flexr
 
       def normalize_name(name)
         name.to_s.delete("-_ ").downcase
+      end
+
+      def property_ranges(canonical, original_name)
+        case canonical
+        when "Alnum"
+          merge_ranges(Data::PROPERTIES.fetch("Alnum") + Data::PROPERTIES.fetch("Other_Alphabetic"))
+        when "Word"
+          merge_ranges(Data::PROPERTIES.fetch("Alnum") + Data::PROPERTIES.fetch("Other_Alphabetic") + [[0x5f, 0x5f]])
+        else
+          Data::PROPERTIES.fetch(canonical)
+        end
+      rescue KeyError
+        raise CompileError, "unknown Unicode property: #{original_name}"
       end
 
       def complement(ranges)

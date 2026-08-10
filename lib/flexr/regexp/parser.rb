@@ -8,7 +8,7 @@ module Flexr
         "v" => 0x0b, "a" => 0x07, "e" => 0x1b, "0" => 0
       }.freeze
       PROPERTY_ALIASES = {
-        "digit" => "Nd", "alpha" => "L", "alnum" => "Alnum",
+        "digit" => "Nd", "alpha" => "Alphabetic", "alnum" => "Alnum",
         "word" => "Word", "space" => "Space"
       }.freeze
       POSIX_CLASSES = %w[alnum alpha blank cntrl digit graph lower print punct space upper xdigit].freeze

@@ -141,8 +141,10 @@ properties = {
   "Alphabetic" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nl]) +
                                  property_file_ranges(prop_list, ["Other_Alphabetic"])),
   "Other_Alphabetic" => property_file_ranges(prop_list, ["Other_Alphabetic"]),
-  "Alnum" => category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]),
-  "Word" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]) + [[0x5f, 0x5f]]),
+  "Alnum" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]) +
+                           property_file_ranges(prop_list, ["Other_Alphabetic"])),
+  "Word" => merge_ranges(category_ranges(unicode_data, %w[Lu Ll Lt Lm Lo Nd Nl No]) +
+                          property_file_ranges(prop_list, ["Other_Alphabetic"]) + [[0x5f, 0x5f]]),
   "Space" => property_file_ranges(prop_list, ["White_Space"]),
   "XDigit" => [[0x30, 0x39], [0x41, 0x46], [0x61, 0x66]],
   "Cntrl" => [[0, 0x1f], [0x7f, 0x9f]],
