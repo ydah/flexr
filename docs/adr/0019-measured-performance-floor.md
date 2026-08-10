@@ -19,3 +19,8 @@ threshold.
 This revision preserves an honest acceptance criterion: the project must not
 claim to have reached `0.7x`, and benchmark output must continue to be recorded
 from an actual run.
+
+The absolute floor is enforced by the local release gate. CI uses a portable
+variant that keeps the 10% baseline-regression check but omits the absolute
+throughput floor because hosted runners are not a stable performance
+measurement environment.

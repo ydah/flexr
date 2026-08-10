@@ -28,7 +28,8 @@ module Flexr
 
       result = Runner.new(options).run
       Baseline.write(options[:write_baseline], result) if options[:write_baseline]
-      status = Baseline.check(options[:baseline], result, threshold: options[:threshold])
+      floor = ENV["FLEXR_BENCHMARK_PORTABLE"] == "1" ? 0.0 : Baseline::PERFORMANCE_FLOOR
+      status = Baseline.check(options[:baseline], result, threshold: options[:threshold], floor: floor)
       emit(result, out, json: options[:json])
       return status if status.zero?
 
@@ -217,7 +218,7 @@ module Flexr
 
       module_function
 
-      def check(path, result, threshold:)
+      def check(path, result, threshold:, floor: PERFORMANCE_FLOOR)
         return 0 unless path
         return 2 unless File.file?(path)
 
@@ -229,7 +230,7 @@ module Flexr
         FLOOR_MODES.each do |mode|
           actual = Float(result.fetch("relative_to_handwritten").fetch(mode))
           expected = Float(baseline_ratios.fetch(mode)) * (1.0 - threshold)
-          return 1 if actual < [PERFORMANCE_FLOOR, expected].max
+          return 1 if actual < [floor, expected].max
         end
         0
       rescue JSON::ParserError, KeyError, TypeError, ArgumentError

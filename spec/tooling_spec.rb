@@ -104,4 +104,15 @@ RSpec.describe "verification tooling" do
 
     expect(Flexr::Benchmarking::Baseline.check(baseline_path, result, threshold: 0.1)).to eq(1)
   end
+
+  it "supports a portable baseline gate without the host-dependent absolute floor" do
+    baseline_path = File.join(root, "benchmark/baselines/json.json")
+    baseline = JSON.parse(File.read(baseline_path))
+    result = baseline.merge(
+      "relative_to_handwritten" => { "runtime" => 0.17, "generated" => 0.17 }
+    )
+
+    expect(Flexr::Benchmarking::Baseline.check(baseline_path, result, threshold: 0.1, floor: 0.0)).to eq(0)
+    expect(Flexr::Benchmarking::Baseline.check(baseline_path, result, threshold: 0.1)).to eq(1)
+  end
 end

@@ -57,6 +57,10 @@ jobs:
       # environment instead of comparing different OS/CPU combinations.
       - name: Run benchmark regression on the canonical environment
         if: matrix.os == 'ubuntu-latest' && matrix.ruby == '3.4'
+        env:
+          # Shared runners do not provide a stable absolute throughput floor;
+          # the release command still enforces the measured 0.18x floor.
+          FLEXR_BENCHMARK_PORTABLE: "1"
         run: bundle exec rake bench:regression
 
   differential-fuzz:
