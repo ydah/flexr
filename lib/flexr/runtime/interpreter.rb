@@ -20,24 +20,22 @@ module Flexr
         position = @lexer.byte_pos
         return nil unless @lexer.valid_utf8_at?(position)
         return scan_firstmatch(position) if @lexer.class.__flexr_config.backend == :firstmatch
+        return scan_fast(machine, position) if fast_path?
 
         buffer = @lexer.buffer
         state = machine.dfa.start
         best = reference_match(position, buffer)
         cursor = position
         best = consider_acceptances(machine, state, cursor, position, buffer, best) if @lexer.class.__flexr_config.options[:allow_empty_match]
-        accelerated = acceleration_enabled?
+        acceleration_regions = acceleration_enabled? ? acceleration_regions_for(machine) : nil
 
         while buffer.ensure_available?(cursor + 1)
-          if accelerated
-            region = acceleration_region(machine, state)
-            if region
-              accelerated_end = accelerate(region, buffer, cursor)
-              if accelerated_end && accelerated_end > cursor
-                cursor = accelerated_end
-                best = consider_acceptances(machine, state, cursor, position, buffer, best)
-                next
-              end
+          if acceleration_regions && (region = acceleration_regions[state])
+            accelerated_end = accelerate(region, buffer, cursor)
+            if accelerated_end && accelerated_end > cursor
+              cursor = accelerated_end
+              best = consider_acceptances(machine, state, cursor, position, buffer, best)
+              next
             end
           end
 
@@ -47,6 +45,46 @@ module Flexr
 
           cursor += 1
           best = consider_acceptances(machine, state, cursor, position, buffer, best)
+        end
+        best
+      end
+
+      def scan_fast(machine, position)
+        buffer = @lexer.buffer
+        source = buffer.source
+        dfa = machine.dfa
+        accepts = dfa.accepts
+        rules = @lexer.class.__flexr_rules
+        transitions = dfa.transitions
+        ec = dfa.ec
+        direct = dfa.direct
+        state = dfa.start
+        cursor = position
+        best = nil
+
+        while cursor < source.bytesize || buffer.ensure_available?(cursor + 1)
+          byte = source.getbyte(cursor)
+          state = if direct
+            class_id = ec[byte]
+            value = direct[:nxt][(state * direct[:classes]) + class_id]
+            value >= 0 ? value : nil
+          else
+            transitions[state][ec[byte]]
+          end
+          break unless state
+
+          cursor += 1
+          acceptance = accepts[state].first
+          next unless acceptance
+
+          rule = rules.fetch(acceptance.rule_index)
+          next if best && cursor == best.total_end_pos && rule.index > best.rule.index
+
+          best ||= (@match ||= Match.new)
+          best.rule = rule
+          best.start_pos = position
+          best.end_pos = cursor
+          best.total_end_pos = cursor
         end
         best
       end
@@ -95,6 +133,15 @@ module Flexr
         @reference_rules = @lexer.class.__flexr_rules.any? do |rule|
           rule.patterns.any? { |pattern| reference_pattern?(pattern) }
         end
+      end
+
+      def fast_path?
+        return @fast_path unless @fast_path.nil?
+
+        rules = @lexer.class.__flexr_rules
+        @fast_path = !@lexer.class.__flexr_config.options[:allow_empty_match] &&
+          !reference_rules? && rules.none?(&:trailing) &&
+          rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
       end
 
       def reference_pattern?(pattern)
@@ -376,7 +423,7 @@ module Flexr
       end
 
       def acceleration_enabled?
-        @lexer.class.__flexr_config.options.fetch(:accel, :auto) != :none && !@lexer.utf8_input?
+        @lexer.class.__flexr_config.options.fetch(:accel, :auto) != :none
       end
 
       def reusable_match(rule, start_pos, end_pos, total_end_pos)
@@ -418,18 +465,21 @@ module Flexr
         dfa.transition(state, byte)
       end
 
-      def acceleration_region(machine, state)
-        @acceleration_regions ||= Automaton::Accel.extract(machine.dfa).to_h { |region| [region.state, region] }
-        region = @acceleration_regions[state]
-        return unless region
+      def acceleration_regions_for(machine)
+        @acceleration_regions ||= {}
+        return @acceleration_regions[machine.dfa] if @acceleration_regions.key?(machine.dfa)
 
-        accepting = machine.dfa.accepts[state]
-        return if accepting.any? do |acceptance|
-          rule = @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
-          acceptance.bol_only || acceptance.end_anchor || rule.trailing
-        end
+        @acceleration_regions[machine.dfa] = Automaton::Accel.extract(machine.dfa).filter_map do |region|
+          next if region.bytes.any? { |byte| byte >= 128 }
 
-        region
+          accepting = machine.dfa.accepts[region.state]
+          next if accepting.any? do |acceptance|
+            rule = @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+            acceptance.bol_only || acceptance.end_anchor || rule.trailing
+          end
+
+          [region.state, region]
+        end.to_h
       end
 
       def end_anchor_match?(buffer, position)

@@ -10,6 +10,7 @@ module Flexr
       self.class.compile!
       @buffer = Runtime::Buffer.new(input, chunk_size: chunk_size)
       @input = input.is_a?(String) ? input : nil
+      @line_tracking_needed = !@input || input.include?("\n")
       @filename = filename
       @error_mode = error_mode
       @max_token_size = max_token_size.to_i
@@ -122,7 +123,11 @@ module Flexr
     end
 
     def tokens
-      each_token.to_a
+      result = []
+      while (token = next_token)
+        result << token
+      end
+      result
     end
 
     def racc_next_token
@@ -332,8 +337,10 @@ module Flexr
         length = @match_end - @match_start
         @line += if length == 1
           @buffer.source.getbyte(@match_start) == 0x0a ? 1 : 0
-        else
+        elsif @line_tracking_needed && (newline = @buffer.source.index("\n", @match_start)) && newline < @match_end
           @buffer.byteslice(@match_start, length).to_s.count("\n")
+        else
+          0
         end
       end
       @bol = @match_end.zero? || @buffer.source.getbyte(@match_end - 1) == 0x0a
@@ -355,6 +362,8 @@ module Flexr
     end
 
     def eof?
+      return @position >= @buffer.bytesize if @input
+
       @buffer.eof?(@position)
     end
 
