@@ -428,7 +428,8 @@ RSpec.describe Flexr do
   it "normalizes Windows line endings before generation" do
     path = File.expand_path("../examples/json/lexer.flexr.rb", __dir__)
     crlf_path = File.join(Dir.tmpdir, "flexr-crlf-#{Process.pid}.flexr.rb")
-    File.binwrite(crlf_path, File.binread(path).gsub("\n", "\r\n"))
+    source = File.binread(path).gsub(/\r\n?/, "\n")
+    File.binwrite(crlf_path, source.gsub("\n", "\r\n"))
 
     normalize_source_path = ->(source) { source.sub(/^# source: .*\n/, "# source: <path>\n") }
     expect(normalize_source_path.call(Flexr::Generator.new(crlf_path).generate))
