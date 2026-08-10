@@ -28,6 +28,26 @@ RSpec.describe "Flexr runtime" do
     expect(lexer_class.new("ab").tokens).to eq([[:A, "a"], [:OTHER, "b"]])
   end
 
+  it "keeps Unicode reference matching local to reference alternatives" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(["1", /\p{L}/]) { emit :MIXED }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer_class.new("1a").tokens).to eq([[:MIXED, "1"], [:MIXED, "a"]])
+  end
+
+  it "uses the vendored UCD for Unicode trailing context" do
+    newly_assigned = [0x18db8].pack("U")
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/a/, followed_by: /\p{L}/) { emit :A }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer_class.new("a#{newly_assigned}").tokens)
+      .to eq([[:OTHER, "a"], [:OTHER, newly_assigned]])
+  end
+
   it "reports UTF-8 columns in characters" do
     lexer_class = Class.new(Flexr::Lexer) do
       token_kind :struct

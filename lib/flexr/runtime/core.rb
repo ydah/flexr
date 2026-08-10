@@ -23,8 +23,10 @@ module Flexr
       @match_start = 0
       @match_end = 0
       @text_start = 0
+      @text_line = 1
       @bol = true
       @more_start = nil
+      @more_line = nil
       @more_requested = false
       @candidate_token_size = 0
       @eof_fired_states = {}
@@ -53,6 +55,7 @@ module Flexr
             @match_start = @position
             @match_end = @position
             @text_start = @position
+            @text_line = @line
             @matched = nil
             instance_exec(&eof_action)
             token = @pending
@@ -79,7 +82,13 @@ module Flexr
         end
         @match_start = match.start_pos
         @match_end = match.end_pos
-        @text_start = @more_start || @match_start
+        if @more_start
+          @text_start = @more_start
+          @text_line = @more_line
+        else
+          @text_start = @match_start
+          @text_line = @line
+        end
         @matched = nil
         @more_requested = false
         @position = match.end_pos
@@ -261,10 +270,11 @@ module Flexr
     end
 
     def last_location
+      line_begin = @text_line || @line
       Runtime::Location.new(
-        filename: @filename, byte_begin: @match_start, byte_end: @match_end,
-        line_begin: @line, line_end: @line + text.to_s.b.count("\n"),
-        column_values: [column_at(@match_start), column_at(@match_end)],
+        filename: @filename, byte_begin: @text_start, byte_end: @match_end,
+        line_begin: line_begin, line_end: line_begin + text.to_s.b.count("\n"),
+        column_values: [column_at(@text_start), column_at(@match_end)],
         eager_columns: self.class.__flexr_config.options[:eager_columns] == true
       )
     end
@@ -285,8 +295,13 @@ module Flexr
     end
 
     def finalize_more
-      @more_start = @text_start if @more_requested
-      @more_start = nil unless @more_requested
+      if @more_requested
+        @more_start = @text_start
+        @more_line = @text_line
+      else
+        @more_start = nil
+        @more_line = nil
+      end
       @more_requested = false
     end
 
@@ -322,6 +337,7 @@ module Flexr
       @match_start = @position
       @match_end = @position + 1
       @text_start = @match_start
+      @text_line = @line
       @position += 1
       @line += 1 if bad.to_s.b == "\n"
       @bol = bad.to_s.b == "\n"

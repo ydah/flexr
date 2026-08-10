@@ -39,4 +39,27 @@ RSpec.describe Flexr::Runtime::Location do
     expect(token.location.column_begin).to eq(1)
     expect(token.location.column_end).to eq(2)
   end
+
+  it "spans the complete token assembled with more" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      rule(/</) do
+        more
+        skip
+      end
+      rule(/[^>]+/) do
+        more
+        skip
+      end
+      rule(/>/) { emit :TEXT, text }
+    end
+
+    token = lexer_class.new("<ab>").next_token
+
+    expect(token.value).to eq("<ab>")
+    expect(token.location.to_h).to include(
+      byte_begin: 0, byte_end: 4, line_begin: 1, line_end: 1
+    )
+    expect([token.location.column_begin, token.location.column_end]).to eq([1, 5])
+  end
 end

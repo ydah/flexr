@@ -64,7 +64,7 @@ module Flexr
             condition = rule.pattern_conditions.fetch(pattern_index)
             next if condition.bol_only && !@lexer.beginning_of_line?
 
-            match = streamed_match(pattern, buffer, position, reference: true)
+            match = streamed_match(pattern, buffer, position, reference: reference_pattern?(pattern))
             next unless match&.begin(0)&.zero?
 
             end_position = position + match[0].bytesize
@@ -135,7 +135,7 @@ module Flexr
         return 0 unless rule.trailing
 
         regexp = rule.trailing
-        match = streamed_match(regexp, buffer, position)
+        match = streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp))
         return nil unless match&.begin(0)&.zero?
 
         match[0].bytesize
@@ -144,6 +144,7 @@ module Flexr
       end
 
       def streamed_match(pattern, buffer, position, reference: false)
+        pattern = regexp_pattern(pattern)
         minimum = minimum_match_bytes(pattern)
         loop do
           subject, tail = stream_subject(buffer, position)
@@ -226,6 +227,12 @@ module Flexr
         minimum_ast_bytes(ast, ignorecase: pattern.options.anybits?(::Regexp::IGNORECASE))
       rescue CompileError, RegexpError
         1
+      end
+
+      def regexp_pattern(pattern)
+        return pattern if pattern.is_a?(::Regexp)
+
+        ::Regexp.new(::Regexp.escape(pattern.to_s))
       end
 
       def minimum_ast_bytes(node, ignorecase: false)
