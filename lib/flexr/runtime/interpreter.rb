@@ -90,7 +90,9 @@ module Flexr
       end
 
       def reference_rules?
-        @lexer.class.__flexr_rules.any? do |rule|
+        return @reference_rules unless @reference_rules.nil?
+
+        @reference_rules = @lexer.class.__flexr_rules.any? do |rule|
           rule.patterns.any? { |pattern| reference_pattern?(pattern) }
         end
       end
@@ -129,8 +131,7 @@ module Flexr
           next if rule.trailing && trailing.nil?
 
           ensure_token_size!(end_position, position)
-          return Match.new(rule: rule, start_pos: position, end_pos: end_position,
-                           total_end_pos: end_position + (trailing || 0))
+          return reusable_match(rule, position, end_position, end_position + (trailing || 0))
         end
         nil
       end
@@ -365,14 +366,26 @@ module Flexr
           next if best && total_end == best.total_end_pos && acceptance.rule_index > best.rule.index
 
           ensure_token_size!(cursor, position)
-          best = Match.new(rule: candidate, start_pos: position, end_pos: cursor,
-                           total_end_pos: total_end)
+          best = @match ||= Match.new
+          best.rule = candidate
+          best.start_pos = position
+          best.end_pos = cursor
+          best.total_end_pos = total_end
         end
         best
       end
 
       def acceleration_enabled?
         @lexer.class.__flexr_config.options.fetch(:accel, :auto) != :none && !@lexer.utf8_input?
+      end
+
+      def reusable_match(rule, start_pos, end_pos, total_end_pos)
+        @match ||= Match.new
+        @match.rule = rule
+        @match.start_pos = start_pos
+        @match.end_pos = end_pos
+        @match.total_end_pos = total_end_pos
+        @match
       end
 
       def accelerate(region, buffer, position)

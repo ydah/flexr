@@ -29,6 +29,10 @@ observations, not cross-machine guarantees.
 
 | mode | MB/s | tokens/s | allocations/token | handwritten ratio |
 |---|---:|---:|---:|---:|
-| runtime | 0.449 | 160,490 | 41.6 | 0.084x |
-| generated | 0.415 | 148,384 | 44.4 | 0.077x |
-| handwritten | 5.374 | 1,919,116 | 3.4 | 1.000x |
+| runtime | 0.921 | 328,769 | 5.601 | 0.109x |
+| generated | 0.780 | 278,443 | 8.601 | 0.092x |
+| handwritten | 8.464 | 3,022,853 | 3.4 | 1.000x |
+
+This sample is still below the design target of 0.7x against the handwritten
+lexer; the measured ratios are recorded explicitly rather than presented as a
+claim that the target has been reached.

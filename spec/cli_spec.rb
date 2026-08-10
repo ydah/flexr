@@ -55,6 +55,22 @@ RSpec.describe Flexr::CLI do
     FileUtils.rm_f(path)
   end
 
+  it "fails incomplete imports instead of silently accepting untranslated C" do
+    path = File.join(Dir.tmpdir, "flexr-incomplete-import-#{Process.pid}.l")
+    File.write(path, <<~LEX)
+      %%
+      .    { printf("%s", yytext); }
+    LEX
+
+    status, output, errors = run_cli("import", path)
+
+    expect(status).to eq(1)
+    expect(output).to include("FLEXR-TODO")
+    expect(errors).to include("manual action translation required")
+  ensure
+    FileUtils.rm_f(path)
+  end
+
   it "supports version and rule-filtered explain output" do
     version_status, version, = run_cli("--version")
     explain_status, explanation, = run_cli("explain", spec_path, "--rule", "0")

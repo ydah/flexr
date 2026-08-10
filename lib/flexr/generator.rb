@@ -4,6 +4,9 @@ module Flexr
   class Generator
     attr_reader :diagnostics
 
+    INLINE_EMIT = /\Aemit(?:\s+(.+?))?\z/
+    INLINE_EMIT_ARGUMENTS = /\A(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line)(?:\s*,\s*(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line))*\z/
+
     RUNTIME_SOURCES = %w[
       version.rb errors.rb diagnostics.rb ir.rb
       regexp/ast.rb regexp/parser.rb regexp/normalizer.rb regexp/unsupported.rb regexp/char_class.rb
@@ -296,7 +299,7 @@ module Flexr
 
         nil
       when String
-        return nil if rule.action_source
+        return inline_simple_action(rule.action_source) if rule.action_source
         return unless action.start_with?("proc")
 
         body = action.delete_prefix("proc").strip
@@ -309,6 +312,18 @@ module Flexr
 
         body.delete_prefix("do")[0...-3].strip
       end
+    end
+
+    def inline_simple_action(source)
+      body = source.to_s.strip
+      body = body[1...-1].strip if body.start_with?("{") && body.end_with?("}")
+      match = INLINE_EMIT.match(body)
+      return unless match
+
+      arguments = match[1].to_s.strip
+      return unless arguments.empty? || INLINE_EMIT_ARGUMENTS.match?(arguments)
+
+      arguments.empty? ? "emit" : "emit #{arguments}"
     end
 
     def validate_diagnostics!(compiled)

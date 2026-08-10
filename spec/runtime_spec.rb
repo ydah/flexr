@@ -81,6 +81,17 @@ RSpec.describe "Flexr runtime" do
       .to eq([[1, 2], [2, 3]])
   end
 
+  it "updates line state without changing newline semantics" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/\n/) { emit :NEWLINE, lineno }
+      rule(/./) { emit :CHAR, lineno }
+    end
+
+    expect(lexer_class.new("a\nb").tokens).to eq([
+      [:CHAR, 1], [:NEWLINE, 1], [:CHAR, 2]
+    ])
+  end
+
   it "joins matches after more into the next token text" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/"/) do

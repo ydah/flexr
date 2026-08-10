@@ -32,6 +32,7 @@ module Flexr
       @eof_fired_states = {}
       @on_error = nil
       @halted = false
+      @interpreter = nil
     end
 
     attr_reader :filename, :error_mode, :buffer, :max_token_size
@@ -69,7 +70,7 @@ module Flexr
         match = if generated_runtime? && respond_to?(:scan_one, true)
           scan_one
         else
-          Runtime::Interpreter.new(self).scan
+          (@interpreter ||= Runtime::Interpreter.new(self)).scan
         end
         unless match
           unless eof?
@@ -148,7 +149,7 @@ module Flexr
     end
 
     def defer_token_size_check!(size)
-      @candidate_token_size = [@candidate_token_size, size].max
+      @candidate_token_size = size if size > @candidate_token_size
     end
 
     def utf8_input?
@@ -327,9 +328,15 @@ module Flexr
     end
 
     def update_position
-      consumed = @buffer.byteslice(@match_start...@match_end).to_s.b
-      @line += consumed.count("\n")
-      @bol = consumed.end_with?("\n") || @match_end.zero?
+      if @match_end > @match_start
+        length = @match_end - @match_start
+        @line += if length == 1
+          @buffer.source.getbyte(@match_start) == 0x0a ? 1 : 0
+        else
+          @buffer.byteslice(@match_start, length).to_s.count("\n")
+        end
+      end
+      @bol = @match_end.zero? || @buffer.source.getbyte(@match_end - 1) == 0x0a
     end
 
     def handle_unmatched_byte
