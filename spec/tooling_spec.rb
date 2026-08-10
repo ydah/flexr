@@ -30,6 +30,38 @@ RSpec.describe "verification tooling" do
     end
   end
 
+  it "keeps verification tasks composable after dogfood" do
+    script = <<~RUBY
+      require "rake"
+      load "Rakefile"
+      Rake::Task["dogfood:verify"].invoke
+      Rake::Task["accel:equivalence"].invoke
+    RUBY
+    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, chdir: root)
+
+    expect(status).to be_success, stderr
+  end
+
+  it "keeps runtime verification independent of Prism" do
+    script = <<~RUBY
+      require "rake"
+      load "Rakefile"
+      module Kernel
+        alias_method :flexr_original_require, :require
+
+        def require(name)
+          raise LoadError, "simulated missing prism" if name == "prism"
+
+          flexr_original_require(name)
+        end
+      end
+      FlexrVerification::VERIFICATION_SPECS.each { |spec| FlexrVerification.load_runtime(spec) }
+    RUBY
+    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, chdir: root)
+
+    expect(status).to be_success, stderr
+  end
+
   it "fails benchmark verification when its baseline is missing" do
     missing = File.join(Dir.tmpdir, "flexr-missing-baseline-#{Process.pid}.json")
     _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "benchmark/run.rb",

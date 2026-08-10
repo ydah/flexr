@@ -35,6 +35,14 @@ module FlexrVerification
     "é|あ",
     "\\xffa".b
   ].freeze
+  RUNTIME_CLASS_NAMES = {
+    %r{/examples/json/} => "JsonExample::Lexer",
+    %r{/examples/toy_lang/} => "ToyLang::Lexer",
+    %r{/examples/ruby_subset/} => "RubySubset::Lexer",
+    %r{/examples/with_racc/} => "WithRacc::RaccLexer",
+    %r{/examples/with_lrama/} => "WithLrama::LramaLexer",
+    %r{/lib/flexr/regexp/tokenizer\.flexr\.rb\z} => "Flexr::Regexp::SourceLexer"
+  }.freeze
   module_function
 
   def input_for(spec)
@@ -65,11 +73,10 @@ module FlexrVerification
   end
 
   def load_runtime(spec)
-    class_name = Flexr::Source::PrismReader.new(
-      File.binread(spec).force_encoding(Encoding::UTF_8), path: spec
-    ).read.class_name
+    class_name = runtime_class_name(spec)
     existing = constantize(class_name)
     return existing if runtime_lexer?(existing)
+    remove_constant(class_name) if existing
 
     before = ObjectSpace.each_object(Class).to_a
     load spec
@@ -82,12 +89,24 @@ module FlexrVerification
     raise "no lexer class loaded from #{spec}"
   end
 
+  def runtime_class_name(spec)
+    RUNTIME_CLASS_NAMES.find { |pattern, _class_name| spec.match?(pattern) }&.last
+  end
+
   def constantize(class_name)
     return unless class_name
 
     class_name.split("::").reject(&:empty?).reduce(Object) { |parent, name| parent.const_get(name) }
   rescue NameError
     nil
+  end
+
+  def remove_constant(class_name)
+    return unless class_name
+
+    parts = class_name.split("::").reject(&:empty?)
+    parent = constantize(parts[0...-1].join("::"))
+    parent.send(:remove_const, parts.last) if parent&.const_defined?(parts.last, false)
   end
 
   def runtime_lexer?(klass)
@@ -166,7 +185,7 @@ module FlexrVerification
   def verify_tokenizer_reference
     runtime_lexer = load_runtime(TOKENIZER_SPEC)
     generated_path = File.join(Dir.tmpdir, "flexr-tokenizer-reference-#{Process.pid}.rb")
-    Flexr::Regexp.send(:remove_const, :SourceLexer) if Flexr::Regexp.const_defined?(:SourceLexer, false)
+    remove_constant("Flexr::Regexp::SourceLexer")
     File.binwrite(generated_path, generated_source(TOKENIZER_SPEC))
     load generated_path
     generated_lexer = Flexr::Regexp.const_get(:SourceLexer, false)
@@ -182,6 +201,8 @@ module FlexrVerification
     end
   ensure
     FileUtils.rm_f(generated_path) if generated_path
+    remove_constant("Flexr::Regexp::SourceLexer")
+    Flexr::Regexp.const_set(:SourceLexer, runtime_lexer) if runtime_lexer
   end
 
 end
