@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-require "weakref"
+require "open3"
+require "rbconfig"
 
 RSpec.describe Flexr::Runtime::Location do
   def lexer_class(eager: false)
@@ -9,20 +10,6 @@ RSpec.describe Flexr::Runtime::Location do
       option :eager_columns if eager
       rule(/./) { emit :CHAR }
     end
-  end
-
-  def token_and_reference
-    token_and_reference_without_lexer_scope
-  end
-
-  def token_and_reference_without_lexer_scope
-    lexer = lexer_class.new("あ")
-    token = lexer.next_token
-    reference = WeakRef.new(lexer)
-    # Ruby may conservatively scan this stack slot during GC on some versions.
-    lexer = nil # rubocop:disable Lint/UselessAssignment
-    GC.start
-    [token, reference]
   end
 
   it "defers column computation by default" do
@@ -41,12 +28,30 @@ RSpec.describe Flexr::Runtime::Location do
   end
 
   it "does not retain the lexer through a lazy location" do
-    token, reference = token_and_reference
-    GC.start
+    script = <<~RUBY
+      require "flexr"
+      require "weakref"
 
-    expect(reference.weakref_alive?).to be_falsy
-    expect(token.location.column_begin).to eq(1)
-    expect(token.location.column_end).to eq(2)
+      def lexer_class
+        Class.new(Flexr::Lexer) do
+          token_kind :struct
+          rule(/./) { emit :CHAR }
+        end
+      end
+
+      def token_and_reference
+        lexer = lexer_class.new("あ")
+        [lexer.next_token, WeakRef.new(lexer)]
+      end
+
+      token, reference = token_and_reference
+      GC.start
+      abort "lexer retained" if reference.weakref_alive?
+      abort "unexpected columns" unless [token.location.column_begin, token.location.column_end] == [1, 2]
+    RUBY
+    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script)
+
+    expect(status).to be_success, stderr
   end
 
   it "spans the complete token assembled with more" do
