@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "spec": "examples/json/lexer.flexr.rb",
-  "source_sha256": "7f06321560ddfaf07f612ff38a689b5378ba911270826865f17049dbc48d22d5",
-  "source_bytes": 725,
+  "source_sha256": "909c8fbc07f27e5be871a6f7e2bb4d0c29996e4362dbb201dd90edd1ae55c7e3",
+  "source_bytes": 745,
   "input_sha256": "f15489cc8fa286cd365fb167b3f99d3d216dc90c0de6279fe9f36c8d2215d7a7",
   "input_bytes": 140000,
   "tokens": 50000,
@@ -10,19 +10,25 @@
   "modes": {
     "runtime": {
       "tokens": 50000,
-      "mb_per_s": 0.449,
-      "tokens_per_s": 160490,
-      "allocations_per_token": 41.6
+      "mb_per_s": 0.889,
+      "tokens_per_s": 317556,
+      "allocations_per_token": 5.601
     },
     "generated": {
       "tokens": 50000,
-      "mb_per_s": 0.415,
-      "tokens_per_s": 148384,
-      "allocations_per_token": 44.4
+      "mb_per_s": 0.936,
+      "tokens_per_s": 334309,
+      "allocations_per_token": 4.601
+    },
+    "handwritten": {
+      "tokens": 50000,
+      "mb_per_s": 8.772,
+      "tokens_per_s": 3132963,
+      "allocations_per_token": 3.4
     }
   },
   "relative_to_handwritten": {
-    "runtime": 0.084,
-    "generated": 0.077
+    "runtime": 0.101,
+    "generated": 0.107
   }
 }

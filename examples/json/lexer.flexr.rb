@@ -4,6 +4,7 @@ require "flexr"
 
 module JsonExample
   class Lexer < Flexr::Lexer
+    backend :direct
     emits :LBRACE, :RBRACE, :LBRACKET, :RBRACKET, :COLON, :COMMA,
       :STRING, :NUMBER, :TRUE, :FALSE, :NULL
 

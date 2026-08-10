@@ -42,6 +42,15 @@ The runtime path is useful during development: `require` the specification and
 instantiate its lexer. The generated path is the deployment path and embeds
 the compiled tables.
 
+## Measured performance
+
+The local CRuby 4.0.0 sample on 2026-08-10 used the deterministic JSON
+benchmark input (140,000 bytes, three measured iterations): runtime `0.889
+MB/s`, generated `0.936 MB/s`, and the handwritten `StringScanner` baseline
+`8.772 MB/s`. These are measurements on one machine, not guarantees; run
+`ruby -Ilib benchmark/run.rb` for your environment. The current sample is
+below the design target, so no target-reaching performance claim is made.
+
 ## Generating a lexer
 
 ```sh
@@ -78,7 +87,7 @@ trusted input.
 bundle install
 bundle exec rake test
 bundle exec rake modes:equivalence
-bundle exec rake golden:verify accel:equivalence dogfood:verify
+bundle exec rake golden:verify accel:equivalence dogfood:verify examples:check
 bundle exec rake bench:regression
 ```
 

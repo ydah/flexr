@@ -5,7 +5,10 @@
 #   ruby benchmark/corpora/generate_json.rb > benchmark/corpora/json_10mb.json
 
 TARGET_BYTES = Integer(ENV.fetch("FLEXR_JSON_BYTES", "10_000_000"), 10)
-RECORD = '{"answer":42,"name":"flexr"}'
+PADDING_BYTES = Integer(ENV.fetch("FLEXR_JSON_PADDING_BYTES", "0"), 10)
+abort "FLEXR_JSON_PADDING_BYTES must not be negative" if PADDING_BYTES.negative?
+
+RECORD = %({"answer":42#{' ' * PADDING_BYTES},"name":"flexr"}).freeze
 
 abort "FLEXR_JSON_BYTES must be at least #{RECORD.bytesize + 3}" if RECORD.bytesize + 3 > TARGET_BYTES
 
