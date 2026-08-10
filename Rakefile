@@ -62,7 +62,8 @@ module FlexrVerification
   def relative_spec(spec)
     normalized_spec = normalized_path(spec)
     normalized_root = normalized_path(ROOT)
-    normalized_spec.delete_prefix("#{normalized_root}/")
+    relative = normalized_spec.delete_prefix("#{normalized_root}/")
+    relative == normalized_spec ? normalized_spec.sub(%r{\A.*?(?=(?:examples|lib/flexr)/)}, "") : relative
   end
 
   def normalized_path(path)
