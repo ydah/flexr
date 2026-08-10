@@ -16,13 +16,14 @@ module Flexr
         nil
       end
 
-      def compiled(pattern, encoding:, options: 0, unicode: false)
-        key = [pattern.source, pattern.options, encoding, options, unicode]
+      def compiled(pattern, encoding:, options: nil, unicode: false)
+        effective_options = options.nil? ? pattern.options : options
+        key = [pattern.source, effective_options, encoding, unicode]
         return CACHE[key] if CACHE.key?(key)
 
-        parser = Regexp::Parser.new(pattern.source, options: pattern.options, encoding: encoding, unicode: unicode)
-        source = source_for(parser.parse, ignorecase: pattern.options.anybits?(::Regexp::IGNORECASE))
-        regexp_options = options & ~::Regexp::IGNORECASE
+        parser = Regexp::Parser.new(pattern.source, options: effective_options, encoding: encoding, unicode: unicode)
+        source = source_for(parser.parse, ignorecase: effective_options.anybits?(::Regexp::IGNORECASE))
+        regexp_options = effective_options & ~::Regexp::IGNORECASE
         CACHE[key] = ::Regexp.new(source, regexp_options).freeze
       end
 

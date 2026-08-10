@@ -183,6 +183,23 @@ RSpec.describe "Flexr runtime" do
       .to raise_error(Flexr::Runtime::TokenTooLargeError)
   end
 
+  it "labels max_token_size failures with FLEXR-E012" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/a+/) { emit :WORD }
+    end
+
+    error = begin
+      lexer_class.new("aaaa", max_token_size: 2).tokens
+    rescue Flexr::Runtime::TokenTooLargeError => caught
+      caught
+    end
+
+    expect(error.code).to eq("FLEXR-E012")
+    expect(error.diagnostic.code).to eq("FLEXR-E012")
+    expect(error.diagnostic.help).to include("max_token_size")
+    expect(error.message).to eq("token exceeds max_token_size")
+  end
+
   it "enforces max_token_size in the firstmatch backend" do
     lexer_class = Class.new(Flexr::Lexer) do
       backend :firstmatch

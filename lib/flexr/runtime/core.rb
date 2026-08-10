@@ -315,7 +315,7 @@ module Flexr
       @candidate_token_size = 0
       return if actual_size <= @max_token_size
 
-      raise Runtime::TokenTooLargeError, "token exceeds max_token_size"
+      raise Runtime::TokenTooLargeError
     end
 
     def force_empty_match_progress!
