@@ -54,16 +54,13 @@ jobs:
       - run: bundle exec rake examples:check
       - run: bundle exec rake coverage
       # The throughput baseline is host-specific; run its gate on one canonical
-      # environment instead of comparing different OS/CPU combinations. Shared
-      # runners can still vary, so keep this observation from masking test failures.
+      # environment instead of comparing different OS/CPU combinations.
       - name: Run benchmark regression on the canonical environment
         if: matrix.os == 'ubuntu-latest' && matrix.ruby == '3.4'
-        continue-on-error: true
         run: bundle exec rake bench:regression
 
-  nightly-fuzz:
-    if: github.event_name == 'schedule'
-    name: nightly / differential and fuzz
+  differential-fuzz:
+    name: verification / differential and fuzz
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
