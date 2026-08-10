@@ -8,15 +8,18 @@ on:
 
 jobs:
   runtime:
-    name: runtime / ${{ matrix.os }} / ruby ${{ matrix.ruby }}
+    name: runtime / ${{ matrix.os }} / ruby ${{ matrix.ruby }} / ${{ matrix.jit }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         ruby: ["3.1", "3.2", "3.3", "3.4", head]
+        jit: [off, on]
         exclude:
           - os: windows-latest
             ruby: head
+    env:
+      RUBYOPT: ${{ matrix.jit == 'on' && '--yjit' || '' }}
     continue-on-error: ${{ matrix.ruby == 'head' }}
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +48,7 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake golden:verify
       - run: bundle exec rake dogfood:verify
+      - run: bundle exec rake examples:check
       - run: bundle exec rake bench:regression
 
   nightly-fuzz:
@@ -59,3 +63,24 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake test:differential
       - run: bundle exec rake fuzz
+
+  generated-compatibility:
+    name: generated-only / ${{ matrix.ruby }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: [jruby, truffleruby]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Load a generated lexer without the generator
+        run: >-
+          bundle exec ruby -Ilib -e
+          'require "flexr"; load "spec/fixtures/generated.rb";
+          lexer = GeneratedFixture::Lexer.new("42");
+          abort "generated lexer mismatch" unless lexer.tokens == [[:INT, 42]]'

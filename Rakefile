@@ -246,4 +246,24 @@ task :fuzz do
   puts "fuzz: #{cases} inputs per example passed"
 end
 
+namespace :examples do
+  task :check do
+    FlexrVerification::EXAMPLES.each do |spec|
+      stdout, stderr, status = Open3.capture3(
+        RbConfig.ruby, "-Ilib", "exe/flexr", "check", spec, "--format", "json", chdir: FlexrVerification::ROOT
+      )
+      abort "example diagnostics failed for #{spec}: #{stderr}#{stdout}" unless status.success?
+      diagnostics = JSON.parse(stdout)
+      abort "example diagnostics are not empty for #{spec}: #{diagnostics.inspect}" unless diagnostics.empty?
+    rescue JSON::ParserError => e
+      abort "example diagnostics were not JSON for #{spec}: #{e.message}\n#{stdout}#{stderr}"
+    end
+    puts "examples: all checks passed"
+  end
+end
+
+task :coverage do
+  sh RbConfig.ruby, "-Ilib", "tools/coverage.rb"
+end
+
 task default: :spec

@@ -4,6 +4,7 @@ AllCops:
   Exclude:
     - "lib/flexr/codegen/**/*"
     - "lib/flexr/unicode/data/**/*"
+    - "spec/fixtures/generated.rb"
     - "vendor/**/*"
 
 Metrics/MethodLength:
