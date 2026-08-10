@@ -229,12 +229,19 @@ module Flexr
 
           rule.patterns.each do |pattern|
             regexp = pattern.is_a?(String) ? ::Regexp.new(::Regexp.escape(pattern)) : pattern
+            parse_regexp(regexp) if regexp.is_a?(::Regexp)
             next unless regexp.is_a?(::Regexp) && regexp.match?("")
 
             diagnostic = Diagnostics.error("FLEXR-E005", "rule #{rule.index} can match an empty string")
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
           end
         end
+      end
+
+      def parse_regexp(regexp)
+        encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
+        Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
+                           unicode: @spec.options[:unicode] == true).parse
       end
 
       def diagnostics_for(compiled, elapsed)

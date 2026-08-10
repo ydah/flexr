@@ -148,6 +148,16 @@ RSpec.describe Flexr do
       .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E005") }
   end
 
+  it "reports unsupported regexp syntax before empty-match validation" do
+    lexer_class = Class.new(Flexr::Lexer) { rule(/a*?/) { emit :TOKEN } }
+
+    expect { lexer_class.new("a").tokens }
+      .to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include("negated character class")
+      end
+  end
+
   it "generates source while preserving constants and actions" do
     path = File.expand_path("fixtures/generated.flexr.rb", __dir__)
     output = File.join(Dir.tmpdir, "flexr-generated-test.rb")
