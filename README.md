@@ -89,6 +89,7 @@ bundle exec rake test
 bundle exec rake modes:equivalence
 bundle exec rake golden:verify accel:equivalence dogfood:verify examples:check
 bundle exec rake bench:regression
+bundle exec rake coverage
 ```
 
 The verification gates are independent: golden checks generated-source digests,
@@ -96,6 +97,8 @@ acceleration checks the extracted byte regions, and dogfood checks that each
 generated Ruby file is syntactically valid and contains a compiled payload.
 `bench:regression` requires the checked-in baseline and fails when its input
 identity changes or throughput drops by more than 10 percent.
+`coverage` reports line coverage for `lib/flexr`; the 95% planning target is
+reported explicitly and is not yet used as a CI gate.
 
 For diagnostics, use `flexr check SPEC.rb --format json`, `flexr stats`,
 `flexr dot`, or `flexr trace`. `--warn-as-error` turns compiler warnings into a

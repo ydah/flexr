@@ -1,0 +1,31 @@
+# frozen_string_literal: true
+
+require "coverage"
+require "rspec/core"
+
+Coverage.start(lines: true)
+
+status = RSpec::Core::Runner.run(["spec", "--format", "progress", "--no-color"], File::NULL, $stdout)
+result = Coverage.result
+files = Dir[File.expand_path("../lib/flexr/**/*.rb", __dir__)]
+totals = files.map do |file|
+  lines = result.fetch(file, {}).fetch(:lines, [])
+  executable = lines.count { |count| !count.nil? }
+  covered = lines.count { |count| count&.positive? }
+  uncovered = lines.each_index.select { |index| lines[index].zero? }
+  [file, covered, executable, uncovered]
+end
+covered = totals.sum { |_, count, _, _| count }
+executable = totals.sum { |_, _, count, _| count }
+percentage = executable.zero? ? 100.0 : covered.to_f / executable * 100
+
+puts format("coverage: %<percentage>.2f%% (%<covered>d/%<executable>d lines)",
+            percentage: percentage, covered: covered, executable: executable)
+puts "coverage target: 95.00% (report only; expand the regression suite before gating this target)"
+totals.reject { |_, count, total, _| total.zero? || count == total }.each do |file, count, total, uncovered|
+  puts format("  %<file>s: %<count>d/%<total>d", file: file.delete_prefix("#{Dir.pwd}/"), count: count,
+              total: total)
+  puts "    uncovered lines: #{uncovered.map { |line| line + 1 }.join(', ')}"
+end
+
+exit status unless status.zero?
