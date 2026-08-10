@@ -16,12 +16,14 @@ task test: :spec
 module FlexrVerification
   ROOT = File.expand_path(__dir__)
   EXAMPLES = Dir[File.join(ROOT, "examples/**/*.flexr.rb")].freeze
+  DOGFOOD_SPECS = (EXAMPLES + [File.join(ROOT, "lib/flexr/regexp/tokenizer.flexr.rb")]).freeze
   EXPECTED_INPUTS = {
     %r{/examples/json/} => '{"answer": 42}',
     %r{/examples/toy_lang/} => "answer + 12",
     %r{/examples/ruby_subset/} => 'class Foo "ok" end',
     %r{/examples/with_racc/} => "12 + 3",
-    %r{/examples/with_lrama/} => "12 - 3"
+    %r{/examples/with_lrama/} => "12 - 3",
+    %r{/lib/flexr/regexp/tokenizer\.flexr\.rb\z} => "a|[a-z]+\\p{L}?"
   }.freeze
   module_function
 
@@ -152,7 +154,54 @@ task "accel:equivalence" do
 end
 
 task "dogfood:verify" do
-  FlexrVerification::EXAMPLES.each { |spec| FlexrVerification.verify_dogfood(spec) }
+  FlexrVerification::DOGFOOD_SPECS.each { |spec| FlexrVerification.verify_dogfood(spec) }
+end
+
+task "direct:verify" do
+  unless defined?(RubyVM::InstructionSequence)
+    puts "direct: disassembly unavailable on #{RUBY_ENGINE}; skipped"
+    next
+  end
+
+  spec = File.join(FlexrVerification::ROOT, "examples/json/lexer.flexr.rb")
+  disassembly = RubyVM::InstructionSequence.compile(FlexrVerification.generated_source(spec)).disasm
+  abort "direct dispatch did not compile to opt_case_dispatch" unless disassembly.include?("opt_case_dispatch")
+
+  puts "direct: opt_case_dispatch present"
+end
+
+task "unicode:verify" do
+  splitter = Flexr::Unicode::Utf8Splitter
+  scalar_count = 0
+  (0..0x10_ffff).each do |codepoint|
+    next if codepoint.between?(0xd800, 0xdfff)
+
+    expected = [codepoint].pack("U").bytes.map { |byte| [byte, byte] }
+    actual = splitter.split(codepoint, codepoint)
+    abort "Unicode singleton mismatch at U+#{codepoint.to_s(16)}" unless actual == [expected]
+    scalar_count += 1
+  end
+
+  random = Random.new(0xF1E2)
+  100_000.times do
+    loop do
+      lo = random.rand(0x11_0000)
+      hi = [lo + random.rand(17), 0x10_ffff].min
+      next if lo <= 0xdfff && hi >= 0xd800
+
+      sequences = splitter.split(lo, hi)
+      abort "Unicode range split was empty for U+#{lo.to_s(16)}..U+#{hi.to_s(16)}" if sequences.empty?
+      (lo..hi).each do |codepoint|
+        bytes = [codepoint].pack("U").bytes
+        included = sequences.any? do |sequence|
+          sequence.length == bytes.length && sequence.zip(bytes).all? { |range, byte| byte.between?(*range) }
+        end
+        abort "Unicode range omitted U+#{codepoint.to_s(16)}" unless included
+      end
+      break
+    end
+  end
+  puts "unicode: #{scalar_count} singleton and 100000 random range cases passed"
 end
 
 task "bench:regression" do
