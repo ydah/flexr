@@ -26,7 +26,10 @@ module Flexr
     end
 
     def generate
-      source = File.binread(@path).force_encoding(Encoding::UTF_8)
+      # Keep generated source stable when a checkout presents the spec with
+      # Windows line endings. All offsets consumed by the parser and
+      # passthrough writer are relative to this normalized source.
+      source = File.binread(@path).gsub(/\r\n?/, "\n").force_encoding(Encoding::UTF_8)
       result = if @eval_mode
         generate_from_runtime(source)
       else
