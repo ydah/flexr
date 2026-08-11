@@ -18,14 +18,13 @@ output as SVG and should be run before a release that changes CLI visualization.
 
 Then:
 
-1. Move the intended entries from `Unreleased` into a dated version section in
-   `CHANGELOG.md`.
-2. Update `lib/flexr/version.rb` and verify the gemspec metadata URLs.
+1. Review the commits since the previous release and update `lib/flexr/version.rb`.
+2. Verify the gemspec metadata URLs.
 3. Build and inspect the package with `gem build flexr.gemspec`.
 4. Confirm generated golden files and the Unicode snapshot are intentional.
 5. Create the release tag only after the working tree and CI are clean.
 
 Unicode snapshot changes are minor-version compatibility changes because they
 can change generated output. Stable runtime and generated-file contracts are
-preserved within a major version unless this document and the changelog state a
-migration.
+preserved within a major version unless this document and the release commits
+state a migration.

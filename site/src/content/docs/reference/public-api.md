@@ -15,4 +15,4 @@ The `firstmatch` backend and any option explicitly marked experimental may chang
 
 `Flexr::IR`, `Flexr::Automaton`, `Flexr::Codegen`, parser internals, and generated implementation helpers are internal. Compatibility is not guaranteed for these namespaces.
 
-Version-specific guarantees live in [compatibility](https://github.com/ydah/flexr/blob/main/docs/reference/compatibility.md) and the [changelog](/flexr/changelog/).
+Version-specific guarantees live in the [compatibility reference](https://github.com/ydah/flexr/blob/main/docs/reference/compatibility.md) and the release commits.

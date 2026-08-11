@@ -45,8 +45,7 @@ export default defineConfig({
           label: 'Project',
           items: [
             { label: 'Examples', slug: 'examples' },
-            { label: 'Benchmarks', slug: 'benchmarks' },
-            { label: 'Changelog', slug: 'changelog' }
+            { label: 'Benchmarks', slug: 'benchmarks' }
           ]
         }
       ],
