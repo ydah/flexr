@@ -20,9 +20,9 @@ module Flexr
     end
 
     def validate!
-      validate_value!(backend, %i[table direct firstmatch auto], :backend)
-      validate_value!(token_kind, %i[array struct yield], :token_kind)
-      validate_value!(accel, %i[auto strscan regexp none], :accel)
+      validate_value!(backend, Configuration::BACKENDS, :backend)
+      validate_value!(token_kind, Configuration::TOKEN_KINDS, :token_kind)
+      validate_value!(accel, Configuration::ACCELERATORS, :accel)
       validate_value!(table_compression, %i[none rows full], :table_compression)
       validate_value!(table_format, %i[literal packed], :table_format)
       validate_value!(warn_level, %i[all default none], :warn_level)

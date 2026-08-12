@@ -135,11 +135,11 @@ module FlexrVerification
     inputs = [input_for(spec)] + Array.new(32) do
       Array.new(random.rand(48..96)) { random.rand(32..126) }.pack("C*")
     end
-    options = lexer.__flexr_config.options
-    original_accel = options.fetch(:accel, :auto)
     accelerated = inputs.map { |input| lexer.new(input, error_mode: :panic).tokens }
-    options[:accel] = :none
-    reference = inputs.map { |input| lexer.new(input, error_mode: :panic).tokens }
+    remove_constant(runtime_class_name(spec))
+    reference_lexer = load_runtime(spec)
+    reference_lexer.accel(:none)
+    reference = inputs.map { |input| reference_lexer.new(input, error_mode: :panic).tokens }
     raise "acceleration token mismatch in #{spec}" unless accelerated == reference
 
     lexer.compile!.machines.each_value do |machine|
@@ -153,8 +153,6 @@ module FlexrVerification
         end
       end
     end
-  ensure
-    options[:accel] = original_accel if options && original_accel
   end
 
   def verify_dogfood(spec)

@@ -45,7 +45,15 @@ module Flexr
         when "NilNode"
           nil
         when "ArrayNode"
-          node.elements.map { |element| evaluate(element) }
+          node.elements.flat_map do |element|
+            if element.class.name.end_with?("SplatNode")
+              Array(evaluate(element.expression))
+            else
+              [evaluate(element)]
+            end
+          end
+        when "HashNode"
+          evaluate_hash(node)
         when "ConstantReadNode"
           evaluate_constant([node.name.to_s], absolute: false)
         when "ConstantPathNode"
@@ -66,8 +74,10 @@ module Flexr
           kind = part.class.name.split("::").last
           if kind == "EmbeddedStatementsNode"
             body = part.statements&.body || []
-            value = evaluate(body.last)
-            value.is_a?(::Regexp) ? "(?:#{value.source})" : value.to_s
+            raise_resolution("interpolation must contain exactly one expression") unless body.one?
+
+            value = evaluate(body.first)
+            value.is_a?(::Regexp) ? regexp_fragment(value) : value.to_s
           else
             evaluate(part).to_s
           end
@@ -95,7 +105,7 @@ module Flexr
           return value unless value.equal?(MISSING)
         end
 
-        return ::Encoding.const_get(parts.last) if !absolute && parts.length == 2 && parts.first == "Encoding"
+        return ::Encoding.const_get(parts.last) if parts.length == 2 && parts.first == "Encoding"
 
         raise_resolution("constant #{parts.join('::')} is not statically known")
       rescue NameError
@@ -120,6 +130,32 @@ module Flexr
         return evaluate(node.receiver).freeze if node.receiver && node.name == :freeze
         return ::Regexp.union(positional_arguments(node).map { |argument| evaluate(argument) }) if node.receiver && node.name == :union && constant_name(node.receiver) == "Regexp"
         raise_resolution("method call #{node.name} is not statically supported")
+      end
+
+      def evaluate_hash(node)
+        node.elements.each_with_object({}) do |element, result|
+          kind = element.class.name.split("::").last
+          if kind == "AssocNode"
+            result[evaluate(element.key)] = evaluate(element.value)
+          elsif kind == "AssocSplatNode"
+            value = evaluate(element.value)
+            raise_resolution("hash splat value must be a Hash") unless value.is_a?(Hash)
+
+            result.merge!(value)
+          else
+            raise_resolution("hash element #{kind} is not statically supported")
+          end
+        end
+      end
+
+      def regexp_fragment(regexp)
+        flags = {
+          "i" => ::Regexp::IGNORECASE,
+          "m" => ::Regexp::MULTILINE,
+          "x" => ::Regexp::EXTENDED
+        }
+        enabled, disabled = flags.partition { |_name, bit| regexp.options.anybits?(bit) }
+        "(?#{enabled.to_h.keys.join}-#{disabled.to_h.keys.join}:#{regexp.source})"
       end
 
       def positional_arguments(node)

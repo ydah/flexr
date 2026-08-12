@@ -282,6 +282,8 @@ RSpec.describe "adversarial boundary coverage" do
     expect(Flexr::Regexp::Normalizer.new(property_class).normalize).not_to be_nil
     expect { Flexr::Regexp::Normalizer.new(Object.new).normalize }.to raise_error(Flexr::CompileError)
     expect { Flexr::Unicode::Property.ranges("not-a-property") }.to raise_error(Flexr::CompileError)
+    expect { Flexr::Unicode::Property.ranges("Letter").first[0] = -1 }.to raise_error(FrozenError)
+    expect(Flexr::Unicode::Property.ranges("Letter")).to equal(Flexr::Unicode::Property.ranges("L"))
     expect { Flexr::Unicode::Property.ranges("POSIX_not-a-class") }.to raise_error(Flexr::CompileError)
 
     walked = []
@@ -399,7 +401,7 @@ RSpec.describe "adversarial boundary coverage" do
     expect(evaluate.call("Outer::VALUE", constants: { "Outer::VALUE" => /d/ })).to eq(/d/)
     expect(evaluate.call("::Outer::VALUE", constants: { "Outer::VALUE" => /e/ })).to eq(/e/)
     expect(evaluate.call("VALUE", constants: { "Scope::VALUE" => /f/ }, scope: [:Scope])).to eq(/f/)
-    expect(evaluate.call("[1, *[2]]")).to eq([1, [2]])
+    expect(evaluate.call("[1, *[2]]")).to eq([1, 2])
 
     expect { evaluate.call("unknown.call") }.to raise_error(Flexr::StaticResolutionError)
     expect { evaluate.call("UNKNOWN") }.to raise_error(Flexr::StaticResolutionError)

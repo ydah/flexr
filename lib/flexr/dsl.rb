@@ -21,23 +21,23 @@ module Flexr
       )
       @__flexr_compiled = nil
       @__flexr_generated = false
-      @__flexr_compile_mutex = Mutex.new
+      @__flexr_generated_actions = []
+      @__flexr_specification_frozen = false
+      @__flexr_compile_mutex = Monitor.new
     end
 
     def rule(pattern, skip: false, emit: nil, followed_by: nil, &action)
-      patterns = normalize_patterns(pattern)
-      rule_action = if skip
-        :skip
-      elsif emit
-        [:emit, emit.to_sym]
-      else
-        action || proc { emit(nil, text) }
+      __flexr_mutate! do
+        patterns = normalize_patterns(pattern)
+        rule_action = ActionResolver.resolve(
+          skip: skip, emit: emit, block: action, default: proc { emit(nil, text) }
+        )
+        states = @__flexr_state_stack.empty? ? [:initial] : @__flexr_state_stack.dup
+        @__flexr_rules << IR::Rule.new(
+          index: @__flexr_rules.length, patterns: patterns, trailing: normalize_trailing(followed_by),
+          action: rule_action, states: states, bol_only: false, end_anchor: nil
+        )
       end
-      states = @__flexr_state_stack.empty? ? [:initial] : @__flexr_state_stack.dup
-      @__flexr_rules << IR::Rule.new(
-        index: @__flexr_rules.length, patterns: patterns, trailing: normalize_trailing(followed_by),
-        action: rule_action, states: states, bol_only: false, end_anchor: nil
-      )
       nil
     end
 
@@ -45,38 +45,56 @@ module Flexr
       raise ArgumentError, "state requires a block" unless block
       raise ArgumentError, "state requires a name" if names.empty?
 
-      names.each do |name|
-        symbol = name.to_sym
-        @__flexr_states[symbol] ||= IR::State.new(name: symbol, inclusive: inclusive, id: @__flexr_states.length)
+      __flexr_mutate! do
+        names.each do |name|
+          symbol = name.to_sym
+          existing = @__flexr_states[symbol]
+          raise ArgumentError, "state #{symbol.inspect} already declared with inclusive: #{existing.inclusive}" if
+            existing && existing.inclusive != inclusive
+          @__flexr_states[symbol] ||= IR::State.new(
+            name: symbol, inclusive: inclusive, id: @__flexr_states.length
+          )
+        end
+        @__flexr_state_stack.concat(names.map(&:to_sym))
+        begin
+          class_eval(&block)
+        ensure
+          names.length.times { @__flexr_state_stack.pop }
+        end
       end
-      @__flexr_state_stack.concat(names.map(&:to_sym))
-      class_eval(&block)
-    ensure
-      names&.length&.times { @__flexr_state_stack.pop }
     end
 
     def all_states(&)
-      state(*@__flexr_states.keys, &)
+      raise ArgumentError, "all_states requires a block" unless block_given?
+
+      __flexr_mutate! do
+        names = @__flexr_states.keys
+        @__flexr_state_stack.concat(names)
+        begin
+          class_eval(&)
+        ensure
+          names.length.times { @__flexr_state_stack.pop }
+        end
+      end
     end
 
     def on_eof(&action)
-      state_name = @__flexr_state_stack.last || :initial
-      @__flexr_eof_rules[state_name] = action
+      __flexr_mutate! do
+        state_name = @__flexr_state_stack.last || :initial
+        @__flexr_eof_rules[state_name] = action
+      end
     end
 
     def emits(*tokens)
-      @__flexr_config.declared_tokens.concat(tokens.flatten.map(&:to_sym)).uniq!
+      __flexr_mutate! { @__flexr_config.declared_tokens.concat(tokens.flatten.map(&:to_sym)).uniq! }
     end
 
     def backend(name)
-      @__flexr_config.backend = name.to_sym
+      __flexr_mutate! { @__flexr_config.backend = Configuration.backend!(name) }
     end
 
     def token_kind(name)
-      value = name.to_sym
-      raise ArgumentError, "unsupported token_kind: #{name}" unless %i[array struct yield].include?(value)
-
-      @__flexr_config.token_kind = value
+      __flexr_mutate! { @__flexr_config.token_kind = Configuration.token_kind!(name) }
     end
 
     def encoding(value)
@@ -86,15 +104,17 @@ module Flexr
         raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
 
-      @__flexr_config.encoding = encoding
+      __flexr_mutate! { @__flexr_config.encoding = encoding }
     end
 
     def option(*values)
-      values.each { |value| @__flexr_config.options[value.to_sym] = true }
+      __flexr_mutate! do
+        values.each { |value| @__flexr_config.options[Configuration.option!(value)] = true }
+      end
     end
 
     def accel(value)
-      @__flexr_config.options[:accel] = value.to_sym
+      __flexr_mutate! { @__flexr_config.options[:accel] = Configuration.accelerator!(value) }
     end
 
     def compile!
@@ -104,6 +124,8 @@ module Flexr
         @__flexr_compiled ||= begin
           compiled = Automaton::Compiler.new(__flexr_spec).compile
           @__flexr_config.backend = auto_direct?(compiled) ? :direct : :table if @__flexr_config.backend == :auto
+          freeze_specification!
+          freeze_compiled!(compiled)
           compiled
         end
         # rubocop:enable Naming/MemoizedInstanceVariableName
@@ -131,18 +153,27 @@ module Flexr
       )
     end
 
-    attr_reader :__flexr_rules, :__flexr_states, :__flexr_config, :__flexr_compiled
+    attr_reader :__flexr_rules, :__flexr_states, :__flexr_config, :__flexr_compiled, :__flexr_generated_actions
 
     def __flexr_add_generated_eof(state, action)
-      @__flexr_eof_rules[state.to_sym] = action
+      __flexr_mutate! { @__flexr_eof_rules[state.to_sym] = action }
     end
 
     def __flexr_set_compiled!(compiled)
-      @__flexr_compiled = compiled
+      @__flexr_compile_mutex.synchronize do
+        @__flexr_compiled = freeze_compiled!(compiled)
+        freeze_specification!
+      end
     end
 
     def __flexr_mark_generated!
       @__flexr_generated = true
+    end
+
+    def __flexr_bind_generated_action(index, action)
+      raise FrozenSpecificationError, "generated actions can only be bound on a generated lexer" unless @__flexr_generated
+
+      @__flexr_generated_actions[index] = action
     end
 
     def __flexr_generated?
@@ -150,6 +181,43 @@ module Flexr
     end
 
     private
+
+    def __flexr_mutate!
+      @__flexr_compile_mutex.synchronize do
+        raise FrozenSpecificationError, "lexer specification is immutable after compilation" if
+          @__flexr_specification_frozen
+
+        yield
+      end
+    end
+
+    def freeze_specification!
+      @__flexr_rules.each do |rule|
+        rule.patterns.freeze
+        rule.states.freeze
+        rule.pattern_conditions&.freeze
+        rule.freeze
+      end
+      @__flexr_states.each_value(&:freeze)
+      @__flexr_eof_rules.freeze
+      @__flexr_rules.freeze
+      @__flexr_states.freeze
+      @__flexr_config.options.freeze
+      @__flexr_config.declared_tokens.freeze
+      @__flexr_config.freeze
+      @__flexr_specification_frozen = true
+    end
+
+    def freeze_compiled!(compiled)
+      compiled.machines.each_value(&:freeze)
+      compiled.machines.freeze
+      compiled.states.freeze
+      compiled.stats.each_value(&:freeze)
+      compiled.stats.freeze
+      Array(compiled.diagnostics).each(&:freeze)
+      compiled.diagnostics.freeze
+      compiled.freeze
+    end
 
     def normalize_patterns(pattern)
       values = pattern.is_a?(Array) ? pattern : [pattern]

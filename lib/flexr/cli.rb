@@ -142,7 +142,7 @@ module Flexr
                  else
                    compile(read_spec(spec), overrides: options.overrides)
                  end
-      diagnostics = compiled.is_a?(Array) ? compiled : Array(compiled&.diagnostics)
+      diagnostics = (compiled.is_a?(Array) ? compiled : Array(compiled&.diagnostics)).dup
       diagnostics.select! do |diagnostic|
         options.warn_level == :all || (options.warn_level == :default && diagnostic.code != "FLEXR-W016")
       end
@@ -275,8 +275,8 @@ module Flexr
       klass.encoding(config.fetch(:encoding, Encoding::UTF_8))
       Array(config[:declared_tokens]).each { |token| klass.emits(token) }
       config_options = config.fetch(:options, {}).merge(overrides.slice(:experimental, :allow_empty_match))
-      config_options.each do |name, value|
-        value ? klass.option(name) : nil
+      config_options.slice(*Configuration::BOOLEAN_OPTIONS).each do |name, value|
+        klass.option(name) if value
       end
       klass.__flexr_config.options[:max_dfa_states] = overrides[:max_dfa_states] if overrides[:max_dfa_states]
       accel = overrides.fetch(:accel, config_options[:accel])

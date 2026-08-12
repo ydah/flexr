@@ -124,6 +124,25 @@ RSpec.describe Flexr do
     end
   end
 
+  it "validates trailing context with the same regexp parser as rule patterns" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/a/, followed_by: /(?=b)/) { emit :A }
+    end
+
+    expect { lexer.compile! }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+    end
+  end
+
+  it "starts subclasses with an independent empty specification" do
+    parent = Class.new(Flexr::Lexer) { rule(/a/) { emit :A } }
+    child = Class.new(parent) { rule(/b/) { emit :B } }
+
+    expect(parent.new("a").tokens).to eq([[:A, "a"]])
+    expect(child.new("b").tokens).to eq([[:B, "b"]])
+    expect(child.__flexr_rules.length).to eq(1)
+  end
+
   it "reports parser limit and anchor diagnostics as compile errors" do
     expect { Flexr::Regexp::Parser.new("a{1001}").parse }
       .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E007") }
@@ -319,8 +338,9 @@ RSpec.describe Flexr do
     FileUtils.rm_f(output) if output
   end
 
-  it "aborts firstmatch generation when deterministic differential checks disagree" do
+  it "generates firstmatch lexers with the same semantics as runtime mode" do
     spec = File.join(Dir.tmpdir, "flexr-firstmatch-#{Process.pid}.flexr.rb")
+    output = File.join(Dir.tmpdir, "flexr-firstmatch-#{Process.pid}.rb")
     File.write(spec, <<~RUBY)
       require "flexr"
       class FirstmatchFixture < Flexr::Lexer
@@ -331,10 +351,19 @@ RSpec.describe Flexr do
       end
     RUBY
 
-    expect { Flexr::Generator.new(spec).generate }
-      .to raise_error(Flexr::CompileError, /firstmatch differs from table/)
+    load spec
+    runtime_tokens = FirstmatchFixture.new("aa").tokens
+    Object.send(:remove_const, :FirstmatchFixture)
+    generator = Flexr::Generator.new(spec, output: output)
+    generator.generate
+    load output
+
+    expect(FirstmatchFixture.new("aa").tokens).to eq(runtime_tokens).and eq([[:A, "a"], [:A, "a"]])
+    expect(generator.diagnostics.map(&:code)).to include("FLEXR-W010")
   ensure
+    Object.send(:remove_const, :FirstmatchFixture) if Object.const_defined?(:FirstmatchFixture, false)
     FileUtils.rm_f(spec) if spec
+    FileUtils.rm_f(output) if output
   end
 
   it "removes nested DSL spans as one source transformation" do

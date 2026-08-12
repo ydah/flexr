@@ -2,10 +2,13 @@
 
 require "json"
 require "digest"
+require "monitor"
 require_relative "flexr/artifact_writer"
 require_relative "flexr/version"
 require_relative "flexr/errors"
 require_relative "flexr/diagnostics"
+require_relative "flexr/action_resolver"
+require_relative "flexr/configuration"
 require_relative "flexr/ir"
 require_relative "flexr/regexp/ast"
 require_relative "flexr/regexp/parser"

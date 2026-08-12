@@ -148,20 +148,22 @@ module Flexr
 
   module DSL
     def __flexr_add_generated_rule(definition)
-      action = definition.fetch(:action)
-      @__flexr_rules << IR::Rule.new(
-        index: definition.fetch(:index), patterns: Array(definition.fetch(:patterns)),
-        trailing: normalize_trailing(definition[:trailing]), action: action,
-        states: Array(definition.fetch(:states)).map(&:to_sym),
-        bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
-        location: definition[:span] || definition[:location],
-        pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
-          next unless condition
+      __flexr_mutate! do
+        action = definition.fetch(:action)
+        @__flexr_rules << IR::Rule.new(
+          index: definition.fetch(:index), patterns: Array(definition.fetch(:patterns)),
+          trailing: normalize_trailing(definition[:trailing]), action: action,
+          states: Array(definition.fetch(:states)).map(&:to_sym),
+          bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
+          location: definition[:span] || definition[:location],
+          pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
+            next unless condition
 
-          Automaton::Acceptance.new(rule_index: condition[0], pattern_index: condition[1],
-                                    bol_only: condition[2], end_anchor: condition[3])
-        end
-      )
+            Automaton::Acceptance.new(rule_index: condition[0], pattern_index: condition[1],
+                                      bol_only: condition[2], end_anchor: condition[3])
+          end
+        )
+      end
     end
   end
 end

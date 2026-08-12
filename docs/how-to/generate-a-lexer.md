@@ -13,9 +13,9 @@ Ruby constants, comments, requires, and non-DSL code remain in the file.
 
 ## Static expressions
 
-The default path accepts regexp and string literals, arrays of supported
-values, constants, ranges, interpolation whose values are static, `.freeze`,
-and `Regexp.union`. A call whose value depends on runtime state raises
+The default path accepts regexp and string literals, arrays and hashes of
+supported values, constants, ranges, interpolation whose values are static,
+`.freeze`, and `Regexp.union`. Constants follow Ruby source order. A call whose value depends on runtime state raises
 `FLEXR-E017`. See the [static-expression reference](../reference/generated-artifacts.md)
 for the exact boundary.
 

@@ -25,4 +25,5 @@ module Flexr
   class CompileError < Error; end
   class UnsupportedRegexpError < CompileError; end
   class StaticResolutionError < CompileError; end
+  class FrozenSpecificationError < Error; end
 end

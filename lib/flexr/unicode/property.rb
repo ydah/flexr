@@ -21,17 +21,17 @@ module Flexr
       module_function
 
       def ranges(name, negate: false)
-        key = [name.to_s, negate]
+        canonical = canonical_name(name)
+        key = [canonical, negate]
         return CACHE[key] if CACHE.key?(key)
 
-        canonical = canonical_name(name)
         ranges = if canonical.start_with?("POSIX_")
           posix_ranges(canonical.delete_prefix("POSIX_"))
         else
           property_ranges(canonical, name)
         end
         ranges = complement(ranges) if negate
-        CACHE[key] = ranges.map(&:dup).freeze
+        CACHE[key] = ranges.map { |range| range.dup.freeze }.freeze
       end
 
       def canonical_name(name)

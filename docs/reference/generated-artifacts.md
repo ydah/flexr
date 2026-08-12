@@ -27,6 +27,14 @@ Methods with runtime-dependent results, `Time`, IO, environment reads, and
 arbitrary dynamic calls produce `FLEXR-E017`. `--eval` is the explicit escape
 hatch and executes the complete specification.
 
+Constants are resolved in source order, array splats are flattened with Ruby
+semantics, and regexp interpolation retains the embedded regexp's options.
+Receiver-qualified DSL calls, DSL hidden in conditionals or other unsupported
+control flow, unknown DSL keywords, and files containing multiple candidate
+lexer classes fail closed with `FLEXR-E017`. A file intended for static
+generation should contain one lexer class and place DSL statements directly in
+that class or a `state`/`all_states` body.
+
 ## Source transformation
 
 The generator removes DSL call spans, inserts `Flexr::Generated.install_compiled!`,

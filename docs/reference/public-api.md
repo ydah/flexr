@@ -27,8 +27,9 @@ in the reference pages and are covered by the test suite.
 - Any future backend or option explicitly marked experimental in its reference.
 
 Experimental behavior may change semantics or output between minor releases.
-`firstmatch` requires the opt-in and generation performs a deterministic
-differential check against the table matcher.
+`firstmatch` requires the opt-in. Runtime and generated `firstmatch` modes use
+the same rule-order semantics; overlap with longest-match behavior is reported
+as `FLEXR-W010` rather than making generation fail.
 
 ## Internal; compatibility is not guaranteed
 

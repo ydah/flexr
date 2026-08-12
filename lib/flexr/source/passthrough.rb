@@ -9,26 +9,25 @@ module Flexr
       module_function
 
       def remove_spans(source, spans, insertion:, payload:)
-        result = source.dup
-        top_level = spans.reject do |span|
-          spans.any? do |outer|
-            next false if outer.equal?(span)
+        rewrite(source, spans.map { |start_offset, end_offset| [start_offset, end_offset, ""] },
+                insertion: insertion, payload: payload)
+      end
 
-            outer.first <= span.first && span.last <= outer.last &&
-              (outer.first < span.first || span.last < outer.last)
-          end
+      def rewrite(source, edits, insertion:, payload:)
+        result = source.dup
+        normalized_edits = edits.map do |start_offset, end_offset, replacement|
+          start_offset = line_start_offset(source, start_offset) if replacement.empty? && start_offset != insertion
+          [start_offset, end_offset, replacement]
         end
-        removals = top_level.map do |start_offset, end_offset|
-          start_offset = line_start_offset(source, start_offset) unless start_offset == insertion
-          [start_offset, end_offset]
-        end
-        adjusted_insertion = insertion - removals.sum do |start_offset, end_offset|
+        validate_non_overlapping!(normalized_edits)
+        adjusted_insertion = insertion + normalized_edits.sum do |start_offset, end_offset, replacement|
           next 0 if start_offset >= insertion
 
-          [end_offset, insertion].min - start_offset
+          replaced_size = [end_offset, insertion].min - start_offset
+          replacement.bytesize - replaced_size
         end
-        removals.sort_by(&:first).reverse_each do |start_offset, end_offset|
-          result.slice!(start_offset...end_offset)
+        normalized_edits.sort_by(&:first).reverse_each do |start_offset, end_offset, replacement|
+          result[start_offset...end_offset] = replacement
         end
         result.insert(adjusted_insertion, payload)
         result
@@ -71,6 +70,14 @@ module Flexr
 
       def magic_comment?(line)
         ENCODING_COMMENT.match?(line) || FROZEN_COMMENT.match?(line)
+      end
+
+      def validate_non_overlapping!(edits)
+        edits.sort_by(&:first).each_cons(2) do |left, right|
+          next if left[1] <= right[0]
+
+          raise ArgumentError, "overlapping source edits"
+        end
       end
     end
   end

@@ -21,9 +21,9 @@ it uses table dispatch. The effective backend is recorded in generated headers.
 ## `firstmatch`
 
 Experimental compatibility behavior. It requires `option :experimental` and
-can return a shorter match merely because its rule appears earlier. Generation
-compares a deterministic input corpus with the table matcher and aborts if the
-results differ.
+can return a shorter match merely because its rule appears earlier. Runtime and
+generated artifacts preserve that same behavior. Potential differences from
+the stable longest-match backends are reported with `FLEXR-W010`.
 
 ## Acceleration and packing
 

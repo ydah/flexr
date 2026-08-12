@@ -6,7 +6,7 @@ module Flexr
       attr_reader :transitions, :accepts, :ec, :class_count, :start, :states, :rule_ids, :packed, :direct
 
       def initialize(transitions:, accepts:, ec:, class_count:, start:, rule_ids:, packed: nil, direct: nil)
-        @transitions = transitions.freeze
+        @transitions = transitions.map(&:freeze).freeze
         @accepts = accepts.map do |rules|
           rules.map do |acceptance|
             next acceptance if acceptance.is_a?(Acceptance)
@@ -20,8 +20,9 @@ module Flexr
         @start = start
         @states = transitions.length
         @rule_ids = rule_ids.map { |id| id.respond_to?(:rule_index) ? id.rule_index : id }.uniq.sort.freeze
-        @packed = packed
-        @direct = direct
+        @packed = freeze_representation(packed)
+        @direct = freeze_representation(direct)
+        freeze
       end
 
       def transition(state, byte)
@@ -64,6 +65,15 @@ module Flexr
 
       def stats
         { states: states, classes: class_count, accepting_states: accepts.count { |rules| !rules.empty? } }
+      end
+
+      private
+
+      def freeze_representation(representation)
+        return unless representation
+
+        representation.each_value { |value| value.freeze if value.respond_to?(:freeze) }
+        representation.freeze
       end
     end
 

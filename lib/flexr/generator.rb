@@ -8,7 +8,7 @@ module Flexr
     INLINE_EMIT_ARGUMENTS = /\A(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line)(?:\s*,\s*(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line))*\z/
 
     RUNTIME_SOURCES = %w[
-      version.rb errors.rb diagnostics.rb ir.rb
+      version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
       regexp/ast.rb regexp/parser.rb regexp/normalizer.rb regexp/unsupported.rb regexp/char_class.rb
       unicode/utf8_splitter.rb unicode/data/properties.rb unicode/data/case_folding.rb unicode/property.rb unicode/reference_regexp.rb unicode/case_fold.rb
       automaton/byte_class_set.rb automaton/nfa.rb automaton/dfa.rb automaton/compiler.rb
@@ -54,10 +54,10 @@ module Flexr
       install = "#{install}#{generated_action_source(parsed, indent)}"
       install = "#{install}#{Codegen::Direct.new(compiled).source(indent: indent)}#{indent}" if
         effective_backend(parsed) == :direct
-      removed_spans = parsed.dsl_spans.dup
-      removed_spans.concat(parsed.flexr_require_spans) if standalone?(parsed)
-      result = Source::Passthrough.remove_spans(
-        parsed.source, removed_spans, insertion: parsed.first_dsl_offset, payload: install
+      edits = parsed.dsl_edits.dup
+      edits.concat(parsed.flexr_require_spans.map { |span| [*span, ""] }) if standalone?(parsed)
+      result = Source::Passthrough.rewrite(
+        parsed.source, edits, insertion: parsed.first_dsl_offset, payload: install
       )
       digest = Digest::SHA256.hexdigest(result)
       header = [
@@ -72,7 +72,7 @@ module Flexr
         "# eval: #{@eval_mode}",
         "# standalone: #{standalone?(parsed)}"
       ].join("\n")
-      prefix = standalone?(parsed) ? "require \"json\"\n#{embedded_runtime}\n" : ""
+      prefix = standalone?(parsed) ? "require \"json\"\nrequire \"monitor\"\n#{embedded_runtime}\n" : ""
       Source::Passthrough.insert_after_preamble(result, "#{header}\n#{prefix}")
     end
 
@@ -120,7 +120,6 @@ module Flexr
         eof_rules: parsed.config[:eof_rules] || {}, verbatim: parsed.source
       )
       compiled = Automaton::Compiler.new(spec).compile
-      validate_firstmatch_equivalence!(spec, compiled) if spec.backend == :firstmatch
       @resolved_backend = resolve_backend(spec.backend, compiled)
       parsed.rules.each do |rule|
         compiled_rule = spec.rules.fetch(rule.index)
@@ -151,66 +150,6 @@ module Flexr
         diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp or String")
         raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
-    end
-
-    def validate_firstmatch_equivalence!(spec, compiled)
-      return if spec.rules.any? do |rule|
-        rule.trailing || rule.patterns.any? { |pattern| reference_pattern?(pattern, unicode: spec.options[:unicode] == true) }
-      end
-
-      machine = compiled.machines.fetch(:initial).dfa
-      random = Random.new(17)
-      inputs = ["", "a", "aa", "aaa", "ba", "aab"]
-      inputs.concat(Array.new(9_994) do
-        Array.new(random.rand(10)) { random.rand(32..126) }.pack("C*")
-      end)
-      inputs.each do |input|
-        table = table_match(machine, input)
-        firstmatch = firstmatch_match(spec.rules, input)
-        next if table == firstmatch
-
-        raise CompileError, "firstmatch differs from table for #{input.inspect}: #{firstmatch.inspect} vs #{table.inspect}"
-      end
-    end
-
-    def reference_pattern?(pattern, unicode: false)
-      return false unless pattern.is_a?(::Regexp)
-      return true if pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
-
-      unicode && pattern.encoding != Encoding::BINARY && pattern.source.match?(/\\[dDwWsS]/)
-    end
-
-    def table_match(dfa, input)
-      state = dfa.start
-      best = nil
-      input.each_byte.with_index do |byte, index|
-        state = dfa.transition(state, byte)
-        break unless state
-
-        acceptance = dfa.accepts[state].select do |candidate|
-          !candidate.end_anchor || index + 1 == input.bytesize || input.getbyte(index + 1) == 0x0a
-        end.min_by(&:rule_index)
-        next unless acceptance
-
-        candidate = [acceptance.rule_index, index + 1]
-        best = candidate if best.nil? || candidate[1] > best[1] ||
-          (candidate[1] == best[1] && candidate[0] < best[0])
-      end
-      best
-    end
-
-    def firstmatch_match(rules, input)
-      rules.sort_by(&:index).each do |rule|
-        lengths = rule.patterns.filter_map do |pattern|
-          regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-          match = regexp.match(input, 0)
-          match&.begin(0)&.zero? ? match[0].bytesize : nil
-        rescue ArgumentError, RegexpError
-          nil
-        end
-        return [rule.index, lengths.max] unless lengths.empty?
-      end
-      nil
     end
 
     def compiled_expression(compiled, compression: :none, backend: :table)
@@ -288,6 +227,10 @@ module Flexr
       lines = ["#{indent}def __flexr_generated_execute(rule)", "#{indent}  case rule.index"]
       parsed.rules.each do |rule|
         lines << "#{indent}  when #{rule.index}"
+        if rule.bind_action
+          lines << "#{indent}    instance_exec(&self.class.__flexr_generated_actions.fetch(rule.index))"
+          next
+        end
         body = inline_action_body(rule)
         if body.nil?
           lines << "#{indent}    instance_exec(&rule.action)"

@@ -25,6 +25,11 @@ Creates one or more named states and registers rules in the block for those
 states. The block is required. Named states are exclusive by default. An
 inclusive state also sees rules registered for `:initial`.
 
+Nested state blocks register their rules for every enclosing state, matching
+Ruby runtime evaluation. Repeating a state declaration with a different
+`inclusive:` value raises immediately instead of silently retaining or replacing
+one declaration.
+
 ## `all_states(&block)`
 
 Registers the block for every state known when the call is evaluated, including
@@ -65,8 +70,9 @@ model is valid.
 
 Adds boolean options to the specification. Stable options include
 `:unicode`, `:eager_columns`, and `:allow_empty_match`. `:experimental` is a
-capability opt-in for experimental behavior such as `:firstmatch`. Unknown
-options are retained in generated configuration but may have no effect.
+capability opt-in for experimental behavior such as `:firstmatch`.
+`:standalone` is build metadata used by standalone generation. Unknown option
+names raise immediately so misspellings cannot silently change behavior.
 
 ## `accel(value)`
 
@@ -76,6 +82,14 @@ source of truth. Affected trailing-context rules cannot use region acceleration.
 
 ## Compilation helpers
 
-`compile!` and `dfa` exist for diagnostics and integration internals. They are
-not required for normal use and are not compatibility-stable; use the lexer
-constructor and token methods instead. See [public API](public-api.md).
+`compile!` and `dfa` exist for diagnostics and integration internals. The first
+compilation makes the specification immutable; later calls to `rule`, `state`,
+`backend`, `option`, and other declaration methods raise
+`Flexr::FrozenSpecificationError`. This keeps the compiled DFA and its DSL
+definition from diverging. These helpers are not required for normal use and
+are not compatibility-stable; use the lexer constructor and token methods
+instead. See [public API](public-api.md).
+
+Subclassing a custom lexer class starts a new, empty specification; rules and
+states are not inherited. This avoids silently changing rule order or state
+membership in the child class.

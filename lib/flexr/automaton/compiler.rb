@@ -225,6 +225,7 @@ module Flexr
 
         @spec.rules.each do |rule|
           raise CompileError, "rule #{rule.index} has no pattern" if rule.patterns.empty?
+          parse_regexp(rule.trailing) if rule.trailing.is_a?(::Regexp)
           next if @spec.options[:allow_empty_match]
 
           rule.patterns.each do |pattern|
