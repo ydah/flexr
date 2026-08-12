@@ -55,8 +55,6 @@ module Flexr
   class << self
     def compile_pattern(pattern, options: {})
       regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
-      return Automaton::ReferenceDFA.new(regexp, unicode: options[:unicode] == true) if
-        reference_pattern?(regexp, unicode: options[:unicode] == true)
       encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
       rule = IR::Rule.new(index: 0, patterns: [regexp], action: :skip, states: [:initial])
       state = IR::State.new(name: :initial, inclusive: true, id: 0)

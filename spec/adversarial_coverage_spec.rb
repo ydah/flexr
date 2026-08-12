@@ -266,10 +266,13 @@ RSpec.describe "adversarial boundary coverage" do
   it "covers low-level AST, Unicode, and representation boundaries" do
     ast = Flexr::Regexp::AST
     expect(ast::Empty.new(loc: nil).to_s).to eq("Empty")
+    expect(ast::Fail.new(loc: nil).to_s).to eq("Fail")
     expect(ast::ByteRange.new(lo: 1, hi: 2, loc: nil).to_s).to eq("ByteRange(1..2)")
     expect(ast::CodepointRange.new(lo: 65, hi: 90, loc: nil).to_s).to eq("CodepointRange(65..90)")
     expect(ast::Anchor.new(kind: :bol, loc: nil).to_s).to eq("Anchor(bol)")
     expect(ast::Star.new(child: ast::Empty.new(loc: nil), loc: nil).to_s).to eq("Star(Empty)")
+    expect(ast::Repeat.new(child: ast::Empty.new(loc: nil), minimum: 1, maximum: nil, loc: nil).to_s)
+      .to eq("Repeat(Empty, 1, ∞)")
     expect(ast::Seq.new(children: [ast::Empty.new(loc: nil)], loc: nil).to_s).to eq("Seq(Empty)")
     expect(ast::Alt.new(children: [ast::Empty.new(loc: nil)], loc: nil).to_s).to eq("Alt(Empty)")
     expect(ast::TrailMark.new(rule_id: 1, loc: nil).to_s).to include("TrailMark")

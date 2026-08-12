@@ -56,6 +56,8 @@ module Flexr
         when Regexp::AST::Empty
           state = @nfa.new_state
           [state, state]
+        when Regexp::AST::Fail
+          [@nfa.new_state, @nfa.new_state]
         when Regexp::AST::ByteRange
           from = @nfa.new_state
           to = @nfa.new_state
@@ -75,17 +77,52 @@ module Flexr
           end
           [from, to]
         when Regexp::AST::Star
-          from = @nfa.new_state
-          to = @nfa.new_state
-          child_start, child_end = fragment(node.child)
-          @nfa.epsilon(from, to)
-          @nfa.epsilon(from, child_start)
-          @nfa.epsilon(child_end, child_start)
-          @nfa.epsilon(child_end, to)
-          [from, to]
+          repeat_fragment(node.child, 0, nil)
+        when Regexp::AST::Repeat
+          repeat_fragment(node.child, node.minimum, node.maximum)
         else
           raise CompileError, "cannot build NFA from #{node.class}"
         end
+      end
+
+      def repeat_fragment(child, minimum, maximum)
+        return fragment(Regexp::AST::Empty.new(loc: nil)) if maximum&.zero?
+        return star_fragment(child) if minimum.zero? && maximum.nil?
+
+        from = @nfa.new_state
+        cursor = from
+        last_start = nil
+        minimum.times do
+          child_start, child_end = fragment(child)
+          @nfa.epsilon(cursor, child_start)
+          cursor = child_end
+          last_start = child_start
+        end
+        if maximum.nil?
+          @nfa.epsilon(cursor, last_start)
+          return [from, cursor]
+        end
+
+        (maximum - minimum).times do
+          child_start, child_end = fragment(child)
+          next_cursor = @nfa.new_state
+          @nfa.epsilon(cursor, next_cursor)
+          @nfa.epsilon(cursor, child_start)
+          @nfa.epsilon(child_end, next_cursor)
+          cursor = next_cursor
+        end
+        [from, cursor]
+      end
+
+      def star_fragment(child)
+        from = @nfa.new_state
+        to = @nfa.new_state
+        child_start, child_end = fragment(child)
+        @nfa.epsilon(from, to)
+        @nfa.epsilon(from, child_start)
+        @nfa.epsilon(child_end, child_start)
+        @nfa.epsilon(child_end, to)
+        [from, to]
       end
     end
   end

@@ -140,6 +140,7 @@ module Flexr
       end
 
       def reference_rules?
+        return false unless @lexer.class.__flexr_config.backend == :firstmatch
         return @reference_rules unless @reference_rules.nil?
 
         @reference_rules = @lexer.class.__flexr_rules.any? do |rule|
@@ -310,7 +311,7 @@ module Flexr
 
       def minimum_ast_bytes(node, ignorecase: false)
         case node
-        when Regexp::AST::Empty, Regexp::AST::Anchor then 0
+        when Regexp::AST::Empty, Regexp::AST::Anchor, Regexp::AST::Fail then 0
         when Regexp::AST::ByteRange then 1
         when Regexp::AST::CodepointRange then utf8_length(node.lo)
         when Regexp::AST::CharClass
@@ -321,6 +322,7 @@ module Flexr
           ranges.map { |lo, _hi| utf8_length(lo) }.min || 1
         when Regexp::AST::Seq then node.children.sum { |child| minimum_ast_bytes(child, ignorecase: ignorecase) }
         when Regexp::AST::Alt then node.children.map { |child| minimum_ast_bytes(child, ignorecase: ignorecase) }.min || 0
+        when Regexp::AST::Repeat then node.minimum * minimum_ast_bytes(node.child, ignorecase: ignorecase)
         else minimum_unknown_bytes(node)
         end
       end
@@ -344,7 +346,7 @@ module Flexr
 
       def first_byte_ranges(node, options, binary: false)
         case node
-        when Regexp::AST::Empty, Regexp::AST::Anchor then []
+        when Regexp::AST::Empty, Regexp::AST::Anchor, Regexp::AST::Fail then []
         when Regexp::AST::ByteRange then [[node.lo, node.hi]]
         when Regexp::AST::CodepointRange
           ranges = options.anybits?(::Regexp::IGNORECASE) ? Unicode::CaseFold.ranges(node.lo, node.hi) : [[node.lo, node.hi]]
@@ -370,7 +372,7 @@ module Flexr
           ranges
         when Regexp::AST::Alt
           node.children.flat_map { |child| first_byte_ranges(child, options, binary: binary) }
-        when Regexp::AST::Star
+        when Regexp::AST::Star, Regexp::AST::Repeat
           first_byte_ranges(node.child, options, binary: binary)
         else
           first_byte_fallback
@@ -384,6 +386,7 @@ module Flexr
       def nullable?(node)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor, Regexp::AST::Star then true
+        when Regexp::AST::Repeat then node.minimum.zero? || nullable?(node.child)
         when Regexp::AST::Seq then node.children.all? { |child| nullable?(child) }
         when Regexp::AST::Alt then node.children.any? { |child| nullable?(child) }
         else false

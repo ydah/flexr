@@ -11,8 +11,10 @@ extends the selection end without extending the consumed token end.
 
 The matcher is byte-oriented so binary input and invalid UTF-8 have deterministic
 behavior. UTF-8 patterns still require valid codepoint boundaries before a
-match is accepted. The runtime and generated scanner share the compiled model;
-acceleration may skip self-loop bytes but cannot change the winner.
+match is accepted. Unicode properties and POSIX classes are expanded from the
+vendored UCD into this same model rather than matched by a separate host-regexp
+path. The runtime and generated scanner share the compiled model; acceleration
+may skip self-loop bytes but cannot change the winner.
 
 `firstmatch` is intentionally separate. It picks the first rule that has a
 matching alternative and therefore is useful only for compatibility migrations

@@ -151,7 +151,7 @@ RSpec.describe Flexr do
   end
 
   it "parses public patterns and rejects malformed regexp sources" do
-    expect(Flexr.parse_pattern(/a+/)).to be_a(Flexr::Regexp::AST::Seq)
+    expect(Flexr.parse_pattern(/a+/)).to be_a(Flexr::Regexp::AST::Repeat)
     expect(Flexr.compile_pattern(/[^a]/).accept?("あ")).to be(true)
 
     expect { Flexr::Regexp::Parser.new("a)").parse }

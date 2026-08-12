@@ -387,46 +387,8 @@ module Flexr
 
     def rexical_dfa_counterexample(regexps, automata)
       first, second = automata
-      queue = [[first.start, second.start, false, +"".b]]
-      visited = { [first.start, second.start, false] => true }
-      bytes = rexical_byte_representatives(first, second)
-
-      until queue.empty?
-        first_state, second_state, first_seen, input = queue.shift
-        bytes.each do |byte|
-          next_first = first_state && first.transition(first_state, byte)
-          next_second = second.transition(second_state, byte)
-          next unless next_second
-
-          next_input = input + byte.chr(Encoding::BINARY)
-          next_first_seen = first_seen || rexical_accepting?(first, next_first)
-          if next_first_seen && rexical_accepting?(second, next_second) &&
-              !rexical_accepting?(first, next_first)
-            lengths = rexical_match_lengths(regexps, next_input)
-            return lengths if lengths
-          end
-
-          key = [next_first, next_second, next_first_seen]
-          next if visited[key]
-
-          visited[key] = true
-          queue << [next_first, next_second, next_first_seen, next_input]
-        end
-      end
-      nil
-    end
-
-    def rexical_byte_representatives(first, second)
-      representatives = {}
-      256.times do |byte|
-        key = [first.ec[byte], second.ec[byte]]
-        representatives[key] ||= byte
-      end
-      representatives.values.sort_by { |byte| [byte.between?(32, 126) ? 0 : 1, byte] }
-    end
-
-    def rexical_accepting?(dfa, state)
-      state && !dfa.accepts.fetch(state).empty?
+      input = Automaton::Analysis.firstmatch_counterexample(first, second)
+      input && rexical_match_lengths(regexps, input)
     end
 
     def rexical_match_lengths(regexps, input)

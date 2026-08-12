@@ -30,6 +30,7 @@ module Flexr
       def source_for(node, ignorecase: false)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor then ""
+        when Regexp::AST::Fail then "(?!)"
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
         when Regexp::AST::CodepointRange then codepoint_class([[node.lo, node.hi]])
         when Regexp::AST::CharClass
@@ -48,6 +49,9 @@ module Flexr
         when Regexp::AST::Alt
           "(?:#{node.children.map { |child| source_for(child, ignorecase: ignorecase) }.join('|')})"
         when Regexp::AST::Star then "(?:#{source_for(node.child, ignorecase: ignorecase)})*"
+        when Regexp::AST::Repeat
+          maximum = node.maximum.nil? ? "" : node.maximum
+          "(?:#{source_for(node.child, ignorecase: ignorecase)}){#{node.minimum},#{maximum}}"
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"
         end

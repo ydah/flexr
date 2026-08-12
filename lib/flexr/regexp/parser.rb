@@ -12,6 +12,7 @@ module Flexr
         "word" => "Word", "space" => "Space"
       }.freeze
       POSIX_CLASSES = %w[alnum alpha blank cntrl digit graph lower print punct space upper xdigit].freeze
+      LITERAL_ESCAPES = (%w[. [ ] { } ( ) * + ? | ^ $ \\ / - #] + [" "]).freeze
 
       attr_reader :source
 
@@ -22,6 +23,12 @@ module Flexr
         @unicode = unicode
         @index = 0
         @class_depth = 0
+        offset = 0
+        @byte_offsets = [0]
+        source.each_char do |character|
+          offset += character.bytesize
+          @byte_offsets << offset
+        end
       end
 
       def parse
@@ -34,43 +41,46 @@ module Flexr
       private
 
       def parse_expression
+        starting = @index
         branches = [parse_sequence]
         branches << parse_sequence while consume?("|")
         return branches.first if branches.length == 1
 
-        AST::Alt.new(children: branches, loc: nil)
+        AST::Alt.new(children: branches, loc: span(starting))
       end
 
       def parse_sequence
+        starting = @index
         children = []
         children << parse_quantified until eof? || [")", "|"].include?(current)
-        return AST::Empty.new(loc: nil) if children.empty?
+        return AST::Empty.new(loc: span(starting)) if children.empty?
         return children.first if children.length == 1
 
-        AST::Seq.new(children: children, loc: nil)
+        AST::Seq.new(children: children, loc: span(starting))
       end
 
       def parse_quantified
+        starting = @index
         atom = parse_atom
         return atom unless ["*", "+", "?", "{"].include?(current)
 
         if consume?("*")
           reject_postfix_quantifier
-          return AST::Star.new(child: atom, loc: nil)
+          return AST::Repeat.new(child: atom, minimum: 0, maximum: nil, loc: span(starting))
         end
         if consume?("+")
           reject_postfix_quantifier
-          return AST::Seq.new(children: [atom, AST::Star.new(child: atom, loc: nil)], loc: nil)
+          return AST::Repeat.new(child: atom, minimum: 1, maximum: nil, loc: span(starting))
         end
         if consume?("?")
           reject_postfix_quantifier
-          return AST::Alt.new(children: [atom, AST::Empty.new(loc: nil)], loc: nil)
+          return AST::Repeat.new(child: atom, minimum: 0, maximum: 1, loc: span(starting))
         end
 
-        parse_repetition(atom)
+        parse_repetition(atom, starting)
       end
 
-      def parse_repetition(atom)
+      def parse_repetition(atom, starting)
         consume?("{")
         min = read_number
         max = if consume?(",")
@@ -80,8 +90,7 @@ module Flexr
         end
         expect("}")
         raise_syntax("invalid repetition") if min.nil? || (!max.nil? && max < min)
-        raise_syntax("open repetition is not supported") if max.nil?
-        if max > 1000
+        if (max || min) > 1000
           raise_diagnostic(
             diagnostic("FLEXR-E007", "repetition limit exceeds 1000",
                        help: "split the rule or use a smaller bounded repetition")
@@ -89,18 +98,11 @@ module Flexr
         end
         reject_postfix_quantifier
 
-        required = Array.new(min) { atom }
-        optional = Array.new(max - min) do
-          AST::Alt.new(children: [atom, AST::Empty.new(loc: nil)], loc: nil)
-        end
-        children = required + optional
-        return AST::Empty.new(loc: nil) if children.empty?
-        return children.first if children.length == 1
-
-        AST::Seq.new(children: children, loc: nil)
+        AST::Repeat.new(child: atom, minimum: min, maximum: max, loc: span(starting))
       end
 
       def parse_atom
+        starting = @index
         @escaped_value = false
         @last_ranges = nil
         return parse_group if consume?("(")
@@ -109,25 +111,28 @@ module Flexr
 
         if consume?(".")
           upper = @options.nobits?(::Regexp::MULTILINE) ? 0x0a - 1 : 0x10ffff
-          return AST::CharClass.new(ranges: [[0, upper], [0x0b, 0x10ffff]], negated: false, loc: nil)
+          return AST::CharClass.new(
+            ranges: [[0, upper], [0x0b, 0x10ffff]], negated: false, loc: span(starting)
+          )
         end
 
         if consume?("\\")
           parse_escape
-          return AST::CharClass.new(ranges: @last_ranges, negated: false, loc: nil) if @last_ranges
-          return codepoint_node(read_codepoint) if @escaped_value
+          return AST::CharClass.new(ranges: @last_ranges, negated: false, loc: span(starting)) if @last_ranges
+          return codepoint_node(read_codepoint, span(starting)) if @escaped_value
         end
 
         char = advance
         raise_syntax("unexpected end of expression") unless char
-        codepoint_node(char.ord)
+        codepoint_node(char.ord, span(starting))
       end
 
       def parse_group
+        starting = @index - 1
         saved_options = @options
         if consume?("?")
           prefix = parse_group_prefix
-          return AST::Empty.new(loc: nil) if prefix == :global
+          return AST::Empty.new(loc: span(starting)) if prefix == :global
         else
           warn_capture
         end
@@ -174,10 +179,11 @@ module Flexr
         @options = enabled ? (@options | bit) : (@options & ~bit)
       end
 
-      def codepoint_node(codepoint)
-        return AST::CodepointRange.new(lo: codepoint, hi: codepoint, loc: nil) if @options.nobits?(::Regexp::IGNORECASE)
+      def codepoint_node(codepoint, location)
+        return AST::CodepointRange.new(lo: codepoint, hi: codepoint, loc: location) if
+          @options.nobits?(::Regexp::IGNORECASE)
 
-        AST::CharClass.new(ranges: fold_ranges([[codepoint, codepoint]]), negated: false, loc: nil)
+        AST::CharClass.new(ranges: fold_ranges([[codepoint, codepoint]]), negated: false, loc: location)
       end
 
       def fold_ranges(ranges)
@@ -190,29 +196,51 @@ module Flexr
       end
 
       def parse_class
-        negated = consume?("^")
-        ranges = []
+        starting = @index - 1
         @class_depth += 1
-        until eof? || current == "]"
+        negated = consume?("^")
+        ranges = parse_class_union
+        while peek_prefix?("&&")
+          @index += 2
+          ranges = materialize_class_ranges(ranges, negated: negated)
+          negated = false
+          right = if consume?("[")
+            nested = parse_class
+            materialize_class_ranges(nested.ranges, negated: nested.negated)
+          else
+            materialize_class_ranges(parse_class_union, negated: false)
+          end
+          ranges = intersect_ranges(ranges, right)
+        end
+        expect("]")
+        ranges = merge_ranges(ranges)
+        ranges = fold_ranges(ranges) if @options.anybits?(::Regexp::IGNORECASE)
+        AST::CharClass.new(ranges: ranges, negated: negated, loc: span(starting))
+      ensure
+        @class_depth -= 1
+      end
+
+      def parse_class_union
+        ranges = []
+        until eof? || current == "]" || peek_prefix?("&&")
           if current == "[" && @source[@index, 2] == "[:"
             ranges.concat(parse_posix_class)
             next
           end
           first = parse_class_atom
-          if consume?("-") && current != "]"
-            last = parse_class_atom
-            ranges.concat(expand_class_range(first, last))
+          if consume?("-")
+            if current == "]"
+              ranges.concat(first)
+              ranges << [45, 45]
+            else
+              last = parse_class_atom
+              ranges.concat(expand_class_range(first, last))
+            end
           else
             ranges.concat(first)
           end
         end
-        expect("]")
-        @class_depth -= 1
-        ranges = merge_ranges(ranges)
-        ranges = fold_ranges(ranges) if @options.anybits?(::Regexp::IGNORECASE)
-        AST::CharClass.new(ranges: ranges, negated: negated, loc: nil)
-      ensure
-        @class_depth -= 1 if @class_depth.positive? && current != "]"
+        ranges
       end
 
       def parse_posix_class
@@ -261,12 +289,46 @@ module Flexr
         [[lo, hi]]
       end
 
+      def materialize_class_ranges(ranges, negated:)
+        concrete = ranges.flat_map do |range|
+          if range.first == AST::Property
+            Unicode::Property.ranges(range[2], negate: range[1])
+          else
+            [range]
+          end
+        end
+        concrete = merge_ranges(concrete)
+        negated ? complement_ranges(concrete) : concrete
+      end
+
+      def intersect_ranges(left, right)
+        result = []
+        left_index = 0
+        right_index = 0
+        while left_index < left.length && right_index < right.length
+          left_range = left[left_index]
+          right_range = right[right_index]
+          lo = [left_range.first, right_range.first].max
+          hi = [left_range.last, right_range.last].min
+          result << [lo, hi] if lo <= hi
+          if left_range.last < right_range.last
+            left_index += 1
+          else
+            right_index += 1
+          end
+        end
+        result
+      end
+
       def parse_escape
         @escaped_value = false
         @last_ranges = nil
         char = advance_raw
         raise_syntax("trailing backslash") unless char
         if ESCAPES.key?(char)
+          raise unsupported("octal escapes", "use an explicit hexadecimal escape") if
+            char == "0" && current&.match?(/[0-9]/)
+
           @escaped_value = true
           @last_codepoint = ESCAPES.fetch(char)
           return
@@ -299,14 +361,22 @@ module Flexr
           end
           assign_codepoint(digits)
           nil
-        when "G", "K", "b", "B", "A", "z", "Z", "1", "2", "3", "4", "5", "6", "7", "8", "9"
+        when "b"
+          raise unsupported("\\b", "use an explicit token boundary rule") unless @class_depth.positive?
+
+          @escaped_value = true
+          @last_codepoint = 0x08
+        when "G", "K", "B", "A", "z", "Z", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+             "g", "R", "X", "c", "C", "M"
           raise unsupported("\\#{char}", "use a state or followed_by: instead")
         when "k"
           read_until(">") if consume?("<")
           raise unsupported("backreferences", "split the rule into DFA-compatible states")
-        else
+        when *LITERAL_ESCAPES
           @escaped_value = true
           @last_codepoint = char.ord
+        else
+          raise unsupported("unknown escape \\#{char}", "remove the backslash or use a supported escape")
         end
       end
 
@@ -320,7 +390,7 @@ module Flexr
           "d" => [[48, 57]],
           "w" => [[48, 57], [65, 90], [95, 95], [97, 122]],
           "s" => [[9, 13], [32, 32]],
-          "h" => [[9, 9], [32, 32]]
+          "h" => [[48, 57], [65, 70], [97, 102]]
         }.fetch(char.downcase)
         return base unless char == char.upcase
 
@@ -339,10 +409,11 @@ module Flexr
       end
 
       def parse_anchor
+        starting = @index
         char = advance
-        return AST::Anchor.new(kind: :bol, loc: nil) if char == "^"
+        return AST::Anchor.new(kind: :bol, loc: span(starting)) if char == "^"
 
-        AST::Anchor.new(kind: :eol, loc: nil)
+        AST::Anchor.new(kind: :eol, loc: span(starting))
       end
 
       def validate_anchor_positions(node)
@@ -375,7 +446,7 @@ module Flexr
 
       def anchor_nodes(node)
         return [node] if node.is_a?(AST::Anchor)
-        return anchor_nodes(node.child) if node.is_a?(AST::Star)
+        return anchor_nodes(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat)
         return [] unless node.respond_to?(:children)
 
         node.children.flat_map { |child| anchor_nodes(child) }
@@ -383,7 +454,7 @@ module Flexr
 
       def anchor_nested_in_alternative?(node)
         return node.children.any? { |child| anchor_nodes(child).any? } if node.is_a?(AST::Alt)
-        return anchor_nested_in_alternative?(node.child) if node.is_a?(AST::Star)
+        return anchor_nested_in_alternative?(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat)
         return false unless node.respond_to?(:children)
 
         node.children.any? { |child| anchor_nested_in_alternative?(child) }
@@ -511,6 +582,10 @@ module Flexr
           @index += 1
           @index += 1 while @source[@index] && @source[@index] != "\n"
         end
+      end
+
+      def span(starting, ending = @index)
+        @byte_offsets.fetch(starting)...@byte_offsets.fetch(ending)
       end
     end
   end

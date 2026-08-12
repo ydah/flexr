@@ -48,11 +48,6 @@ module Flexr
         normalized = []
         rules.each do |rule|
           rule.pattern_conditions = []
-          if reference_rule?(rule)
-            validate_reference_patterns(rule)
-            next
-          end
-
           rule.patterns.each_with_index do |pattern, pattern_index|
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
             encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
@@ -76,32 +71,6 @@ module Flexr
 
       def empty_dfa
         DFA.new(transitions: [[nil]], accepts: [[]], ec: Array.new(256, 0), class_count: 1, start: 0, rule_ids: [])
-      end
-
-      def reference_rule?(rule)
-        rule.patterns.any? { |pattern| reference_pattern?(pattern) }
-      end
-
-      def reference_pattern?(pattern)
-        return false unless pattern.is_a?(::Regexp)
-        return true if pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
-
-        @spec.options[:unicode] == true && @spec.encoding != Encoding::BINARY &&
-          pattern.source.match?(/\\[dDwWsS]/)
-      end
-
-      def validate_reference_patterns(rule)
-        rule.patterns.each_with_index do |pattern, pattern_index|
-          regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-          encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
-          parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
-                                      unicode: @spec.options[:unicode] == true)
-          ast = parser.parse
-          _body, bol_only, end_anchor = strip_anchors(ast)
-          rule.pattern_conditions[pattern_index] = Acceptance.new(
-            rule_index: rule.index, pattern_index: pattern_index, bol_only: bol_only, end_anchor: end_anchor
-          )
-        end
       end
 
       def strip_anchors(ast)
@@ -131,35 +100,38 @@ module Flexr
 
       def contains_anchor?(node)
         return true if node.is_a?(Regexp::AST::Anchor)
+        return contains_anchor?(node.child) if node.is_a?(Regexp::AST::Repeat) || node.is_a?(Regexp::AST::Star)
         return false unless node.respond_to?(:children)
 
         node.children.any? { |child| contains_anchor?(child) }
       end
 
       def subset_construction(nfa, ec, class_count)
-        representatives = Array.new(class_count)
-        ec.each_with_index { |class_id, byte| representatives[class_id] ||= byte }
-        start_set = epsilon_closure(nfa, 1 << nfa.start)
+        closures = {}
+        closure_for = lambda do |state|
+          closures[state] ||= epsilon_closure_for(nfa, state)
+        end
+        transition_closures = indexed_transition_closures(nfa, ec, closure_for)
+        start_set = closure_for.call(nfa.start)
         sets = [start_set]
         ids = { start_set => 0 }
         transitions = []
         accepts = []
         queue = [start_set]
+        queue_index = 0
+        limit = @spec.options.fetch(:max_dfa_states, 100_000)
+        limit = 100_000 unless limit.is_a?(Integer) && limit.positive?
 
-        until queue.empty?
-          set = queue.shift
+        while queue_index < queue.length
+          set = queue.fetch(queue_index)
+          queue_index += 1
           state_id = ids.fetch(set)
           transitions[state_id] ||= Array.new(class_count)
           accepts[state_id] = accepting_rules(nfa, set)
-          class_count.times do |class_id|
-            moved = move(nfa, set, representatives[class_id])
-            next if moved.zero?
-            closure = epsilon_closure(nfa, moved)
+          move_closures(set, transition_closures).each do |class_id, closure|
             destination = ids[closure]
             unless destination
               destination = sets.length
-              limit = @spec.options.fetch(:max_dfa_states, 100_000)
-              limit = 100_000 unless limit.is_a?(Integer) && limit.positive?
               if destination >= limit
                 message = "DFA state limit exceeded while compiling rules #{@active_rule_ids.join(', ')}"
                 diagnostic = Diagnostics.error("FLEXR-E006", message,
@@ -180,13 +152,12 @@ module Flexr
         Minimizer.minimize(dfa)
       end
 
-      def epsilon_closure(nfa, set)
-        closure = set
-        stack = []
-        nfa.states.each_index { |id| stack << id if set.anybits?(1 << id) }
+      def epsilon_closure_for(nfa, state)
+        closure = 1 << state
+        stack = [state]
         until stack.empty?
-          state = stack.pop
-          nfa.states[state].epsilon.each do |target|
+          current = stack.pop
+          nfa.states[current].epsilon.each do |target|
             next if closure.anybits?(1 << target)
 
             closure |= 1 << target
@@ -196,28 +167,44 @@ module Flexr
         closure
       end
 
-      def move(nfa, set, byte)
-        moved = 0
-        nfa.states.each_index do |state|
-          next if set.nobits?(1 << state)
-
-          nfa.states[state].transitions.each do |transition|
-            next unless byte.between?(transition.lo, transition.hi)
-
-            moved |= 1 << transition.to
+      def indexed_transition_closures(nfa, ec, closure_for)
+        nfa.states.map do |state|
+          raw = {}
+          state.transitions.each do |transition|
+            transition.lo.upto(transition.hi).map { |byte| ec.fetch(byte) }.uniq.each do |class_id|
+              raw[class_id] = raw.fetch(class_id, 0) | (1 << transition.to)
+            end
+          end
+          raw.transform_values do |targets|
+            each_state_id(targets).reduce(0) { |closure, target| closure | closure_for.call(target) }
           end
         end
-        moved
+      end
+
+      def move_closures(set, transition_closures)
+        each_state_id(set).with_object({}) do |state, moves|
+          transition_closures.fetch(state).each do |class_id, closure|
+            moves[class_id] = moves.fetch(class_id, 0) | closure
+          end
+        end
       end
 
       def accepting_rules(nfa, set)
-        rules = []
-        nfa.states.each_index do |state|
-          next if set.nobits?(1 << state)
-
-          rules.concat(nfa.states[state].accepts)
+        rules = each_state_id(set).with_object([]) do |state, result|
+          result.concat(nfa.states[state].accepts)
         end
         rules.uniq.sort_by { |acceptance| [acceptance.rule_index, acceptance.pattern_index] }
+      end
+
+      def each_state_id(set)
+        return enum_for(__method__, set) unless block_given?
+
+        remaining = set
+        until remaining.zero?
+          bit = remaining & -remaining
+          yield bit.bit_length - 1
+          remaining ^= bit
+        end
       end
 
       def validate_rules
@@ -250,8 +237,6 @@ module Flexr
         present = compiled.machines.values.flat_map do |machine|
           machine.dfa.accepts.filter_map { |acceptances| acceptances.min_by(&:rule_index)&.rule_index }
         end
-        reference_rules = @spec.rules.select { |rule| reference_rule?(rule) && rule_active_anywhere?(rule) }
-        present.concat(reference_rules.map(&:index))
         shadowers = shadowed_rules(compiled)
         diagnostics.concat(@spec.rules.reject { |rule| present.include?(rule.index) }.map do |rule|
           winners = shadowers.fetch(rule.index, []).uniq.sort
@@ -343,10 +328,6 @@ module Flexr
         return [] unless @spec.backend == :firstmatch
 
         rules.combination(2).to_a
-      end
-
-      def rule_active_anywhere?(rule)
-        @spec.states.keys.any? { |state_name| rules_for(state_name).include?(rule) }
       end
 
       def capture_rules
