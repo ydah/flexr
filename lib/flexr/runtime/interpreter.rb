@@ -13,20 +13,24 @@ module Flexr
     class Interpreter
       def initialize(lexer)
         @lexer = lexer
+        klass = lexer.class
+        @compiled = klass.__flexr_compiled
+        @rules = klass.__flexr_rules
+        @config = klass.__flexr_config
       end
 
       def scan
-        machine = @lexer.class.__flexr_compiled.machines.fetch(@lexer.state)
+        machine = @compiled.machines.fetch(@lexer.state)
         position = @lexer.byte_pos
         return nil unless @lexer.valid_utf8_at?(position)
-        return scan_firstmatch(position) if @lexer.class.__flexr_config.backend == :firstmatch
+        return scan_firstmatch(position) if @config.backend == :firstmatch
         return scan_fast(machine, position) if fast_path?(machine)
 
         buffer = @lexer.buffer
         state = machine.dfa.start
         best = reference_match(position, buffer)
         cursor = position
-        best = consider_acceptances(machine, state, cursor, position, buffer, best) if @lexer.class.__flexr_config.options[:allow_empty_match]
+        best = consider_acceptances(machine, state, cursor, position, buffer, best) if @config.options[:allow_empty_match]
         acceleration_regions = acceleration_enabled? ? acceleration_regions_for(machine) : nil
 
         while buffer.ensure_available?(cursor + 1)
@@ -61,7 +65,7 @@ module Flexr
         buffer = @lexer.buffer
         dfa = machine.dfa
         accepts = dfa.accepts
-        rules = @lexer.class.__flexr_rules
+        rules = @rules
         transitions = dfa.transitions
         ec = dfa.ec
         direct = dfa.direct
@@ -69,7 +73,6 @@ module Flexr
         direct_classes = direct&.fetch(:classes)
         source = buffer.stable_source
         guarded_steps = @lexer.scan_steps_guarded?
-        scanned_steps = 0
         text_start = @lexer.more_text_start || position
         max_token_size = @lexer.max_token_size
         token_limit_required = @lexer.token_limit_required?
@@ -80,7 +83,6 @@ module Flexr
         if source && !guarded_steps && !token_limit_required
           while cursor < source.bytesize || buffer.ensure_available?(cursor + 1)
             byte = source.getbyte(cursor)
-            scanned_steps += 1
             state = if direct_nxt
               class_id = ec[byte]
               value = direct_nxt[(state * direct_classes) + class_id]
@@ -103,17 +105,12 @@ module Flexr
             best.end_pos = cursor
             best.total_end_pos = cursor
           end
-          @lexer.record_scan_steps!(scanned_steps)
           return best
         end
 
         while cursor < buffer.bytesize || buffer.ensure_available?(cursor + 1)
           byte = buffer.getbyte(cursor)
-          if guarded_steps
-            @lexer.consume_step!
-          else
-            scanned_steps += 1
-          end
+          @lexer.consume_step! if guarded_steps
           state = if direct_nxt
             class_id = ec[byte]
             value = direct_nxt[(state * direct_classes) + class_id]
@@ -140,7 +137,6 @@ module Flexr
           best.end_pos = cursor
           best.total_end_pos = cursor
         end
-        @lexer.record_scan_steps!(scanned_steps) unless guarded_steps
         best
       end
 
@@ -149,7 +145,7 @@ module Flexr
       def reference_match(position, buffer)
         return unless reference_rules?
 
-        candidates = @lexer.class.__flexr_rules.filter_map do |rule|
+        candidates = @rules.filter_map do |rule|
           next unless rule_active?(rule)
           next unless rule.patterns.any? { |pattern| reference_pattern?(pattern) }
 
@@ -186,10 +182,10 @@ module Flexr
       end
 
       def reference_rules?
-        return false unless @lexer.class.__flexr_config.backend == :firstmatch
+        return false unless @config.backend == :firstmatch
         return @reference_rules unless @reference_rules.nil?
 
-        @reference_rules = @lexer.class.__flexr_rules.any? do |rule|
+        @reference_rules = @rules.any? do |rule|
           rule.patterns.any? { |pattern| reference_pattern?(pattern) }
         end
       end
@@ -198,8 +194,8 @@ module Flexr
         @fast_paths ||= {}
         return @fast_paths[machine.dfa] if @fast_paths.key?(machine.dfa)
 
-        rules = machine.dfa.rule_ids.map { |rule_index| @lexer.class.__flexr_rules.fetch(rule_index) }
-        @fast_paths[machine.dfa] = !@lexer.class.__flexr_config.options[:allow_empty_match] &&
+        rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
+        @fast_paths[machine.dfa] = !@config.options[:allow_empty_match] &&
           !reference_rules? && rules.none?(&:trailing) &&
           rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
       end
@@ -208,13 +204,13 @@ module Flexr
         return false unless pattern.is_a?(::Regexp)
         return true if pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
 
-        @lexer.class.__flexr_config.options[:unicode] == true && @lexer.utf8_input? &&
+        @config.options[:unicode] == true && @lexer.utf8_input? &&
           pattern.source.match?(/\\[dDwWsS]/)
       end
 
       def scan_firstmatch(position)
         buffer = @lexer.buffer
-        @lexer.class.__flexr_rules.sort_by(&:index).each do |rule|
+        @rules.sort_by(&:index).each do |rule|
           next unless rule_active?(rule)
 
           matches = rule.patterns.each_with_index.filter_map do |pattern, pattern_index|
@@ -280,8 +276,8 @@ module Flexr
       def match_stream_pattern(pattern, subject, reference:)
         if reference
           Unicode::ReferenceRegexp.match(
-            pattern, subject, encoding: @lexer.class.__flexr_config.encoding,
-            options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
+            pattern, subject, encoding: @config.encoding,
+            options: pattern.options, unicode: @config.options[:unicode] == true
           )
         else
           pattern.match(subject, 0)
@@ -471,7 +467,7 @@ module Flexr
 
       def consider_acceptances(machine, state, cursor, position, buffer, best)
         machine.dfa.accepts[state].each do |acceptance|
-          candidate = @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+          candidate = @rules.fetch(acceptance.rule_index)
           next if acceptance.bol_only && !@lexer.beginning_of_line?
           next unless @lexer.utf8_boundary?(cursor)
           next unless !acceptance.end_anchor || end_anchor_match?(buffer, cursor)
@@ -494,7 +490,7 @@ module Flexr
       end
 
       def acceleration_enabled?
-        mode = @lexer.class.__flexr_config.options.fetch(:accel, :auto)
+        mode = @config.options.fetch(:accel, :auto)
         mode != :none && !(mode == :auto && @auto_acceleration_off)
       end
 
@@ -508,7 +504,7 @@ module Flexr
       end
 
       def accelerate(region, buffer, position, token_rule:, token_start:)
-        mode = @lexer.class.__flexr_config.options.fetch(:accel, :auto)
+        mode = @config.options.fetch(:accel, :auto)
         cursor = position
         matched = false
         loop do
@@ -563,7 +559,7 @@ module Flexr
       end
 
       def transition(dfa, state, byte)
-        return dfa.transition_direct(state, byte) if @lexer.class.__flexr_config.backend == :direct
+        return dfa.transition_direct(state, byte) if @config.backend == :direct
 
         dfa.transition(state, byte)
       end
@@ -577,7 +573,7 @@ module Flexr
 
           accepting = machine.dfa.accepts[region.state]
           next if accepting.any? do |acceptance|
-            rule = @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+            rule = @rules.fetch(acceptance.rule_index)
             acceptance.bol_only || acceptance.end_anchor || rule.trailing
           end
 
@@ -605,7 +601,7 @@ module Flexr
       def rule_active?(rule)
         return true if rule.states.include?(:initial) && @lexer.state == :initial
 
-        state = @lexer.class.__flexr_config.states.fetch(@lexer.state)
+        state = @config.states.fetch(@lexer.state)
         return true if state.inclusive && rule.states.include?(:initial)
 
         rule.states.include?(@lexer.state)

@@ -264,7 +264,7 @@ RSpec.describe "Flexr runtime" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/./) { emit :CHAR }
     end
-    input = "\xff".b.force_encoding(Encoding::UTF_8)
+    input = "\xff".b.force_encoding(Encoding::UTF_8).freeze
 
     expect(lexer_class.new(input, error_mode: :token).tokens).to eq([[:error, input]])
   end

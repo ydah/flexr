@@ -14,16 +14,24 @@ module Flexr
       raise ArgumentError, "cancellation must respond to call" if cancellation && !cancellation.respond_to?(:call)
 
       self.class.compile!
+      config = self.class.__flexr_config
       @buffer = Runtime::Buffer.new(
         input, chunk_size: chunk_size, max_buffer_size: max_buffer_size,
         retain_input: retain_input, filename: filename
       )
       @string_input = input.is_a?(String)
+      @stable_input_end = input.bytesize if @string_input && input.frozen?
+      @valid_utf8_input = @string_input && input.frozen? && (config.encoding != Encoding::UTF_8 || begin
+        bytes = input.encoding == Encoding::UTF_8 ? input : input.dup.force_encoding(Encoding::UTF_8)
+        bytes.valid_encoding?
+      end)
       @simple_location_input = @string_input && input.frozen? && retain_input &&
         input.ascii_only? && !input.include?("\n")
       @retain_input = retain_input
       @filename = filename
       @error_mode = error_mode
+      @token_kind = config.token_kind
+      @accel_mode = config.options.fetch(:accel, :auto)
       @max_token_size = max_token_size.to_i
       @token_limit_required = !@string_input || !input.frozen? || input.bytesize > @max_token_size
       @max_lookahead_size = (max_lookahead_size || max_token_size).to_i
@@ -54,6 +62,7 @@ module Flexr
       @on_error = nil
       @halted = false
       @interpreter = nil
+      @generated_scanner = generated_runtime? && respond_to?(:scan_one, true)
     end
 
     attr_reader :filename, :error_mode, :buffer, :max_token_size, :max_lookahead_size, :steps
@@ -69,11 +78,7 @@ module Flexr
 
       loop do
         return nil if @halted
-        if scan_steps_guarded?
-          consume_step!
-        else
-          @steps += 1
-        end
+        consume_step! if scan_steps_guarded?
 
         if eof? && @pending.nil?
           eof_action = self.class.__flexr_spec.eof_rules[@state]
@@ -95,7 +100,7 @@ module Flexr
         end
 
         @active_rule = nil
-        match = if generated_runtime? && respond_to?(:scan_one, true)
+        match = if @generated_scanner
           scan_one
         else
           (@interpreter ||= Runtime::Interpreter.new(self)).scan
@@ -130,7 +135,7 @@ module Flexr
         finalize_more
         ensure_progress!(match, scan_state, empty_match: empty_match) unless
           @position > match.start_pos && @non_progress_signatures.empty?
-        ensure_token_size!
+        ensure_token_size! if @token_limit_required
         update_position
         discard_consumed_input! unless @retain_input
         token = @pending
@@ -146,7 +151,7 @@ module Flexr
         token = next_token
         break unless token
 
-        if self.class.__flexr_config.token_kind == :yield
+        if @token_kind == :yield
           yield(*token)
         else
           yield token
@@ -205,6 +210,8 @@ module Flexr
     end
 
     def consume_step!(count = 1)
+      return unless scan_steps_guarded?
+
       @steps += count
       if @max_steps && @steps > @max_steps
         raise Runtime::StepLimitError.new(
@@ -226,16 +233,12 @@ module Flexr
       @token_limit_required
     end
 
-    def record_scan_steps!(count)
-      @steps += count
-    end
-
     def utf8_input?
       self.class.__flexr_config.encoding == Encoding::UTF_8
     end
 
     def valid_utf8_at?(position)
-      !utf8_input? || @buffer.valid_utf8_at?(position)
+      @valid_utf8_input || !utf8_input? || @buffer.valid_utf8_at?(position)
     end
 
     def utf8_boundary?(position)
@@ -262,7 +265,7 @@ module Flexr
     end
 
     def emit(type, value = text)
-      @pending = case self.class.__flexr_config.token_kind
+      @pending = case @token_kind
       when :struct
         Runtime::Token.new(type: type, value: value, location: last_location)
       else
@@ -423,6 +426,12 @@ module Flexr
     end
 
     def update_position
+      if @simple_location_input
+        @column += @match_end - @match_start
+        @bol = @match_end.zero?
+        return
+      end
+
       advance_location!(@match_start, @match_end)
       @bol = @match_end.zero? || @buffer.getbyte(@match_end - 1) == 0x0a
     end
@@ -446,6 +455,7 @@ module Flexr
     end
 
     def eof?
+      return @position >= @stable_input_end if @stable_input_end
       return @position >= @buffer.bytesize if @string_input
 
       @buffer.eof?(@position)
