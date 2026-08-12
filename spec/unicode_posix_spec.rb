@@ -119,6 +119,8 @@ RSpec.describe "Unicode POSIX and property matching" do
   it "includes UCD Other_Alphabetic in POSIX alpha and alnum" do
     other_alphabetic = Flexr::Unicode::Property.ranges("Other_Alphabetic")
     expect(other_alphabetic).not_to be_empty
+    expect(Flexr::Unicode::Data::PROPERTIES.fetch("Alnum")).to include([0x0345, 0x0345])
+    expect(Flexr::Unicode::Data::PROPERTIES.fetch("Word")).to include([0x0345, 0x0345])
 
     alpha = Flexr.compile_pattern(/[[:alpha:]]/)
     alnum = Flexr.compile_pattern(/[[:alnum:]]/)

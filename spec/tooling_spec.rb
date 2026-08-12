@@ -62,6 +62,25 @@ RSpec.describe "verification tooling" do
     expect(status).to be_success, stderr
   end
 
+  it "captures tokens and structured errors independently for mode comparisons" do
+    script = <<~RUBY
+      require "rake"
+      load "Rakefile"
+      tokens = Class.new(Flexr::Lexer) { rule(/a/) { emit :A } }
+      failure = Class.new(Flexr::Lexer) { rule(/a/) { raise ArgumentError, "action failed" } }
+
+      token_outcome = FlexrVerification.lexer_outcome(tokens, "a")
+      error_outcome = FlexrVerification.lexer_outcome(failure, "a")
+      abort token_outcome.inspect unless token_outcome == { kind: :tokens, tokens: [[:A, "a"]] }
+      abort error_outcome.inspect unless error_outcome.slice(:kind, :class, :message) == {
+        kind: :error, class: "ArgumentError", message: "action failed"
+      }
+    RUBY
+    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, chdir: root)
+
+    expect(status).to be_success, stderr
+  end
+
   it "fails benchmark verification when its baseline is missing" do
     missing = File.join(Dir.tmpdir, "flexr-missing-baseline-#{Process.pid}.json")
     _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "benchmark/run.rb",

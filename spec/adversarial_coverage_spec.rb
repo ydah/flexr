@@ -328,8 +328,36 @@ RSpec.describe "adversarial boundary coverage" do
       transitions: [[nil]], accepts: [[]], ec: Array.new(256, 0), class_count: 1, start: 0, rule_ids: []
     )
     expect(table_dfa.transition_direct(0, 65)).to be_nil
-    expect(Flexr::Automaton::ReferenceDFA.new(/a/).stats).to include(reference: true)
-    expect(Flexr::Automaton::ReferenceDFA.new(/a/).accept?("a")).to be(true)
+    rows = Flexr::Automaton::TransitionRows.new(2) { |state| [state] }
+    expect(rows[-1]).to be_nil
+    expect(rows[2]).to be_nil
+    expect(rows.fetch(0)).to eq([0])
+    expect { rows.fetch(2) }.to raise_error(IndexError)
+    expect(rows.each.to_a).to eq([[0], [1]])
+    expect(rows.each_index.to_a).to eq([0, 1])
+    expect(rows.materialized_count).to eq(2)
+
+    packed_dfa = Flexr::Automaton::DFA.new(
+      packed: { base: [0], default: [nil], next: [0], check: [0] },
+      state_count: 1, accepts: [[]], ec: Array.new(256, 0), class_count: 1, start: 0, rule_ids: []
+    )
+    expect(packed_dfa.transitions.to_a).to eq([[0]])
+    direct_dfa = Flexr::Automaton::DFA.new(
+      direct: { nxt: [0], classes: 1 }, accepts: [[]], ec: Array.new(256, 0), class_count: 1,
+      start: 0, rule_ids: []
+    )
+    expect(direct_dfa.states).to eq(1)
+    expect(direct_dfa.transitions.to_a).to eq([[0]])
+    expect do
+      Flexr::Automaton::DFA.new(
+        state_count: 1, accepts: [[]], ec: Array.new(256, 0), class_count: 1, start: 0, rule_ids: []
+      )
+    end.to raise_error(ArgumentError, /transition representation/)
+
+    reference = Flexr::Automaton::ReferenceDFA.new(/\p{L}/)
+    expect(reference.stats).to include(reference: true)
+    expect(reference.accept?("あ")).to be(true)
+    expect(reference.accept?("\xff".b)).to be(false)
     expect do
       Flexr::Automaton::NFABuilder.new.build([[Object.new, Flexr::Automaton::Acceptance.new(
         rule_index: 0, pattern_index: 0, bol_only: false, end_anchor: false
@@ -343,6 +371,8 @@ RSpec.describe "adversarial boundary coverage" do
     set = Flexr::DiagnosticSet.new << warning
     expect(set.each.to_a).to eq([warning])
     expect(set.render(color: :auto)).to include("warning[FLEXR-W001]")
+    expect(Flexr::ArtifactWriter.default_generated_path("lexer.source")).to eq("lexer.source.generated.rb")
+    expect { Flexr::Configuration.backend!(Object.new) }.to raise_error(ArgumentError, /backend/)
     expect { Flexr::Diagnostics.raise!(Flexr::Diagnostics.error("FLEXR-E014", "unsupported")) }
       .to raise_error(Flexr::UnsupportedRegexpError)
     expect { Flexr::Diagnostics.raise!(diagnostic) }.to raise_error(Flexr::CompileError)

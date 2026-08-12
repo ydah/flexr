@@ -86,6 +86,36 @@ module FlexrVerification
     codepoints.pack("U*")
   end
 
+  def merge_ranges(ranges)
+    ranges.sort_by(&:first).each_with_object([]) do |range, merged|
+      if merged.empty? || range.first > merged.last.last + 1
+        merged << range.dup
+      else
+        merged.last[1] = [merged.last.last, range.last].max
+      end
+    end
+  end
+
+  def lexer_outcome(lexer_class, input, **options)
+    { kind: :tokens, tokens: lexer_class.new(input.dup, **options).tokens }
+  rescue StandardError => e
+    {
+      kind: :error,
+      class: e.class.name,
+      message: e.message,
+      code: if e.respond_to?(:code)
+        e.code
+      elsif e.respond_to?(:diagnostic)
+        e.diagnostic&.code
+      end,
+      filename: e.respond_to?(:filename) ? e.filename : nil,
+      byte_pos: e.respond_to?(:byte_pos) ? e.byte_pos : nil,
+      line: e.respond_to?(:line) ? e.line : nil,
+      rule: e.respond_to?(:rule) ? e.rule : nil,
+      text: e.respond_to?(:text) ? e.text : nil
+    }
+  end
+
   def load_runtime(spec)
     class_name = runtime_class_name(spec)
     existing = constantize(class_name)
@@ -309,6 +339,14 @@ task "unicode:verify" do
       previous = hi
     end
   end
+  expected_alnum = FlexrVerification.merge_ranges(
+    properties.fetch("L") + properties.fetch("N") + properties.fetch("Other_Alphabetic")
+  )
+  abort "vendored Alnum table is stale" unless properties.fetch("Alnum") == expected_alnum
+
+  expected_word = FlexrVerification.merge_ranges(expected_alnum + [[0x5f, 0x5f]])
+  abort "vendored Word table is stale" unless properties.fetch("Word") == expected_word
+
   scalar_count = 0
   (0..0x10_ffff).each do |codepoint|
     next if codepoint.between?(0xd800, 0xdfff)
@@ -359,6 +397,9 @@ namespace :test do
     random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
     unicode_inputs = ["", "a", "あ", "é", "ß", "Ω", "١", "　", "aあ", "éΩ", [0x18db8].pack("U")].freeze
     compiled = {}
+    host_patterns = {}
+    independent_cases = 0
+    version_mismatches = 0
     cases.times do
       pattern = patterns[random.rand(patterns.length)]
       input = if random.rand(3).zero?
@@ -366,26 +407,38 @@ namespace :test do
       else
         Array.new(random.rand(10)) { random.rand(32..126) }.pack("C*")
       end
-      expected = if Flexr.reference_pattern?(pattern)
+      key = [pattern.source, pattern.options]
+      host_expected = begin
+        (host_patterns[key] ||= Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options)).match?(input)
+      rescue RegexpError, ArgumentError, EncodingError
+        false
+      end
+      if Flexr.reference_pattern?(pattern)
         reference = Flexr::Unicode::ReferenceRegexp.compiled(
           pattern, encoding: pattern.encoding, options: pattern.options, unicode: false
         )
         match = reference.match(input, 0)
-        if match
+        vendored_expected = if match
           match.begin(0).zero? && match[0].bytesize == input.bytesize
         else
           false
         end
-      else
-        Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options).match?(input)
+        unless vendored_expected == host_expected
+          version_mismatches += 1
+          next
+        end
       end
-      key = [pattern.source, pattern.options]
+      independent_cases += 1
       actual = (compiled[key] ||= Flexr.compile_pattern(pattern)).accept?(input)
-      next if expected == actual
+      next if host_expected == actual
 
-      abort "differential mismatch: #{pattern.inspect} #{input.inspect} expected=#{expected} actual=#{actual}"
+      abort "differential mismatch: #{pattern.inspect} #{input.inspect} " \
+            "expected=#{host_expected} actual=#{actual}"
     end
-    puts "differential: #{cases} cases passed"
+    abort "differential did not exercise an independent host oracle" if independent_cases.zero?
+
+    puts "differential: #{independent_cases} independent cases passed " \
+         "(#{version_mismatches} host/vendored Unicode differences skipped)"
   end
 end
 
@@ -419,13 +472,12 @@ task :fuzz do
         (FlexrVerification.random_unicode_string(random, max_codepoints: 16) +
           Array.new(random.rand(64)) { random.rand(32..126) }.pack("C*")).force_encoding(Encoding::UTF_8)
       end
-      runtime_tokens = runtime_lexer.new(input, error_mode: :panic).tokens
-      generated_tokens = generated_lexer.new(input, error_mode: :panic).tokens
-      next if runtime_tokens == generated_tokens
+      runtime_outcome = FlexrVerification.lexer_outcome(runtime_lexer, input, error_mode: :panic)
+      generated_outcome = FlexrVerification.lexer_outcome(generated_lexer, input, error_mode: :panic)
+      next if runtime_outcome == generated_outcome
 
-      abort "fuzz mode mismatch: #{spec} input=#{input.inspect} runtime=#{runtime_tokens.inspect} generated=#{generated_tokens.inspect}"
-    rescue Flexr::LexError, ArgumentError, EncodingError
-      # Invalid input and user-defined error actions are expected fuzz outcomes.
+      abort "fuzz mode mismatch: #{spec} input=#{input.inspect} " \
+            "runtime=#{runtime_outcome.inspect} generated=#{generated_outcome.inspect}"
     end
   ensure
     FileUtils.rm_f(generated_path) if generated_path
