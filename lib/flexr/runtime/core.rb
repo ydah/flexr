@@ -19,9 +19,13 @@ module Flexr
         retain_input: retain_input, filename: filename
       )
       @string_input = input.is_a?(String)
+      @simple_location_input = @string_input && input.frozen? && retain_input &&
+        input.ascii_only? && !input.include?("\n")
+      @retain_input = retain_input
       @filename = filename
       @error_mode = error_mode
       @max_token_size = max_token_size.to_i
+      @token_limit_required = !@string_input || !input.frozen? || input.bytesize > @max_token_size
       @max_lookahead_size = (max_lookahead_size || max_token_size).to_i
       @max_state_stack = max_state_stack.to_i
       @max_steps = max_steps&.to_i
@@ -65,7 +69,11 @@ module Flexr
 
       loop do
         return nil if @halted
-        consume_step!
+        if scan_steps_guarded?
+          consume_step!
+        else
+          @steps += 1
+        end
 
         if eof? && @pending.nil?
           eof_action = self.class.__flexr_spec.eof_rules[@state]
@@ -120,10 +128,11 @@ module Flexr
         @active_rule = match.rule
         execute(match.rule)
         finalize_more
-        ensure_progress!(match, scan_state, empty_match: empty_match)
+        ensure_progress!(match, scan_state, empty_match: empty_match) unless
+          @position > match.start_pos && @non_progress_signatures.empty?
         ensure_token_size!
         update_position
-        discard_consumed_input!
+        discard_consumed_input! unless @retain_input
         token = @pending
         @pending = nil
         return token if token
@@ -207,6 +216,18 @@ module Flexr
       raise Runtime::CancelledError.new(
         filename: @filename, byte_pos: @position, line: @line, rule: rule_index(@active_rule)
       )
+    end
+
+    def scan_steps_guarded?
+      !@max_steps.nil? || !@cancellation.nil?
+    end
+
+    def token_limit_required?
+      @token_limit_required
+    end
+
+    def record_scan_steps!(count)
+      @steps += count
     end
 
     def utf8_input?
@@ -385,6 +406,8 @@ module Flexr
     end
 
     def ensure_token_size!
+      return unless @token_limit_required
+
       actual_size = @match_end - @text_start
       defer_token_size_check!(actual_size, rule: @active_rule)
     end
@@ -418,7 +441,7 @@ module Flexr
       error!("unexpected byte #{bad.inspect}")
       token = @pending
       @pending = nil
-      discard_consumed_input!
+      discard_consumed_input! unless @retain_input
       token
     end
 
@@ -460,25 +483,49 @@ module Flexr
     end
 
     def advance_location!(starting, ending)
-      @line, @column = location_after(starting, ending, line: @line, column: @column)
+      return if ending <= starting
+
+      if @simple_location_input
+        @column += ending - starting
+        return
+      end
+
+      value = location_value(starting, ending)
+      location_bytes = value.valid_encoding? ? value : value.b
+      newline_count = location_bytes.count("\n")
+      if newline_count.zero?
+        @column += display_length(value)
+      else
+        tail = value.byteslice(((location_bytes.rindex("\n") || -1) + 1)..).to_s
+        @line += newline_count
+        @column = display_length(tail) + 1
+      end
     end
 
     def location_after(starting, ending, line:, column:)
       return [line, column] if ending <= starting
 
-      value = @buffer.byteslice(starting...ending).to_s
-      newline_count = value.b.count("\n")
+      value = location_value(starting, ending)
+      location_bytes = value.valid_encoding? ? value : value.b
+      newline_count = location_bytes.count("\n")
       return [line, column + display_length(value)] if newline_count.zero?
 
-      tail = value.byteslice(((value.b.rindex("\n") || -1) + 1)..).to_s
+      tail = value.byteslice(((location_bytes.rindex("\n") || -1) + 1)..).to_s
       [line + newline_count, display_length(tail) + 1]
     end
 
     def display_length(value)
       return value.bytesize unless utf8_input?
+      return value.bytesize if value.ascii_only?
 
-      utf8 = value.dup.force_encoding(Encoding::UTF_8)
+      utf8 = value.encoding == Encoding::UTF_8 ? value : value.dup.force_encoding(Encoding::UTF_8)
       utf8.valid_encoding? ? utf8.length : value.bytesize
+    end
+
+    def location_value(starting, ending)
+      return @matched if @matched && starting == @text_start && ending == @match_end
+
+      @buffer.byteslice(starting...ending).to_s
     end
 
     def discard_consumed_input!

@@ -245,6 +245,33 @@ RSpec.describe Flexr do
     FileUtils.rm_f(output) if output
   end
 
+  it "keeps generated anchor conditions when acceleration is disabled" do
+    path = File.join(Dir.tmpdir, "flexr-generated-anchor-#{Process.pid}.flexr.rb")
+    output = "#{path}.generated.rb"
+    File.write(path, <<~RUBY)
+      require "flexr"
+
+      class GeneratedAnchorFixture < Flexr::Lexer
+        option accel: :none
+        rule(/^a/) { emit :BOL_A }
+        rule(/a/) { emit :A }
+        rule(/\n/) { skip }
+      end
+    RUBY
+
+    Flexr::Generator.new(path, output: output).generate
+    load output
+
+    input = "aa\na"
+    expect(GeneratedAnchorFixture.new(input).tokens)
+      .to eq([[:BOL_A, "a"], [:A, "a"], [:BOL_A, "a"]])
+  ensure
+    Object.send(:remove_const, :GeneratedAnchorFixture) if
+      Object.const_defined?(:GeneratedAnchorFixture, false)
+    FileUtils.rm_f(path) if path
+    FileUtils.rm_f(output) if output
+  end
+
   it "preserves captured locals in generated action blocks" do
     path = File.join(Dir.tmpdir, "flexr-captured-action-#{Process.pid}.flexr.rb")
     output = "#{path}.generated.rb"

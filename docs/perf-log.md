@@ -54,3 +54,21 @@ the following local estimates (one iteration, `backend :direct`):
 
 The padded corpus can be reproduced with
 `FLEXR_JSON_PADDING_BYTES=100 ruby benchmark/corpora/generate_json.rb`.
+
+## 2026-08-12
+
+After adding bounded scanning and the compiler/generated-runtime
+optimizations, the same Ruby 4.0.0 host produced this three-iteration sample:
+
+| mode | MB/s | tokens/s | allocations/token | handwritten ratio |
+|---|---:|---:|---:|---:|
+| runtime | 1.291 | 460,930 | 5.2 | 0.204x |
+| generated | 1.129 | 403,388 | 5.21 | 0.178x |
+| handwritten | 6.337 | 2,263,297 | 3.4 | 1.000x |
+
+The portable regression comparison passes the recorded baseline ratios
+(0.101x runtime and 0.107x generated). The generated ratio in this sample is
+0.002 below the host-dependent 0.18x absolute floor, so the ordinary gate can
+still vary across runs on this host. `auto` acceleration now stops trying a
+region after repeated short runs, while explicit `strscan` and `regexp` modes
+remain fixed choices for workloads that have measured long runs.

@@ -285,6 +285,17 @@ RSpec.describe "Flexr runtime" do
     expect(lexer_class.new("aaaa", max_token_size: 4).tokens).to eq([[:WORD, "aaaa"]])
   end
 
+  it "keeps early token limits active for mutable String input" do
+    lexer_class = Class.new(Flexr::Lexer) do
+      rule(/a+/) { emit :A }
+    end
+    input = +"a"
+    lexer = lexer_class.new(input, max_token_size: 1)
+    input << "a"
+
+    expect { lexer.next_token }.to raise_error(Flexr::Runtime::TokenTooLargeError)
+  end
+
   it "enforces max_token_size before less can shorten the match" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/a+/) do

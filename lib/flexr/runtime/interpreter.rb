@@ -30,9 +30,10 @@ module Flexr
         acceleration_regions = acceleration_enabled? ? acceleration_regions_for(machine) : nil
 
         while buffer.ensure_available?(cursor + 1)
-          if acceleration_regions && (region = acceleration_regions[state])
+          if acceleration_regions && (region = acceleration_regions[state]) &&
+              !@disabled_auto_acceleration&.key?(region)
             acceptance = machine.dfa.accepts[state].first
-            token_rule = acceptance && @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+            token_rule = acceptance&.rule_index
             accelerated_end = accelerate(
               region, buffer, cursor, token_rule: token_rule, token_start: position
             )
@@ -50,8 +51,7 @@ module Flexr
 
           cursor += 1
           acceptance = machine.dfa.accepts[state].first
-          resource_rule = acceptance && @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
-          ensure_token_size!(cursor, position, rule: resource_rule)
+          ensure_token_size!(cursor, position, rule: acceptance&.rule_index)
           best = consider_acceptances(machine, state, cursor, position, buffer, best)
         end
         best
@@ -65,16 +65,58 @@ module Flexr
         transitions = dfa.transitions
         ec = dfa.ec
         direct = dfa.direct
+        direct_nxt = direct&.fetch(:nxt)
+        direct_classes = direct&.fetch(:classes)
+        source = buffer.stable_source
+        guarded_steps = @lexer.scan_steps_guarded?
+        scanned_steps = 0
+        text_start = @lexer.more_text_start || position
+        max_token_size = @lexer.max_token_size
+        token_limit_required = @lexer.token_limit_required?
         state = dfa.start
         cursor = position
         best = nil
 
+        if source && !guarded_steps && !token_limit_required
+          while cursor < source.bytesize || buffer.ensure_available?(cursor + 1)
+            byte = source.getbyte(cursor)
+            scanned_steps += 1
+            state = if direct_nxt
+              class_id = ec[byte]
+              value = direct_nxt[(state * direct_classes) + class_id]
+              value >= 0 ? value : nil
+            else
+              transitions[state][ec[byte]]
+            end
+            break unless state
+
+            cursor += 1
+            acceptance = accepts[state].first
+            next unless acceptance
+
+            rule = rules.fetch(acceptance.rule_index)
+            next if best && cursor == best.total_end_pos && rule.index > best.rule.index
+
+            best ||= (@match ||= Match.new)
+            best.rule = rule
+            best.start_pos = position
+            best.end_pos = cursor
+            best.total_end_pos = cursor
+          end
+          @lexer.record_scan_steps!(scanned_steps)
+          return best
+        end
+
         while cursor < buffer.bytesize || buffer.ensure_available?(cursor + 1)
           byte = buffer.getbyte(cursor)
-          @lexer.consume_step!
-          state = if direct
+          if guarded_steps
+            @lexer.consume_step!
+          else
+            scanned_steps += 1
+          end
+          state = if direct_nxt
             class_id = ec[byte]
-            value = direct[:nxt][(state * direct[:classes]) + class_id]
+            value = direct_nxt[(state * direct_classes) + class_id]
             value >= 0 ? value : nil
           else
             transitions[state][ec[byte]]
@@ -83,10 +125,13 @@ module Flexr
 
           cursor += 1
           acceptance = accepts[state].first
-          rule = acceptance && rules.fetch(acceptance.rule_index)
-          ensure_token_size!(cursor, position, rule: rule)
+          if token_limit_required
+            size = cursor - text_start
+            @lexer.defer_token_size_check!(size, rule: acceptance&.rule_index) if size > max_token_size
+          end
           next unless acceptance
 
+          rule = rules.fetch(acceptance.rule_index)
           next if best && cursor == best.total_end_pos && rule.index > best.rule.index
 
           best ||= (@match ||= Match.new)
@@ -95,6 +140,7 @@ module Flexr
           best.end_pos = cursor
           best.total_end_pos = cursor
         end
+        @lexer.record_scan_steps!(scanned_steps) unless guarded_steps
         best
       end
 
@@ -448,7 +494,8 @@ module Flexr
       end
 
       def acceleration_enabled?
-        @lexer.class.__flexr_config.options.fetch(:accel, :auto) != :none
+        mode = @lexer.class.__flexr_config.options.fetch(:accel, :auto)
+        mode != :none && !(mode == :auto && @auto_acceleration_off)
       end
 
       def reusable_match(rule, start_pos, end_pos, total_end_pos)
@@ -470,9 +517,10 @@ module Flexr
             return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)
           end
 
-          segment = buffer.byteslice(cursor...buffer.bytesize).to_s
-          binary = segment.encoding == ::Encoding::BINARY ? segment : segment.b
-          length = acceleration_length(region, binary, mode)
+          segment = buffer.source
+          segment_position = cursor - buffer.base_offset
+          length = acceleration_length(region, segment, segment_position, mode)
+          record_auto_acceleration_miss(region) if mode == :auto && length.to_i < 8
           return matched ? cursor : nil unless length&.positive?
 
           matched = true
@@ -483,18 +531,35 @@ module Flexr
         end
       end
 
-      def acceleration_length(region, binary, mode)
+      def acceleration_length(region, segment, position, mode)
+        if segment.encoding == Encoding::UTF_8 && region.utf8_regexp
+          regexp = region.utf8_regexp
+        else
+          segment = segment.b unless segment.encoding == Encoding::BINARY
+          regexp = region.regexp
+        end
         if %i[strscan auto].include?(mode) && defined?(::StringScanner)
           @acceleration_scanner ||= ::StringScanner.new("".b)
-          @acceleration_scanner.string = binary
-          @acceleration_scanner.pos = 0
-          @acceleration_scanner.skip(region.regexp)
+          @acceleration_scanner.string = segment
+          @acceleration_scanner.pos = position
+          @acceleration_scanner.skip(regexp)
         else
-          match = region.regexp.match(binary, 0)
-          match&.begin(0)&.zero? ? match.end(0) : nil
+          match = regexp.match(segment, position)
+          match&.begin(0) == position ? match.end(0) - position : nil
         end
       rescue ArgumentError
         nil
+      end
+
+      def record_auto_acceleration_miss(region)
+        @auto_acceleration_misses ||= Hash.new(0)
+        @auto_acceleration_misses[region] += 1
+        @auto_acceleration_miss_total = @auto_acceleration_miss_total.to_i + 1
+        @auto_acceleration_off = true if @auto_acceleration_miss_total >= 9
+        return if @auto_acceleration_misses[region] < 3
+
+        @disabled_auto_acceleration ||= {}
+        @disabled_auto_acceleration[region] = true
       end
 
       def transition(dfa, state, byte)

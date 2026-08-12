@@ -27,6 +27,8 @@ module Flexr
       end
 
       def bytesize
+        return @source.bytesize if @window_start.zero? && base_offset.zero?
+
         base_offset + retained_bytesize
       end
 
@@ -40,13 +42,23 @@ module Flexr
         @source.byteslice(@window_start..).to_s
       end
 
+      def stable_source
+        @source if @retain_input && @window_start.zero? && base_offset.zero?
+      end
+
       def getbyte(position)
+        return @source.getbyte(position) if @window_start.zero? && base_offset.zero? && position < @source.bytesize
+
         ensure_available?(position + 1)
         @source.getbyte(storage_position(position))
       end
 
       def byteslice(range, length = nil)
         ensure_range(range, length)
+        if @window_start.zero? && base_offset.zero?
+          return length ? @source.byteslice(range, length) : @source.byteslice(range)
+        end
+
         if length
           @source.byteslice(storage_position(range), length)
         else
