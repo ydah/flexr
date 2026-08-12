@@ -288,16 +288,12 @@ rescue Errno::ENOENT => e
 end
 
 task "direct:verify" do
-  unless defined?(RubyVM::InstructionSequence)
-    puts "direct: disassembly unavailable on #{RUBY_ENGINE}; skipped"
-    next
-  end
-
   spec = File.join(FlexrVerification::ROOT, "examples/json/lexer.flexr.rb")
-  disassembly = RubyVM::InstructionSequence.compile(FlexrVerification.generated_source(spec)).disasm
-  abort "direct dispatch did not compile to opt_case_dispatch" unless disassembly.include?("opt_case_dispatch")
+  source = Flexr::Generator.new(spec, options: { backend: :direct }).generate
+  abort "direct payload is missing its flattened transition representation" unless
+    source.include?("direct: {nxt:") && !source.include?("__flexr_generated_direct_transition")
 
-  puts "direct: opt_case_dispatch present"
+  puts "direct: single flattened representation present"
 end
 
 task "unicode:verify" do

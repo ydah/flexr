@@ -6,9 +6,11 @@ Use `--standalone` to embed the flexr runtime into the generated file:
 flexr lexer.flexr.rb --standalone -o lexer_standalone.rb
 ```
 
-The generated file removes `require "flexr"` and includes the runtime sources
-needed to execute the compiled tables. It can be loaded by a Ruby process that
-does not have the flexr gem installed:
+The generated file removes `require "flexr"` and includes only the runtime
+sources needed to execute its compiled tables. Compiler, generator, and
+minimizer sources are omitted. The regexp reference matcher and Unicode tables
+are included only when the selected backend or trailing context needs them. It
+can be loaded by a Ruby process that does not have the flexr gem installed:
 
 ```sh
 ruby -e 'load ARGV.fetch(0); p Lexer.new("12").tokens' lexer_standalone.rb

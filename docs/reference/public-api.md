@@ -20,6 +20,10 @@ else may change between releases without a deprecation cycle.
 Method arguments, return shapes, and diagnostics for this surface are described
 in the reference pages and are covered by the test suite.
 
+`require "flexr"` keeps the build tools lazy while preserving all public
+constants through autoload. Applications that want an explicit load boundary
+can require `flexr/runtime`, `flexr/generator`, or `flexr/cli` directly.
+
 ## Experimental
 
 - `backend :firstmatch` and `--backend firstmatch`.

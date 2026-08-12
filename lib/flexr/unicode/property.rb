@@ -2,8 +2,6 @@
 
 module Flexr
   module Unicode
-    VERSION = Data::VERSION
-
     module Property
       ALIASES = {
         "L" => "L", "Letter" => "L", "N" => "N", "Number" => "N", "Nd" => "Nd",

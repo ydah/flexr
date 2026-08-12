@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "runtime" unless defined?(Flexr::Lexer)
+
 module Flexr
   class Importer
     Result = Struct.new(:source, :warnings, :complete?, keyword_init: true)

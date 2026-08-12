@@ -52,15 +52,15 @@ module Flexr
         dfa_data = machine.fetch(:dfa)
         packed = decode_packed(dfa_data[:packed])
         dfa = Automaton::DFA.new(
-          transitions: dfa_data[:transitions] || inflate_packed(packed, dfa_data.fetch(:state_count),
-                                                                 dfa_data.fetch(:class_count)),
+          transitions: dfa_data[:transitions],
           accepts: dfa_data.fetch(:accepts),
           ec: dfa_data.fetch(:ec),
           class_count: dfa_data.fetch(:class_count),
           start: dfa_data.fetch(:start),
           rule_ids: dfa_data.fetch(:rule_ids),
           packed: packed,
-          direct: dfa_data[:direct]
+          direct: dfa_data[:direct],
+          state_count: dfa_data.fetch(:state_count)
         )
         Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym)
       end
@@ -126,24 +126,6 @@ module Flexr
       values.map { |value| value == nil_value ? nil : value }
     end
 
-    def inflate_packed(packed, state_count, class_count)
-      return nil unless packed
-
-      Array.new(state_count) do |state|
-        Array.new(class_count) do |class_id|
-          cursor = state
-          loop do
-            index = packed.fetch(:base).fetch(cursor) + class_id
-            break packed.fetch(:next).fetch(index) if packed.fetch(:check)[index] == cursor
-
-            fallback = packed[:fallback]&.fetch(cursor)
-            break packed.fetch(:default).fetch(cursor) unless fallback
-
-            cursor = fallback
-          end
-        end
-      end
-    end
   end
 
   module DSL

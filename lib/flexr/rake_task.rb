@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "runtime" unless defined?(Flexr::Lexer)
+require_relative "artifact_writer"
+require_relative "generator"
+
 module Flexr
   class RakeTask
     attr_accessor :spec, :output, :warn_as_error

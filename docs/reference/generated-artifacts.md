@@ -68,4 +68,10 @@ output is `*.generated.rb`.
 
 `--table-compression none|rows|full` controls row packing. `--table-format
 literal|packed` controls whether packed arrays are emitted as Ruby literals or
-Base64. These affect artifact size and loading cost, not matching semantics.
+Base64. Packed artifacts retain and query their packed representation; the
+dense row view is populated lazily only when an inspection API requests a row.
+These settings affect artifact size and loading cost, not matching semantics.
+
+Standalone output embeds a runtime core, not the compiler or generator. The
+regexp reference matcher and vendored Unicode tables are added only for a
+`firstmatch` backend or trailing-context rules that can use that matcher.

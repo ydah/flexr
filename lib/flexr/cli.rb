@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "runtime" unless defined?(Flexr::Lexer)
+require_relative "artifact_writer"
+require_relative "generator"
+require_relative "importer"
+require_relative "options"
+
 module Flexr
   module CLI
     COMMANDS = %w[check stats tokens dot explain trace bench import].freeze

@@ -3,8 +3,6 @@
 module Flexr
   module DSL
     DSL_METHODS = %i[rule state all_states on_eof emits backend token_kind encoding option accel].freeze
-    AUTO_DIRECT_CELL_THRESHOLD = 100_000
-
     def inherited(child)
       super
       child.__flexr_reset!
@@ -195,6 +193,7 @@ module Flexr
       @__flexr_rules.each do |rule|
         rule.patterns.freeze
         rule.states.freeze
+        rule.pattern_conditions&.each(&:freeze)
         rule.pattern_conditions&.freeze
         rule.freeze
       end
@@ -243,8 +242,7 @@ module Flexr
     end
 
     def auto_direct?(compiled)
-      cells = compiled.stats.values.map { |stats| stats[:states] * stats[:classes] }.max.to_i
-      cells > AUTO_DIRECT_CELL_THRESHOLD
+      Automaton::BackendCostModel.choose(compiled) == :direct
     end
   end
 end

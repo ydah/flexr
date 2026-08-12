@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+require "digest"
+require_relative "runtime" unless defined?(Flexr::Lexer)
+require_relative "artifact_writer"
+require_relative "codegen"
+require_relative "source"
+
 module Flexr
   class Generator
     attr_reader :diagnostics
@@ -9,12 +15,15 @@ module Flexr
 
     RUNTIME_SOURCES = %w[
       version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
-      regexp/ast.rb regexp/parser.rb regexp/normalizer.rb regexp/unsupported.rb regexp/char_class.rb
-      unicode/utf8_splitter.rb unicode/data/properties.rb unicode/data/case_folding.rb unicode/property.rb unicode/reference_regexp.rb unicode/case_fold.rb
-      automaton/byte_class_set.rb automaton/nfa.rb automaton/dfa.rb automaton/compiler.rb
-      automaton/analysis.rb automaton/minimizer.rb automaton/accel.rb
+      unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/analysis.rb automaton/accel.rb
       runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
       runtime/interpreter.rb runtime/core.rb dsl.rb lexer.rb generated.rb
+    ].freeze
+
+    MATCHER_RUNTIME_SOURCES = %w[
+      regexp/ast.rb regexp/parser.rb regexp/unsupported.rb
+      unicode/utf8_splitter.rb unicode/data/properties.rb unicode/data/case_folding.rb
+      unicode/property.rb unicode/reference_regexp.rb unicode/case_fold.rb
     ].freeze
 
     def initialize(path, output: nil, eval_mode: false, options: {})
@@ -52,8 +61,6 @@ module Flexr
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
       install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
-      install = "#{install}#{Codegen::Direct.new(compiled).source(indent: indent)}#{indent}" if
-        effective_backend(parsed) == :direct
       edits = parsed.dsl_edits.dup
       edits.concat(parsed.flexr_require_spans.map { |span| [*span, ""] }) if standalone?(parsed)
       result = Source::Passthrough.rewrite(
@@ -72,7 +79,7 @@ module Flexr
         "# eval: #{@eval_mode}",
         "# standalone: #{standalone?(parsed)}"
       ].join("\n")
-      prefix = standalone?(parsed) ? "require \"json\"\nrequire \"monitor\"\n#{embedded_runtime}\n" : ""
+      prefix = standalone?(parsed) ? "require \"json\"\nrequire \"monitor\"\n#{embedded_runtime(parsed)}\n" : ""
       Source::Passthrough.insert_after_preamble(result, "#{header}\n#{prefix}")
     end
 
@@ -136,8 +143,7 @@ module Flexr
       return requested unless requested == :auto
       return :table unless compiled
 
-      cells = compiled.stats.values.map { |stats| stats[:states] * stats[:classes] }.max.to_i
-      cells > DSL::AUTO_DIRECT_CELL_THRESHOLD ? :direct : :table
+      Automaton::BackendCostModel.choose(compiled)
     end
 
     def normalize_trailing(value)
@@ -164,7 +170,9 @@ module Flexr
           rule_ids: dfa.rule_ids
         }
         pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
-        if pack_tables
+        if backend == :direct
+          data[:direct] = Codegen::Direct.new(compiled).generate(state: name)
+        elsif pack_tables
           packed = Codegen::TablePacker.pack(dfa.transitions, compression: compression)
           data[:packed] = if @options.fetch(:table_format, :literal).to_sym == :packed
             Codegen::TablePacker.encode(packed)
@@ -174,7 +182,6 @@ module Flexr
         else
           data[:transitions] = dfa.transitions
         end
-        data[:direct] = Codegen::Direct.new(compiled).generate(state: name) if backend == :direct
         "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)} }"
       end
       # W016 is derived from wall-clock compilation time and must not make
@@ -201,10 +208,16 @@ module Flexr
       @options.fetch(:table_compression, parsed.config[:options]&.fetch(:table_compression, :rows) || :rows).to_sym
     end
 
-    def embedded_runtime
-      RUNTIME_SOURCES.map do |relative|
+    def embedded_runtime(parsed)
+      sources = RUNTIME_SOURCES.dup
+      sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
+      sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__))
       end.join("\n")
+    end
+
+    def matcher_runtime?(parsed)
+      effective_backend(parsed) == :firstmatch || parsed.rules.any?(&:trailing)
     end
 
     def encoding_expression(encoding)

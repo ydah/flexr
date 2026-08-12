@@ -2,9 +2,6 @@
 
 module Flexr
   module Automaton
-    CompiledSpec = Struct.new(:machines, :rules, :states, :stats, :diagnostics, keyword_init: true)
-    Machine = Struct.new(:dfa, :state_name, keyword_init: true)
-
     class Compiler
       def initialize(spec)
         @spec = spec

@@ -279,7 +279,11 @@ RSpec.describe Flexr do
     expect(generated).to include("encoding: :base64")
     expect(generated).not_to include("transitions:")
     load output
+    dfa = GeneratedFixture::Lexer.compile!.machines.fetch(:initial).dfa
+    expect(dfa.transitions).to be_a(Flexr::Automaton::TransitionRows)
+    expect(dfa.transitions.materialized_count).to eq(0)
     expect(GeneratedFixture::Lexer.new("42").tokens).to eq([[:INT, 42]])
+    expect(dfa.transitions.materialized_count).to eq(0)
   ensure
     FileUtils.rm_f(output) if output
   end
@@ -328,11 +332,17 @@ RSpec.describe Flexr do
 
     generated = Flexr::Generator.new(spec, output: output).generate
 
-    expect(generated).to include("dispatch: :case", "case class_id")
+    expect(generated).to include("direct: {nxt:")
+    expect(generated).not_to include("dispatch:", "__flexr_generated_direct_transition", "case class_id")
+    expect(generated).not_to include("packed:", "transitions:")
     load output
     dfa = GeneratedDirectFixture.compile!.machines.fetch(:initial).dfa
     expect(dfa.direct).not_to be_nil
+    expect(dfa.packed).to be_nil
+    expect(dfa.transitions).to be_a(Flexr::Automaton::TransitionRows)
+    expect(dfa.transitions.materialized_count).to eq(0)
     expect(GeneratedDirectFixture.new("abc<123").tokens).to eq([[:WORD, "abc"], [:NUMBER, "123"]])
+    expect(dfa.transitions.materialized_count).to eq(0)
   ensure
     FileUtils.rm_f(spec) if spec
     FileUtils.rm_f(output) if output

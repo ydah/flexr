@@ -28,21 +28,15 @@ module Flexr
       def source(indent: "  ")
         lines = []
         lines << "#{indent}def scan_one"
-        lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless __flexr_generated_fast_path?"
         lines << "#{indent}  machine = self.class.__flexr_compiled.machines.fetch(state)"
         lines << "#{indent}  dfa = machine.dfa"
+        lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless __flexr_generated_fast_path?(dfa)"
         lines << "#{indent}  position = byte_pos"
         lines << "#{indent}  return nil unless valid_utf8_at?(position)"
         lines << "#{indent}  cursor = position"
         lines << "#{indent}  current = dfa.start"
         lines << "#{indent}  direct = dfa.direct"
-        simple = if simple_fast_path?
-          lines << "#{indent}  best = nil"
-          true
-        else
-          lines << "#{indent}  best = __flexr_generated_acceptance(dfa, current, position, position, nil)"
-          false
-        end
+        lines << "#{indent}  best = nil"
         lines << "#{indent}  accelerate = self.class.__flexr_config.options.fetch(:accel, :auto) != :none"
         lines << "#{indent}  while cursor < buffer.bytesize || buffer.ensure_available?(cursor + 1)"
         lines << "#{indent}    if accelerate"
@@ -70,20 +64,7 @@ module Flexr
         lines << "#{indent}    resource_acceptance = dfa.accepts[current].first"
         lines << "#{indent}    resource_rule = resource_acceptance && self.class.__flexr_rules.fetch(resource_acceptance.rule_index)"
         lines << "#{indent}    defer_token_size_check!(cursor - (more_text_start || position), rule: resource_rule)"
-        if simple
-          lines << "#{indent}    acceptance = dfa.accepts[current].first"
-          lines << "#{indent}    if acceptance"
-          lines << "#{indent}      rule = self.class.__flexr_rules.fetch(acceptance.rule_index)"
-          lines << "#{indent}      defer_token_size_check!(cursor - (more_text_start || position), rule: rule)"
-          lines << "#{indent}      best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
-          lines << "#{indent}      best.rule = rule"
-          lines << "#{indent}      best.start_pos = position"
-          lines << "#{indent}      best.end_pos = cursor"
-          lines << "#{indent}      best.total_end_pos = cursor"
-          lines << "#{indent}    end"
-        else
-          lines << "#{indent}    best = __flexr_generated_acceptance(dfa, current, position, cursor, best)"
-        end
+        lines << "#{indent}    best = __flexr_generated_acceptance(dfa, current, position, cursor, best)"
         lines << "#{indent}  end"
         lines << "#{indent}  best"
         lines << "#{indent}end"
@@ -131,16 +112,12 @@ module Flexr
         lines << "#{indent}    return cursor if cursor < buffer.bytesize || buffer.eof_loaded?"
         lines << "#{indent}  end"
         lines << "#{indent}end"
-        lines << "#{indent}def __flexr_generated_fast_path?"
-        lines << "#{indent}  return @__flexr_generated_fast_path if defined?(@__flexr_generated_fast_path)"
-        lines << "#{indent}  @__flexr_generated_fast_path = if self.class.__flexr_config.backend == :firstmatch ||"
-        lines << "#{indent}                                  self.class.__flexr_config.options[:allow_empty_match] == true"
-        lines << "#{indent}    false"
-        lines << "#{indent}  else"
-        lines << "#{indent}    self.class.__flexr_rules.none? do |rule|"
-        lines << "#{indent}      !rule.trailing.nil?"
-        lines << "#{indent}    end"
-        lines << "#{indent}  end"
+        lines << "#{indent}def __flexr_generated_fast_path?(dfa)"
+        lines << "#{indent}  @__flexr_generated_fast_paths ||= {}"
+        lines << "#{indent}  return @__flexr_generated_fast_paths[dfa] if @__flexr_generated_fast_paths.key?(dfa)"
+        lines << "#{indent}  rules = dfa.rule_ids.map { |rule_index| self.class.__flexr_rules.fetch(rule_index) }"
+        lines << "#{indent}  @__flexr_generated_fast_paths[dfa] = self.class.__flexr_config.backend != :firstmatch &&"
+        lines << "#{indent}    self.class.__flexr_config.options[:allow_empty_match] != true && rules.none?(&:trailing)"
         lines << "#{indent}end"
         lines << "#{indent}def __flexr_generated_acceptance(dfa, state, start_position, cursor, best)"
         lines << "#{indent}  dfa.accepts[state].each do |acceptance|"
@@ -162,13 +139,6 @@ module Flexr
         "#{lines.join("\n")}\n"
       end
 
-      def simple_fast_path?
-        compiled.rules.all? do |rule|
-          rule.trailing.nil? && rule.pattern_conditions.all? do |condition|
-            condition && !condition.bol_only && !condition.end_anchor
-          end
-        end
-      end
     end
   end
 end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "runtime" unless defined?(Flexr::Lexer)
+
 module Flexr
   Options = Struct.new(
     :backend, :token_kind, :accel, :standalone, :eval_mode, :table_compression,

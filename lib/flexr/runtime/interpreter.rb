@@ -20,7 +20,7 @@ module Flexr
         position = @lexer.byte_pos
         return nil unless @lexer.valid_utf8_at?(position)
         return scan_firstmatch(position) if @lexer.class.__flexr_config.backend == :firstmatch
-        return scan_fast(machine, position) if fast_path?
+        return scan_fast(machine, position) if fast_path?(machine)
 
         buffer = @lexer.buffer
         state = machine.dfa.start
@@ -148,11 +148,12 @@ module Flexr
         end
       end
 
-      def fast_path?
-        return @fast_path unless @fast_path.nil?
+      def fast_path?(machine)
+        @fast_paths ||= {}
+        return @fast_paths[machine.dfa] if @fast_paths.key?(machine.dfa)
 
-        rules = @lexer.class.__flexr_rules
-        @fast_path = !@lexer.class.__flexr_config.options[:allow_empty_match] &&
+        rules = machine.dfa.rule_ids.map { |rule_index| @lexer.class.__flexr_rules.fetch(rule_index) }
+        @fast_paths[machine.dfa] = !@lexer.class.__flexr_config.options[:allow_empty_match] &&
           !reference_rules? && rules.none?(&:trailing) &&
           rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
       end
@@ -497,10 +498,6 @@ module Flexr
       end
 
       def transition(dfa, state, byte)
-        if @lexer.class.__flexr_config.backend == :direct &&
-            @lexer.class.respond_to?(:__flexr_generated_direct_transition)
-          return @lexer.class.__flexr_generated_direct_transition(@lexer.state, state, byte)
-        end
         return dfa.transition_direct(state, byte) if @lexer.class.__flexr_config.backend == :direct
 
         dfa.transition(state, byte)

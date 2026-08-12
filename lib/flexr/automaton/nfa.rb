@@ -4,11 +4,6 @@ module Flexr
   module Automaton
     NFAState = Struct.new(:epsilon, :transitions, :accepts, keyword_init: true)
     NFATransition = Struct.new(:lo, :hi, :to, keyword_init: true)
-    Acceptance = Struct.new(:rule_index, :pattern_index, :bol_only, :end_anchor, keyword_init: true) do
-      def inspect
-        [rule_index, pattern_index, bol_only, end_anchor].inspect
-      end
-    end
 
     class NFA
       attr_reader :states, :start, :byte_classes

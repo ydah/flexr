@@ -8,15 +8,16 @@ target for `firstmatch`.
 
 ## `direct`
 
-The stable dense-dispatch backend. It emits a flattened dispatch structure for
-large machines and can reduce lookup overhead at the cost of artifact size.
-It preserves the table backend's longest-match behavior.
+The stable dense-dispatch backend. It emits one flattened transition structure
+and avoids retaining a second packed or row table. It can reduce lookup
+overhead at the cost of artifact size and preserves the table backend's
+leftmost-longest behavior.
 
 ## `auto`
 
-The stable selection policy. At compile time it chooses direct dispatch when the
-largest state-by-byte-class table exceeds the configured threshold, otherwise
-it uses table dispatch. The effective backend is recorded in generated headers.
+The stable selection policy. At compile time it compares estimated dense bytes,
+packed bytes, and lookup cost for each lexical-state machine. The effective
+backend is recorded in generated headers.
 
 ## `firstmatch`
 
@@ -30,4 +31,6 @@ the stable longest-match backends are reported with `FLEXR-W010`.
 Region acceleration and packed tables are representations, not semantic
 backends. `accel` can be disabled for debugging or equivalence tests. Table
 compression and packed Base64 output trade source size against loading cost;
-they do not change token streams.
+packed transitions are queried without creating a second dense table, and a
+dense row is materialized lazily only for inspection. These choices do not
+change token streams.

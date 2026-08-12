@@ -70,6 +70,48 @@ RSpec.describe "generated artifact safety" do
     end
   end
 
+  it "embeds only the runtime core for a compiled standalone lexer" do
+    Dir.mktmpdir("flexr-standalone-core-") do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      generated = Flexr::Generator.new(path, options: { standalone: true }).tap do
+        File.binwrite(path, lexer_source)
+      end.generate
+
+      expect(generated.bytesize).to be < 100_000
+      expect(generated).not_to include(
+        "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel"
+      )
+    end
+  end
+
+  it "adds the reference matcher only when a standalone lexer needs it" do
+    source = <<~RUBY
+      require "flexr"
+      class GeneratorSafetyFirstmatchLexer < Flexr::Lexer
+        backend :firstmatch
+        option :experimental
+        rule(/\\p{L}+/) { emit :WORD }
+      end
+    RUBY
+
+    Dir.mktmpdir("flexr-standalone-matcher-") do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      output = File.join(directory, "lexer.rb")
+      File.binwrite(path, source)
+      generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
+
+      expect(generated).to include("class Parser", "module Data")
+      expect(generated).not_to include("class Compiler", "class NFABuilder", "class BackendCostModel")
+      script = <<~RUBY
+        load ARGV.fetch(0)
+        abort "wrong tokens" unless
+          GeneratorSafetyFirstmatchLexer.new("日本語").tokens == [[:WORD, "日本語"]]
+      RUBY
+      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, output)
+      expect(status).to be_success, stderr
+    end
+  end
+
   it "preserves heredoc and DATA contents during standalone transformation" do
     source = <<~RUBY
       PAYLOAD = <<'TEXT'
