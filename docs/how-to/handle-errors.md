@@ -29,4 +29,7 @@ instance with `lexer.on_error = ->(error) { :skip }`, `:raise`, `:token`, or
 byte position, line, and text.
 
 `error!` creates the same error from an action. `max_token_size` protects the
-runtime from unexpectedly large tokens and raises `FLEXR-E012` when exceeded.
+runtime from unexpectedly large tokens and raises `FLEXR-E012` before the
+action runs. Lookahead, buffer, step, state-stack, cancellation, and progress
+guards likewise raise structured runtime errors; their stable codes are listed
+in the [diagnostics catalog](../reference/diagnostics.md).

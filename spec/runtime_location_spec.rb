@@ -56,4 +56,20 @@ RSpec.describe Flexr::Runtime::Location do
     )
     expect([token.location.column_begin, token.location.column_end]).to eq([1, 5])
   end
+
+  it "tracks columns without rescanning a long input prefix" do
+    input = "a" * 2_000
+    lexer = lexer_class.new(input, retain_input: false)
+    original_byteslice = lexer.buffer.method(:byteslice)
+    sliced_bytes = 0
+    lexer.buffer.define_singleton_method(:byteslice) do |*arguments|
+      original_byteslice.call(*arguments).tap { |slice| sliced_bytes += slice.to_s.bytesize }
+    end
+
+    tokens = lexer.tokens
+
+    expect(tokens.last.location.column_end).to eq(2_001)
+    expect(sliced_bytes).to be < input.bytesize * 8
+    expect(lexer.buffer.base_offset).to eq(input.bytesize)
+  end
 end

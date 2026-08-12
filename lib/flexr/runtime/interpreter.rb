@@ -31,7 +31,11 @@ module Flexr
 
         while buffer.ensure_available?(cursor + 1)
           if acceleration_regions && (region = acceleration_regions[state])
-            accelerated_end = accelerate(region, buffer, cursor)
+            acceptance = machine.dfa.accepts[state].first
+            token_rule = acceptance && @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+            accelerated_end = accelerate(
+              region, buffer, cursor, token_rule: token_rule, token_start: position
+            )
             if accelerated_end && accelerated_end > cursor
               cursor = accelerated_end
               best = consider_acceptances(machine, state, cursor, position, buffer, best)
@@ -40,10 +44,14 @@ module Flexr
           end
 
           byte = buffer.getbyte(cursor)
+          @lexer.consume_step!
           state = transition(machine.dfa, state, byte)
           break unless state
 
           cursor += 1
+          acceptance = machine.dfa.accepts[state].first
+          resource_rule = acceptance && @lexer.class.__flexr_rules.fetch(acceptance.rule_index)
+          ensure_token_size!(cursor, position, rule: resource_rule)
           best = consider_acceptances(machine, state, cursor, position, buffer, best)
         end
         best
@@ -51,7 +59,6 @@ module Flexr
 
       def scan_fast(machine, position)
         buffer = @lexer.buffer
-        source = buffer.source
         dfa = machine.dfa
         accepts = dfa.accepts
         rules = @lexer.class.__flexr_rules
@@ -62,8 +69,9 @@ module Flexr
         cursor = position
         best = nil
 
-        while cursor < source.bytesize || buffer.ensure_available?(cursor + 1)
-          byte = source.getbyte(cursor)
+        while cursor < buffer.bytesize || buffer.ensure_available?(cursor + 1)
+          byte = buffer.getbyte(cursor)
+          @lexer.consume_step!
           state = if direct
             class_id = ec[byte]
             value = direct[:nxt][(state * direct[:classes]) + class_id]
@@ -75,9 +83,10 @@ module Flexr
 
           cursor += 1
           acceptance = accepts[state].first
+          rule = acceptance && rules.fetch(acceptance.rule_index)
+          ensure_token_size!(cursor, position, rule: rule)
           next unless acceptance
 
-          rule = rules.fetch(acceptance.rule_index)
           next if best && cursor == best.total_end_pos && rule.index > best.rule.index
 
           best ||= (@match ||= Match.new)
@@ -102,7 +111,10 @@ module Flexr
             condition = rule.pattern_conditions.fetch(pattern_index)
             next if condition.bol_only && !@lexer.beginning_of_line?
 
-            match = streamed_match(pattern, buffer, position, reference: reference_pattern?(pattern))
+            match = streamed_match(
+              pattern, buffer, position, reference: reference_pattern?(pattern),
+              limit: :token, rule: rule
+            )
             next unless match&.begin(0)&.zero?
 
             end_position = position + match[0].bytesize
@@ -120,7 +132,7 @@ module Flexr
           trailing = trailing_length(rule, buffer, end_position)
           next if rule.trailing && trailing.nil?
 
-          ensure_token_size!(end_position, position)
+          ensure_token_size!(end_position, position, rule: rule)
           Match.new(rule: rule, start_pos: position, end_pos: end_position,
                     total_end_pos: end_position + (trailing || 0))
         end
@@ -162,10 +174,11 @@ module Flexr
             next if condition.bol_only && !@lexer.beginning_of_line?
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp))
+            streamed_match(
+              regexp, buffer, position, reference: reference_pattern?(regexp),
+              limit: :token, rule: rule
+            )
               &.then { |match| [match, condition] }
-          rescue ArgumentError, RegexpError
-            nil
           end
           match, condition = matches.select { |candidate| candidate[0].begin(0).zero? }
             .max_by { |candidate| candidate[0][0].bytesize }
@@ -177,7 +190,7 @@ module Flexr
           trailing = trailing_length(rule, buffer, end_position)
           next if rule.trailing && trailing.nil?
 
-          ensure_token_size!(end_position, position)
+          ensure_token_size!(end_position, position, rule: rule)
           return reusable_match(rule, position, end_position, end_position + (trailing || 0))
         end
         nil
@@ -187,27 +200,22 @@ module Flexr
         return 0 unless rule.trailing
 
         regexp = rule.trailing
-        match = streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp))
+        match = streamed_match(
+          regexp, buffer, position, reference: reference_pattern?(regexp),
+          limit: :lookahead, rule: rule
+        )
         return nil unless match&.begin(0)&.zero?
 
-        match[0].bytesize
-      rescue ArgumentError
-        nil
+        match[0].bytesize.tap { |size| @lexer.ensure_lookahead_size!(size, rule: rule) }
       end
 
-      def streamed_match(pattern, buffer, position, reference: false)
+      def streamed_match(pattern, buffer, position, limit:, rule:, reference: false)
         pattern = regexp_pattern(pattern)
         minimum = minimum_match_bytes(pattern)
         loop do
           subject, tail = stream_subject(buffer, position)
-          match = if reference
-            Unicode::ReferenceRegexp.match(
-              pattern, subject, encoding: @lexer.class.__flexr_config.encoding,
-              options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
-            )
-          else
-            pattern.match(subject, 0)
-          end
+          match = match_stream_pattern(pattern, subject, reference: reference)
+          ensure_stream_limit!(limit, position, match[0].bytesize, rule) if match
           return match if match && match[0].bytesize < subject.bytesize
           return match if match && %i[eof invalid].include?(tail)
           if !match && subject.bytesize >= minimum && tail != :incomplete
@@ -215,10 +223,23 @@ module Flexr
             return nil unless first_byte && possible_first_byte?(pattern, first_byte)
             return nil if %i[eof invalid].include?(tail)
           end
+          ensure_stream_limit!(limit, position, subject.bytesize, rule) unless match
+          @lexer.consume_step!
           return match unless can_refill_match?(buffer, position, subject.bytesize, tail)
-        rescue ArgumentError, RegexpError
-          return nil
         end
+      end
+
+      def match_stream_pattern(pattern, subject, reference:)
+        if reference
+          Unicode::ReferenceRegexp.match(
+            pattern, subject, encoding: @lexer.class.__flexr_config.encoding,
+            options: pattern.options, unicode: @lexer.class.__flexr_config.options[:unicode] == true
+          )
+        else
+          pattern.match(subject, 0)
+        end
+      rescue ArgumentError, RegexpError
+        nil
       end
 
       def stream_subject(buffer, position)
@@ -245,7 +266,7 @@ module Flexr
       def utf8_status(buffer, position)
         return [:eof, 0] if position >= buffer.bytesize
 
-        first = buffer.source.getbyte(position)
+        first = buffer.getbyte(position)
         return [:complete, 1] if first <= 0x7f
         return [:invalid, 1] unless first.between?(0xc2, 0xf4)
 
@@ -412,7 +433,7 @@ module Flexr
           next if best && total_end < best.total_end_pos
           next if best && total_end == best.total_end_pos && acceptance.rule_index > best.rule.index
 
-          ensure_token_size!(cursor, position)
+          ensure_token_size!(cursor, position, rule: candidate)
           best = @match ||= Match.new
           best.rule = candidate
           best.start_pos = position
@@ -435,22 +456,39 @@ module Flexr
         @match
       end
 
-      def accelerate(region, buffer, position)
+      def accelerate(region, buffer, position, token_rule:, token_start:)
         mode = @lexer.class.__flexr_config.options.fetch(:accel, :auto)
-        binary = buffer.source.b
-        match_end = if %i[strscan auto].include?(mode) && defined?(StringScanner)
-          scanner = StringScanner.new(binary)
-          scanner.pos = position
-          length = scanner.skip(region.regexp)
-          length && scanner.pos
-        else
-          region.regexp.match(binary, position)&.then { |match| match.begin(0) == position ? match.end(0) : nil }
-        end
-        return match_end if match_end && match_end < buffer.bytesize
-        return match_end if match_end && buffer.eof_loaded?
-        return unless buffer.ensure_available?(buffer.bytesize + 1)
+        cursor = position
+        matched = false
+        loop do
+          if cursor >= buffer.bytesize
+            return matched ? cursor : nil if buffer.eof_loaded?
+            return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)
+          end
 
-        accelerate(region, buffer, position)
+          segment = buffer.byteslice(cursor...buffer.bytesize).to_s
+          binary = segment.encoding == ::Encoding::BINARY ? segment : segment.b
+          length = acceleration_length(region, binary, mode)
+          return matched ? cursor : nil unless length&.positive?
+
+          matched = true
+          cursor += length
+          @lexer.consume_step!(length)
+          ensure_token_size!(cursor, token_start, rule: token_rule)
+          return cursor if cursor < buffer.bytesize || buffer.eof_loaded?
+        end
+      end
+
+      def acceleration_length(region, binary, mode)
+        if %i[strscan auto].include?(mode) && defined?(::StringScanner)
+          @acceleration_scanner ||= ::StringScanner.new("".b)
+          @acceleration_scanner.string = binary
+          @acceleration_scanner.pos = 0
+          @acceleration_scanner.skip(region.regexp)
+        else
+          match = region.regexp.match(binary, 0)
+          match&.begin(0)&.zero? ? match.end(0) : nil
+        end
       rescue ArgumentError
         nil
       end
@@ -486,9 +524,17 @@ module Flexr
         buffer.eof?(position) || buffer.getbyte(position) == 0x0a
       end
 
-      def ensure_token_size!(end_position, position)
+      def ensure_token_size!(end_position, position, rule: nil)
         text_start = @lexer.more_text_start || position
-        @lexer.defer_token_size_check!(end_position - text_start)
+        @lexer.defer_token_size_check!(end_position - text_start, rule: rule)
+      end
+
+      def ensure_stream_limit!(limit, position, size, rule)
+        if limit == :lookahead
+          @lexer.ensure_lookahead_size!(size, rule: rule)
+        else
+          ensure_token_size!(position + size, position, rule: rule)
+        end
       end
 
       def rule_active?(rule)

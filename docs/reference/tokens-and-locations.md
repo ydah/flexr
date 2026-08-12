@@ -24,10 +24,12 @@ token.
 | `line_begin` / `line_end` | One-based line range |
 | `column_begin` / `column_end` | One-based character columns for UTF-8, byte columns for binary input |
 
-Columns are computed lazily by default. `option :eager_columns` fills them while
-the location is created. The end line and column identify the position after
-the token's last byte, so a token ending at the start of the next line may have
-an end column of 1.
+Line and column positions are tracked incrementally while input is consumed,
+so creating locations does not rescan the input prefix. Column members are
+filled lazily by default; `option :eager_columns` fills them while the location
+is created. The end line and column identify the position after the token's
+last byte, so a token ending at the start of the next line may have an end
+column of 1.
 
 `more` extends the location from the first match to the final match. Trailing
 context is not part of the location because it is not consumed.

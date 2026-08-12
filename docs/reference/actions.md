@@ -43,5 +43,8 @@ instance as `self`.
 | `less(count)` | Keep only the first `count` bytes of the current match |
 | `more` | Join the next match into the current token text |
 
-`less` cannot exceed the current matched byte count. `more` is finalized after
-the action; call `emit` only after the complete text has been assembled.
+`less` cannot exceed the current matched byte count. In UTF-8 mode its result
+must also be a codepoint boundary. Returning to the same byte and state is a
+non-progress error; state-changing rescan cycles are detected as well. `more`
+is finalized after the action; call `emit` only after the complete text has
+been assembled.

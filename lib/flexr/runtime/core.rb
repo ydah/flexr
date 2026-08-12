@@ -3,20 +3,33 @@
 module Flexr
   module Runtime
     def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024,
-                   max_state_stack: 1024, chunk_size: Runtime::Buffer::DEFAULT_CHUNK_SIZE)
+                   max_lookahead_size: nil, max_buffer_size: 64 * 1024 * 1024,
+                   max_state_stack: 1024, max_steps: nil, cancellation: nil, retain_input: true,
+                   chunk_size: Runtime::Buffer::DEFAULT_CHUNK_SIZE)
       raise ArgumentError, "max_token_size must be non-negative" if max_token_size.to_i.negative?
+      raise ArgumentError, "max_lookahead_size must be non-negative" if max_lookahead_size&.to_i&.negative?
+      raise ArgumentError, "max_buffer_size must be non-negative" if max_buffer_size.to_i.negative?
       raise ArgumentError, "max_state_stack must be non-negative" if max_state_stack.to_i.negative?
+      raise ArgumentError, "max_steps must be non-negative" if max_steps&.to_i&.negative?
+      raise ArgumentError, "cancellation must respond to call" if cancellation && !cancellation.respond_to?(:call)
 
       self.class.compile!
-      @buffer = Runtime::Buffer.new(input, chunk_size: chunk_size)
-      @input = input.is_a?(String) ? input : nil
-      @line_tracking_needed = !@input || input.include?("\n")
+      @buffer = Runtime::Buffer.new(
+        input, chunk_size: chunk_size, max_buffer_size: max_buffer_size,
+        retain_input: retain_input, filename: filename
+      )
+      @string_input = input.is_a?(String)
       @filename = filename
       @error_mode = error_mode
       @max_token_size = max_token_size.to_i
+      @max_lookahead_size = (max_lookahead_size || max_token_size).to_i
       @max_state_stack = max_state_stack.to_i
+      @max_steps = max_steps&.to_i
+      @cancellation = cancellation
+      @steps = 0
       @position = 0
       @line = 1
+      @column = 1
       @state = :initial
       @state_stack = []
       @pending = nil
@@ -25,18 +38,21 @@ module Flexr
       @match_end = 0
       @text_start = 0
       @text_line = 1
+      @text_column = 1
       @bol = true
       @more_start = nil
       @more_line = nil
+      @more_column = nil
       @more_requested = false
-      @candidate_token_size = 0
+      @non_progress_signatures = {}
+      @active_rule = nil
       @eof_fired_states = {}
       @on_error = nil
       @halted = false
       @interpreter = nil
     end
 
-    attr_reader :filename, :error_mode, :buffer, :max_token_size
+    attr_reader :filename, :error_mode, :buffer, :max_token_size, :max_lookahead_size, :steps
 
     attr_writer :on_error
 
@@ -49,6 +65,7 @@ module Flexr
 
       loop do
         return nil if @halted
+        consume_step!
 
         if eof? && @pending.nil?
           eof_action = self.class.__flexr_spec.eof_rules[@state]
@@ -58,6 +75,7 @@ module Flexr
             @match_end = @position
             @text_start = @position
             @text_line = @line
+            @text_column = @column
             @matched = nil
             instance_exec(&eof_action)
             token = @pending
@@ -68,6 +86,7 @@ module Flexr
           return nil
         end
 
+        @active_rule = nil
         match = if generated_runtime? && respond_to?(:scan_one, true)
           scan_one
         else
@@ -84,22 +103,27 @@ module Flexr
         end
         @match_start = match.start_pos
         @match_end = match.end_pos
+        scan_state = @state
         if @more_start
           @text_start = @more_start
           @text_line = @more_line
+          @text_column = @more_column
         else
           @text_start = @match_start
           @text_line = @line
+          @text_column = @column
         end
         @matched = nil
         @more_requested = false
         @position = match.end_pos
         empty_match = match.end_pos == match.start_pos
+        @active_rule = match.rule
         execute(match.rule)
         finalize_more
-        force_empty_match_progress! if empty_match && self.class.__flexr_config.options[:allow_empty_match]
+        ensure_progress!(match, scan_state, empty_match: empty_match)
         ensure_token_size!
         update_position
+        discard_consumed_input!
         token = @pending
         @pending = nil
         return token if token
@@ -153,8 +177,36 @@ module Flexr
       @more_start
     end
 
-    def defer_token_size_check!(size)
-      @candidate_token_size = size if size > @candidate_token_size
+    def defer_token_size_check!(size, rule: nil)
+      return if size <= @max_token_size
+
+      raise Runtime::TokenTooLargeError.new(
+        filename: @filename, byte_pos: @more_start || @position, line: @line,
+        rule: rule_index(rule || @active_rule)
+      )
+    end
+
+    def ensure_lookahead_size!(size, rule: nil)
+      return if size <= @max_lookahead_size
+
+      raise Runtime::LookaheadTooLargeError.new(
+        filename: @filename, byte_pos: @position, line: @line,
+        rule: rule_index(rule || @active_rule)
+      )
+    end
+
+    def consume_step!(count = 1)
+      @steps += count
+      if @max_steps && @steps > @max_steps
+        raise Runtime::StepLimitError.new(
+          filename: @filename, byte_pos: @position, line: @line, rule: rule_index(@active_rule)
+        )
+      end
+      return unless cancelled?
+
+      raise Runtime::CancelledError.new(
+        filename: @filename, byte_pos: @position, line: @line, rule: rule_index(@active_rule)
+      )
     end
 
     def utf8_input?
@@ -184,7 +236,8 @@ module Flexr
     end
 
     def binary_input
-      @buffer.source.b
+      source = @buffer.source
+      source.encoding == ::Encoding::BINARY ? source : source.b
     end
 
     def emit(type, value = text)
@@ -201,7 +254,7 @@ module Flexr
     end
 
     def error!(message)
-      error = LexError.new(message, filename: @filename, byte_pos: @match_start, line: @line, text: text)
+      error = LexError.new(message, filename: @filename, byte_pos: @match_start, line: @text_line, text: text)
       if @on_error
         action = @on_error.call(error)
         return @pending = nil if action == :skip
@@ -211,6 +264,11 @@ module Flexr
           return @pending = nil
         end
         return emit(:error, text) if action == :token
+
+        raise Runtime::InvalidRecoveryActionError.new(
+          action: action, filename: @filename, byte_pos: @match_start, line: @text_line,
+          text: text, rule: rule_index(@active_rule)
+        )
       end
       case @error_mode
       when :token
@@ -239,7 +297,8 @@ module Flexr
       if @state_stack.length >= @max_state_stack
         raise Runtime::StateStackOverflowError.new(
           "state stack exceeds max_state_stack (#{@max_state_stack})",
-          filename: @filename, byte_pos: @position, line: @line, text: text
+          filename: @filename, byte_pos: @position, line: @line, text: text,
+          rule: rule_index(@active_rule)
         )
       end
 
@@ -266,7 +325,11 @@ module Flexr
       matched_bytes = @match_end - @match_start
       raise ArgumentError, "less must not exceed matched bytes" if count.negative? || count > matched_bytes
 
-      @position = @match_start + count
+      new_position = @match_start + count
+      raise ArgumentError, "less must end at a UTF-8 codepoint boundary" if
+        utf8_input? && !@buffer.utf8_boundary?(new_position)
+
+      @position = new_position
       @match_end = @position
       @matched = nil
     end
@@ -277,10 +340,14 @@ module Flexr
 
     def last_location
       line_begin = @text_line || @line
+      column_begin = @text_column || @column
+      line_end, column_end = location_after(
+        @text_start, @match_end, line: line_begin, column: column_begin
+      )
       Runtime::Location.new(
         filename: @filename, byte_begin: @text_start, byte_end: @match_end,
-        line_begin: line_begin, line_end: line_begin + text.to_s.b.count("\n"),
-        column_values: [column_at(@text_start), column_at(@match_end)],
+        line_begin: line_begin, line_end: line_end,
+        column_values: [column_begin, column_end],
         eager_columns: self.class.__flexr_config.options[:eager_columns] == true
       )
     end
@@ -304,9 +371,11 @@ module Flexr
       if @more_requested
         @more_start = @text_start
         @more_line = @text_line
+        @more_column = @text_column
       else
         @more_start = nil
         @more_line = nil
+        @more_column = nil
       end
       @more_requested = false
     end
@@ -317,33 +386,22 @@ module Flexr
 
     def ensure_token_size!
       actual_size = @match_end - @text_start
-      @candidate_token_size = 0
-      return if actual_size <= @max_token_size
-
-      raise Runtime::TokenTooLargeError
+      defer_token_size_check!(actual_size, rule: @active_rule)
     end
 
     def force_empty_match_progress!
       return if eof?
 
-      byte = @buffer.byteslice(@position, 1).to_s.b
-      @position += 1
-      @line += 1 if byte == "\n"
-      @bol = byte == "\n"
+      length = utf8_input? ? @buffer.utf8_character_length(@position) : 1
+      ending = @position + length
+      advance_location!(@position, ending)
+      @position = ending
+      @bol = @buffer.getbyte(@position - 1) == 0x0a
     end
 
     def update_position
-      if @match_end > @match_start
-        length = @match_end - @match_start
-        @line += if length == 1
-          @buffer.source.getbyte(@match_start) == 0x0a ? 1 : 0
-        elsif @line_tracking_needed && (newline = @buffer.source.index("\n", @match_start)) && newline < @match_end
-          @buffer.byteslice(@match_start, length).to_s.count("\n")
-        else
-          0
-        end
-      end
-      @bol = @match_end.zero? || @buffer.source.getbyte(@match_end - 1) == 0x0a
+      advance_location!(@match_start, @match_end)
+      @bol = @match_end.zero? || @buffer.getbyte(@match_end - 1) == 0x0a
     end
 
     def handle_unmatched_byte
@@ -352,17 +410,20 @@ module Flexr
       @match_end = @position + 1
       @text_start = @match_start
       @text_line = @line
+      @text_column = @column
       @position += 1
-      @line += 1 if bad.to_s.b == "\n"
+      @non_progress_signatures.clear
+      advance_location!(@match_start, @match_end)
       @bol = bad.to_s.b == "\n"
       error!("unexpected byte #{bad.inspect}")
       token = @pending
       @pending = nil
+      discard_consumed_input!
       token
     end
 
     def eof?
-      return @position >= @buffer.bytesize if @input
+      return @position >= @buffer.bytesize if @string_input
 
       @buffer.eof?(@position)
     end
@@ -374,15 +435,64 @@ module Flexr
       raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
     end
 
-    def column_at(position)
-      prefix = @buffer.byteslice(0...position).to_s
-      last_newline = prefix.rindex("\n")
-      line_prefix = prefix.byteslice((last_newline ? last_newline + 1 : 0)..).to_s
-      if utf8_input? && line_prefix.dup.force_encoding(Encoding::UTF_8).valid_encoding?
-        line_prefix.force_encoding(Encoding::UTF_8).length + 1
-      else
-        line_prefix.bytesize + 1
+    def ensure_progress!(match, scan_state, empty_match:)
+      if @position > match.start_pos
+        @non_progress_signatures.clear
+        return
       end
+      return if @halted
+
+      if empty_match && @state == scan_state && self.class.__flexr_config.options[:allow_empty_match]
+        force_empty_match_progress!
+        @non_progress_signatures.clear
+        return
+      end
+
+      signature = [match.start_pos, scan_state, match.rule.index]
+      repeated = @non_progress_signatures.key?(signature)
+      @non_progress_signatures[signature] = true
+      return if @state != scan_state && !repeated
+
+      raise Runtime::NonProgressError.new(
+        filename: @filename, byte_pos: match.start_pos, line: @line,
+        text: text, rule: match.rule.index
+      )
+    end
+
+    def advance_location!(starting, ending)
+      @line, @column = location_after(starting, ending, line: @line, column: @column)
+    end
+
+    def location_after(starting, ending, line:, column:)
+      return [line, column] if ending <= starting
+
+      value = @buffer.byteslice(starting...ending).to_s
+      newline_count = value.b.count("\n")
+      return [line, column + display_length(value)] if newline_count.zero?
+
+      tail = value.byteslice(((value.b.rindex("\n") || -1) + 1)..).to_s
+      [line + newline_count, display_length(tail) + 1]
+    end
+
+    def display_length(value)
+      return value.bytesize unless utf8_input?
+
+      utf8 = value.dup.force_encoding(Encoding::UTF_8)
+      utf8.valid_encoding? ? utf8.length : value.bytesize
+    end
+
+    def discard_consumed_input!
+      @buffer.discard_before(@more_start || @position)
+    end
+
+    def cancelled?
+      return false unless @cancellation
+
+      @cancellation.arity.zero? ? @cancellation.call : @cancellation.call(self)
+    end
+
+    def rule_index(rule)
+      rule.respond_to?(:index) ? rule.index : rule
     end
   end
 end

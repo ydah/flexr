@@ -189,7 +189,7 @@ RSpec.describe "Flexr runtime" do
     end
 
     error = begin
-      lexer_class.new("aaaa", max_token_size: 2).tokens
+      lexer_class.new("aaaa", filename: "input.txt", max_token_size: 2).tokens
     rescue Flexr::Runtime::TokenTooLargeError => e
       e
     end
@@ -198,6 +198,7 @@ RSpec.describe "Flexr runtime" do
     expect(error.diagnostic.code).to eq("FLEXR-E012")
     expect(error.diagnostic.help).to include("max_token_size")
     expect(error.message).to eq("token exceeds max_token_size")
+    expect([error.filename, error.byte_pos, error.line, error.rule]).to eq(["input.txt", 0, 1, 0])
   end
 
   it "enforces max_token_size in the firstmatch backend" do
@@ -284,7 +285,7 @@ RSpec.describe "Flexr runtime" do
     expect(lexer_class.new("aaaa", max_token_size: 4).tokens).to eq([[:WORD, "aaaa"]])
   end
 
-  it "enforces max_token_size after less has shortened the match" do
+  it "enforces max_token_size before less can shorten the match" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/a+/) do
         less(2)
@@ -292,7 +293,8 @@ RSpec.describe "Flexr runtime" do
       end
     end
 
-    expect(lexer_class.new("aaaa", max_token_size: 2).tokens).to eq([[:WORD, "aa"], [:WORD, "aa"]])
+    expect { lexer_class.new("aaaa", max_token_size: 2).tokens }
+      .to raise_error(Flexr::Runtime::TokenTooLargeError)
   end
 
   it "forces progress for explicitly allowed empty matches" do

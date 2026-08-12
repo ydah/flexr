@@ -21,7 +21,8 @@ Locations use byte offsets for `byte_begin` and `byte_end`, with an exclusive
 end offset. Lines and columns are one-based. UTF-8 columns count characters;
 binary columns count bytes. Column values are computed lazily unless
 `option :eager_columns` is set. `filename:` on the lexer is copied into each
-location and lexical error.
+location and lexical error. The lexer tracks line and column state
+incrementally; locations do not rescan all previously consumed input.
 
 `more` joins successive matches into one `text` value, so `last_location` spans
 the complete assembled token. See the [token and location contract](../reference/tokens-and-locations.md).

@@ -20,6 +20,11 @@ in chunks; `chunk_size:` controls the buffer size. `next_token` returns one
 token or `nil` at EOF, `tokens` drains the lexer into an array, and
 `each_token` returns an enumerator when no block is given.
 
+For a long-lived stream that does not need old input, pass
+`retain_input: false`. Combine it with `max_buffer_size:`, `max_token_size:`,
+and `max_lookahead_size:` to keep memory bounded. Use `max_steps:` or a
+`cancellation:` callback when request-level work must also be bounded.
+
 Use runtime mode when the specification deliberately depends on ordinary Ruby
 execution. Static generation is a better fit when startup cost, deployment
 reproducibility, or a generator-free runtime matters.

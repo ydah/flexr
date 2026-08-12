@@ -22,6 +22,13 @@ Use `flexr check SPEC --format json` to consume the structured form.
 | `FLEXR-E018` | Rule pattern or trailing context has an invalid type | Use a regexp, string, or valid array |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
 | `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
+| `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |
+| `FLEXR-E022` | The retained streaming buffer is too large | Shorten tokens, raise the limit, or disable retention |
+| `FLEXR-E023` | Runtime work exceeded `max_steps` | Raise the limit or simplify the specification |
+| `FLEXR-E024` | Trailing context exceeded its lookahead limit | Bound the context or raise the limit |
+| `FLEXR-E025` | The lexical state stack overflowed | Remove recursive pushes or raise the limit |
+| `FLEXR-E026` | A cancellation callback stopped lexing | Resume with a new lexer when ready |
+| `FLEXR-E027` | An error callback returned an unknown action | Return `:skip`, `:raise`, `:token`, or `:halt` |
 
 ## Warnings
 
