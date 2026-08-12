@@ -9,7 +9,7 @@ module Flexr
     )
       SpecSource = Struct.new(
         :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
-        :states, keyword_init: true
+        :states, :flexr_require_spans, keyword_init: true
     )
 
     class PrismReader
@@ -49,11 +49,13 @@ module Flexr
         collect_constants(prism.value)
         resolve_constants
         collect_body(klass.body, [:initial])
+        require_spans = flexr_require_spans(prism.value)
         first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq(&:first),
-                       first_dsl_offset: first_dsl_offset, constants: @constants, states: @states)
+                       first_dsl_offset: first_dsl_offset, constants: @constants, states: @states,
+                       flexr_require_spans: require_spans)
       end
 
       private
@@ -261,6 +263,30 @@ module Flexr
           block.call(child)
           each_node(child, &block)
         end
+      end
+
+      def flexr_require_spans(node)
+        spans = []
+        each_node_including_self(node) do |child|
+          next unless child.class.name.end_with?("CallNode")
+          next unless child.receiver.nil? && child.name.to_sym == :require
+
+          arguments = Array(child.arguments&.arguments)
+          next unless arguments.one?
+
+          argument = arguments.first
+          next unless argument.class.name.end_with?("StringNode") && argument.unescaped == "flexr"
+
+          spans << [child.location.start_offset, child.location.end_offset]
+        end
+        spans
+      end
+
+      def each_node_including_self(node, &block)
+        return unless node
+
+        block.call(node)
+        node.child_nodes.compact.each { |child| each_node_including_self(child, &block) }
       end
 
       def source_slice(node)

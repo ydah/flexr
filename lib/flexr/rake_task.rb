@@ -17,7 +17,8 @@ module Flexr
       require "rake"
       raise ArgumentError, "spec is required" unless @spec
 
-      output = @output || @spec.sub(/\.flexr\.rb\z/, ".rb")
+      output = @output || ArtifactWriter.default_generated_path(@spec)
+      ArtifactWriter.ensure_distinct!(@spec, output)
       Rake::FileTask.define_task(output => @spec) do
         Generator.new(@spec, output: output, options: { warn_as_error: @warn_as_error }).generate
       end

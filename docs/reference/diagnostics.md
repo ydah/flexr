@@ -21,6 +21,7 @@ Use `flexr check SPEC --format json` to consume the structured form.
 | `FLEXR-E017` | Pattern is not statically resolvable | Rewrite as a static expression or use trusted `--eval` |
 | `FLEXR-E018` | Rule pattern or trailing context has an invalid type | Use a regexp, string, or valid array |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
+| `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
 
 ## Warnings
 

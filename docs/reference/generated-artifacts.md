@@ -30,11 +30,13 @@ hatch and executes the complete specification.
 ## Source transformation
 
 The generator removes DSL call spans, inserts `Flexr::Generated.install_compiled!`,
-and adds generated scanner methods. User actions remain Ruby source. A generated
+and adds generated scanner methods. Source edits use Prism spans, so heredocs and
+the `__END__` data section are not rewritten. User actions remain Ruby source. A generated
 header records:
 
 - source path;
 - SHA-256 digest of the generated payload;
+- artifact schema and runtime ABI versions;
 - vendored Unicode version;
 - effective backend;
 - whether compilation used eval; and
@@ -42,6 +44,17 @@ header records:
 
 Do not edit generated files by hand. Regenerate them when the specification,
 generator, backend, table format, or Unicode snapshot changes.
+
+Compiled payloads also record the artifact schema, compiler version, runtime ABI,
+and Unicode version. Loading fails with `FLEXR-E020` when those contracts are
+missing or incompatible. This prevents a stale artifact from silently running
+against a runtime with different table or Unicode semantics.
+
+Generation refuses to write through the input path, including aliases made with
+symbolic or hard links. Outputs are written to a file in the destination directory,
+synced, and atomically renamed. An unchanged output is left untouched so build
+timestamps remain stable. For input names other than `*.flexr.rb`, the default
+output is `*.generated.rb`.
 
 ## Table formats
 

@@ -2,6 +2,7 @@
 
 require "json"
 require "digest"
+require_relative "flexr/artifact_writer"
 require_relative "flexr/version"
 require_relative "flexr/errors"
 require_relative "flexr/diagnostics"

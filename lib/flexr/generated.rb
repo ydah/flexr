@@ -2,7 +2,19 @@
 
 module Flexr
   module Generated
+    ARTIFACT_SCHEMA_VERSION = 1
+    RUNTIME_ABI_VERSION = 1
+
     module_function
+
+    def artifact_metadata
+      {
+        schema_version: ARTIFACT_SCHEMA_VERSION,
+        compiler_version: VERSION,
+        runtime_abi_version: RUNTIME_ABI_VERSION,
+        unicode_version: Unicode::VERSION
+      }
+    end
 
     def install!(klass, payload)
       rules = payload.fetch(:rules)
@@ -34,6 +46,7 @@ module Flexr
     end
 
     def install_compiled!(klass, payload)
+      validate_artifact!(payload[:artifact])
       install!(klass, payload)
       machines = payload.fetch(:compiled).fetch(:machines).transform_values do |machine|
         dfa_data = machine.fetch(:dfa)
@@ -63,6 +76,35 @@ module Flexr
       klass.__flexr_set_compiled!(compiled)
       klass.__flexr_mark_generated!
       klass
+    end
+
+    def validate_artifact!(artifact)
+      return incompatible_artifact!("artifact metadata is missing") unless artifact.is_a?(Hash)
+
+      expected = {
+        schema_version: ARTIFACT_SCHEMA_VERSION,
+        runtime_abi_version: RUNTIME_ABI_VERSION,
+        unicode_version: Unicode::VERSION
+      }
+      mismatch = expected.find { |name, value| artifact[name] != value }
+      compiler_version = artifact[:compiler_version]
+      return if mismatch.nil? && compiler_version.is_a?(String) && !compiler_version.empty?
+
+      detail = if mismatch
+        name, value = mismatch
+        "#{name}=#{artifact[name].inspect} (expected #{value.inspect})"
+      else
+        "compiler_version=#{compiler_version.inspect}"
+      end
+      incompatible_artifact!(detail)
+    end
+
+    def incompatible_artifact!(detail)
+      diagnostic = Diagnostics.error(
+        "FLEXR-E020", "generated artifact is incompatible with this runtime",
+        help: "regenerate the lexer with the installed flexr version", note: detail
+      )
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
     end
 
     def decode_packed(packed)

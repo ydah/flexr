@@ -300,6 +300,7 @@ RSpec.describe "adversarial boundary coverage" do
     expect(klass.__flexr_spec.eof_rules).to include(:initial)
 
     compiled_payload = payload.merge(
+      artifact: Flexr::Generated.artifact_metadata,
       compiled: { machines: {}, states: [], stats: {}, diagnostics: [{ code: "FLEXR-W999", severity: :warning,
                                                                         message: "generated warning" }] }
     )

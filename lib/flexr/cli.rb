@@ -121,13 +121,13 @@ module Flexr
         return EXIT_FAILURE unless result.complete?
 
         if output
-          File.binwrite(output, result.source)
+          ArtifactWriter.write!(output, result.source, source_path: spec)
         else
           out.write(result.source)
         end
         EXIT_OK
       when :generate
-        target = output || spec.sub(/\.flexr\.rb\z/, ".rb")
+        target = output || ArtifactWriter.default_generated_path(spec)
         Generator.new(spec, output: target, eval_mode: options.eval_mode,
                       options: options.generator_options).generate
         EXIT_OK
