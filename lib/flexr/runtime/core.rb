@@ -37,7 +37,7 @@ module Flexr
       @max_lookahead_size = (max_lookahead_size || max_token_size).to_i
       @max_state_stack = max_state_stack.to_i
       @max_steps = max_steps&.to_i
-      @cancellation = cancellation
+      @cancellation = cancellation.respond_to?(:arity) ? cancellation : cancellation&.method(:call)
       @steps = 0
       @position = 0
       @line = 1
@@ -443,6 +443,7 @@ module Flexr
       @text_start = @match_start
       @text_line = @line
       @text_column = @column
+      @matched = nil
       @position += 1
       @non_progress_signatures.clear
       advance_location!(@match_start, @match_end)
@@ -501,7 +502,7 @@ module Flexr
       end
 
       value = location_value(starting, ending)
-      location_bytes = value.valid_encoding? ? value : value.b
+      location_bytes = value.b
       newline_count = location_bytes.count("\n")
       if newline_count.zero?
         @column += display_length(value)
@@ -516,7 +517,7 @@ module Flexr
       return [line, column] if ending <= starting
 
       value = location_value(starting, ending)
-      location_bytes = value.valid_encoding? ? value : value.b
+      location_bytes = value.b
       newline_count = location_bytes.count("\n")
       return [line, column + display_length(value)] if newline_count.zero?
 

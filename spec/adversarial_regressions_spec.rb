@@ -33,4 +33,29 @@ RSpec.describe "adversarial regressions" do
     expect(lexer_class.new("abc").next_token).to eq([:A, "a"])
   end
 
+  it "resets unmatched text and tracks UTF-8 columns after newlines" do
+    error_lexer = Class.new(Flexr::Lexer) { rule(/[a-z]+/, emit: :WORD) }
+    location_lexer = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      rule(/.+/m, emit: :TEXT)
+    end
+
+    expect(error_lexer.new("abc!", error_mode: :token).tokens)
+      .to eq([[:WORD, "abc"], [:error, "!"]])
+    location = location_lexer.new("あ\nx").next_token.location
+    expect([location.line_end, location.column_end]).to eq([2, 2])
+  end
+
+  it "accepts callable cancellation objects without requiring arity" do
+    cancellation = Class.new do
+      def call
+        true
+      end
+    end.new
+    lexer_class = Class.new(Flexr::Lexer) { rule(/a/, emit: :A) }
+
+    expect { lexer_class.new("a", cancellation: cancellation).next_token }
+      .to raise_error(Flexr::Runtime::CancelledError)
+  end
+
 end
