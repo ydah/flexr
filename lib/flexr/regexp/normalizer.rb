@@ -39,7 +39,7 @@ module Flexr
       def normalize_leaf(node)
         case node
         when AST::CodepointRange
-          byte_sequences_for_ranges(casefold_ranges(node.lo, node.hi), loc: node.loc)
+          byte_sequences_for_ranges([[node.lo, node.hi]], loc: node.loc)
         else
           node
         end
@@ -48,11 +48,11 @@ module Flexr
       def char_class(node)
         ranges = node.ranges.flat_map do |range|
           if range.first == AST::Property
-            property_ranges = Unicode::Property.ranges(range.last)
-            property_ranges = property_ranges.flat_map { |lo, hi| casefold_ranges(lo, hi) }
+            property_ranges = Unicode::Property.ranges(range[2])
+            property_ranges = property_ranges.flat_map { |lo, hi| Unicode::CaseFold.ranges(lo, hi) } if range[3]
             range[1] ? complement(property_ranges) : property_ranges
           else
-            casefold_ranges(*range)
+            [range]
           end
         end
         ranges = complement(ranges) if node.negated
@@ -154,10 +154,6 @@ module Flexr
         result
       end
 
-      def casefold_ranges(lo, hi)
-        return [[lo, hi]] if @options.nobits?(::Regexp::IGNORECASE)
-        Unicode::CaseFold.ranges(lo, hi)
-      end
     end
   end
 end

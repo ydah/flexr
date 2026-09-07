@@ -58,4 +58,17 @@ RSpec.describe "adversarial regressions" do
       .to raise_error(Flexr::Runtime::CancelledError)
   end
 
+  it "honors scoped case options and hexadecimal bytes" do
+    scoped_lexer = Class.new(Flexr::Lexer) do
+      rule(/(?-i:a)/i, emit: :LOWER)
+      rule(/A/, emit: :UPPER)
+    end
+    byte_escape_lexer = Class.new(Flexr::Lexer) do
+      rule(/\xC3\xA9/, emit: :E_ACUTE)
+    end
+
+    expect(scoped_lexer.new("A").tokens).to eq([[:UPPER, "A"]])
+    expect(byte_escape_lexer.new("é").tokens).to eq([[:E_ACUTE, "é"]])
+  end
+
 end

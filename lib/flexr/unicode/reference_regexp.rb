@@ -22,12 +22,12 @@ module Flexr
         return CACHE[key] if CACHE.key?(key)
 
         parser = Regexp::Parser.new(pattern.source, options: effective_options, encoding: encoding, unicode: unicode)
-        source = source_for(parser.parse, ignorecase: effective_options.anybits?(::Regexp::IGNORECASE))
+        source = source_for(parser.parse)
         regexp_options = effective_options & ~::Regexp::IGNORECASE
         CACHE[key] = ::Regexp.new(source, regexp_options).freeze
       end
 
-      def source_for(node, ignorecase: false)
+      def source_for(node)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor then ""
         when Regexp::AST::Fail then "(?!)"
@@ -37,7 +37,7 @@ module Flexr
           ranges = node.ranges.flat_map do |range|
             if range.first == Regexp::AST::Property
               property_ranges = Unicode::Property.ranges(range[2])
-              property_ranges = casefold_ranges(property_ranges) if ignorecase
+              property_ranges = casefold_ranges(property_ranges) if range[3]
               range[1] ? complement(property_ranges) : property_ranges
             else
               [range]
@@ -45,13 +45,13 @@ module Flexr
           end
           ranges = complement(ranges) if node.negated
           codepoint_class(ranges)
-        when Regexp::AST::Seq then node.children.map { |child| source_for(child, ignorecase: ignorecase) }.join
+        when Regexp::AST::Seq then node.children.map { |child| source_for(child) }.join
         when Regexp::AST::Alt
-          "(?:#{node.children.map { |child| source_for(child, ignorecase: ignorecase) }.join('|')})"
-        when Regexp::AST::Star then "(?:#{source_for(node.child, ignorecase: ignorecase)})*"
+          "(?:#{node.children.map { |child| source_for(child) }.join('|')})"
+        when Regexp::AST::Star then "(?:#{source_for(node.child)})*"
         when Regexp::AST::Repeat
           maximum = node.maximum.nil? ? "" : node.maximum
-          "(?:#{source_for(node.child, ignorecase: ignorecase)}){#{node.minimum},#{maximum}}"
+          "(?:#{source_for(node.child)}){#{node.minimum},#{maximum}}"
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"
         end

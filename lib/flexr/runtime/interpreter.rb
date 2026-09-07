@@ -350,7 +350,7 @@ module Flexr
 
         ast = Regexp::Parser.new(pattern.source, options: pattern.options,
                                  encoding: pattern.encoding, unicode: true).parse
-        minimum_ast_bytes(ast, ignorecase: pattern.options.anybits?(::Regexp::IGNORECASE))
+        minimum_ast_bytes(ast)
       rescue CompileError, RegexpError
         1
       end
@@ -361,20 +361,20 @@ module Flexr
         ::Regexp.new(::Regexp.escape(pattern.to_s))
       end
 
-      def minimum_ast_bytes(node, ignorecase: false)
+      def minimum_ast_bytes(node)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor, Regexp::AST::Fail then 0
         when Regexp::AST::ByteRange then 1
         when Regexp::AST::CodepointRange then utf8_length(node.lo)
         when Regexp::AST::CharClass
           ranges = node.ranges.flat_map do |range|
-            range.first == Regexp::AST::Property ? property_ranges(range, ignorecase: ignorecase) : [range]
+            range.first == Regexp::AST::Property ? property_ranges(range, ignorecase: range[3] == true) : [range]
           end
           ranges = complement_codepoint_ranges(ranges) if node.negated
           ranges.map { |lo, _hi| utf8_length(lo) }.min || 1
-        when Regexp::AST::Seq then node.children.sum { |child| minimum_ast_bytes(child, ignorecase: ignorecase) }
-        when Regexp::AST::Alt then node.children.map { |child| minimum_ast_bytes(child, ignorecase: ignorecase) }.min || 0
-        when Regexp::AST::Repeat then node.minimum * minimum_ast_bytes(node.child, ignorecase: ignorecase)
+        when Regexp::AST::Seq then node.children.sum { |child| minimum_ast_bytes(child) }
+        when Regexp::AST::Alt then node.children.map { |child| minimum_ast_bytes(child) }.min || 0
+        when Regexp::AST::Repeat then node.minimum * minimum_ast_bytes(node.child)
         else minimum_unknown_bytes(node)
         end
       end
@@ -391,24 +391,24 @@ module Flexr
         ast = Regexp::Parser.new(pattern.source, options: pattern.options,
                                  encoding: pattern.encoding, unicode: true).parse
         binary = !@lexer.utf8_input?
-        first_byte_ranges(ast, pattern.options, binary: binary).any? { |lo, hi| byte.between?(lo, hi) }
+        first_byte_ranges(ast, binary: binary).any? { |lo, hi| byte.between?(lo, hi) }
       rescue CompileError, RegexpError
         true
       end
 
-      def first_byte_ranges(node, options, binary: false)
+      def first_byte_ranges(node, binary: false)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor, Regexp::AST::Fail then []
         when Regexp::AST::ByteRange then [[node.lo, node.hi]]
         when Regexp::AST::CodepointRange
-          ranges = options.anybits?(::Regexp::IGNORECASE) ? Unicode::CaseFold.ranges(node.lo, node.hi) : [[node.lo, node.hi]]
+          ranges = [[node.lo, node.hi]]
           return ranges if binary
 
           ranges.flat_map { |lo, hi| Unicode::Utf8Splitter.split(lo, hi).map(&:first).map(&:first) }
             .map { |value| [value, value] }
         when Regexp::AST::CharClass
           ranges = node.ranges.flat_map do |range|
-            range.first == Regexp::AST::Property ? property_ranges(range, ignorecase: options.anybits?(::Regexp::IGNORECASE)) : [range]
+            range.first == Regexp::AST::Property ? property_ranges(range, ignorecase: range[3] == true) : [range]
           end
           ranges = complement_codepoint_ranges(ranges) if node.negated
           return ranges if binary
@@ -418,14 +418,14 @@ module Flexr
         when Regexp::AST::Seq
           ranges = []
           node.children.each do |child|
-            ranges.concat(first_byte_ranges(child, options, binary: binary))
+            ranges.concat(first_byte_ranges(child, binary: binary))
             break unless nullable?(child)
           end
           ranges
         when Regexp::AST::Alt
-          node.children.flat_map { |child| first_byte_ranges(child, options, binary: binary) }
+          node.children.flat_map { |child| first_byte_ranges(child, binary: binary) }
         when Regexp::AST::Star, Regexp::AST::Repeat
-          first_byte_ranges(node.child, options, binary: binary)
+          first_byte_ranges(node.child, binary: binary)
         else
           first_byte_fallback
         end

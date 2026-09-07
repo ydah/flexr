@@ -104,6 +104,7 @@ module Flexr
       def parse_atom
         starting = @index
         @escaped_value = false
+        @escaped_byte = false
         @last_ranges = nil
         return parse_group if consume?("(")
         return parse_class if consume?("[")
@@ -119,6 +120,7 @@ module Flexr
         if consume?("\\")
           parse_escape
           return AST::CharClass.new(ranges: @last_ranges, negated: false, loc: span(starting)) if @last_ranges
+          return AST::ByteRange.new(lo: @last_byte, hi: @last_byte, loc: span(starting)) if @escaped_byte
           return codepoint_node(read_codepoint, span(starting)) if @escaped_value
         end
 
@@ -248,7 +250,7 @@ module Flexr
         raw_name = read_until(":]")
         inner_negated = raw_name.start_with?("^")
         name = raw_name.delete_prefix("^")
-        return [[AST::Property, inner_negated, "POSIX_#{name}"]] if
+        return [[AST::Property, inner_negated, "POSIX_#{name}", ignorecase?]] if
           @encoding != Encoding::BINARY && POSIX_CLASSES.include?(name)
 
         ranges = case name
@@ -273,6 +275,7 @@ module Flexr
       def parse_class_atom
         if consume?("\\")
           parse_escape
+          return [[@last_byte, @last_byte]] if @escaped_byte
           return [[@last_codepoint, @last_codepoint]] if @escaped_value
           return @last_ranges
         end
@@ -292,7 +295,9 @@ module Flexr
       def materialize_class_ranges(ranges, negated:)
         concrete = ranges.flat_map do |range|
           if range.first == AST::Property
-            Unicode::Property.ranges(range[2], negate: range[1])
+            property = Unicode::Property.ranges(range[2])
+            property = fold_ranges(property) if range[3]
+            range[1] ? complement_ranges(property) : property
           else
             [range]
           end
@@ -322,6 +327,7 @@ module Flexr
 
       def parse_escape
         @escaped_value = false
+        @escaped_byte = false
         @last_ranges = nil
         char = advance_raw
         raise_syntax("trailing backslash") unless char
@@ -341,16 +347,15 @@ module Flexr
         when "p", "P"
           expect("{")
           name = read_until("}")
-          ranges = [[AST::Property, char == "P", name]]
+          ranges = [[AST::Property, char == "P", name, ignorecase?]]
           @last_ranges = ranges
           nil
         when "x"
-          digits = if consume?("{")
-            read_until("}")
+          if consume?("{")
+            assign_codepoint(read_until("}"))
           else
-            read_exact(2)
+            assign_hex_byte(read_exact(2))
           end
-          assign_codepoint(digits)
           nil
         when "u"
           digits = if consume?("{")
@@ -383,7 +388,7 @@ module Flexr
       def shorthand_ranges(char)
         if @unicode && @encoding != Encoding::BINARY
           property = { "d" => "Nd", "w" => "Word", "s" => "Space" }.fetch(char.downcase, nil)
-          return [[AST::Property, char == char.upcase, property]] if property
+          return [[AST::Property, char == char.upcase, property, ignorecase?]] if property
         end
 
         base = {
@@ -572,6 +577,37 @@ module Flexr
 
         @escaped_value = true
         @last_codepoint = codepoint
+      end
+
+      def assign_hex_byte(digits)
+        byte = digits.to_i(16)
+        if @encoding == Encoding::BINARY
+          @escaped_byte = true
+          @last_byte = byte
+          return
+        end
+
+        length = case byte
+        when 0x00..0x7f then 1
+        when 0xc2..0xdf then 2
+        when 0xe0..0xef then 3
+        when 0xf0..0xf4 then 4
+        else 0
+        end
+        bytes = [byte]
+        (length - 1).times do
+          expect("\\x")
+          bytes << read_exact(2).to_i(16)
+        end
+        value = bytes.pack("C*").force_encoding(Encoding::UTF_8)
+        raise_syntax("invalid UTF-8 byte escape") unless length.positive? && value.valid_encoding?
+
+        @escaped_value = true
+        @last_codepoint = value.ord
+      end
+
+      def ignorecase?
+        @options.anybits?(::Regexp::IGNORECASE)
       end
 
       def skip_extended_space
