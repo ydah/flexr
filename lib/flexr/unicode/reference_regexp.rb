@@ -3,9 +3,8 @@
 module Flexr
   module Unicode
     module ReferenceRegexp
-      # rubocop:disable Style/MutableConstant
+      # rubocop:disable-next Style/MutableConstant
       CACHE = {}
-      # rubocop:enable Style/MutableConstant
       module_function
 
       def match(pattern, subject, encoding:, options: 0, unicode: false)

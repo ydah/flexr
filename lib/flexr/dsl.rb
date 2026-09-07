@@ -114,7 +114,7 @@ module Flexr
     def compile!
       @__flexr_compile_mutex.synchronize do
         # The ivar is part of the generated/runtime class contract.
-        # rubocop:disable Naming/MemoizedInstanceVariableName
+        # rubocop:disable-next Naming/MemoizedInstanceVariableName
         @__flexr_compiled ||= begin
           compiled = Automaton::Compiler.new(__flexr_spec).compile
           @__flexr_config.backend = auto_direct?(compiled) ? :direct : :table if @__flexr_config.backend == :auto
@@ -122,7 +122,6 @@ module Flexr
           freeze_compiled!(compiled)
           compiled
         end
-        # rubocop:enable Naming/MemoizedInstanceVariableName
       end
     end
 
