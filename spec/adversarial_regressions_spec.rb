@@ -31,6 +31,15 @@ RSpec.describe "adversarial regressions" do
     end
 
     expect(lexer_class.new("abc").next_token).to eq([:A, "a"])
+
+    anchored = Class.new(Flexr::Lexer) do
+      rule(/a/, followed_by: /b$/, emit: :A)
+      rule(/ab/, emit: :AB)
+      rule(/./, skip: true)
+    end
+    expect(anchored.new("abc").next_token).to eq([:AB, "ab"])
+    expect(anchored.new("ab").next_token).to eq([:A, "a"])
+    expect(anchored.new("ab\n").next_token).to eq([:A, "a"])
   end
 
   it "resets unmatched text and tracks UTF-8 columns after newlines" do
