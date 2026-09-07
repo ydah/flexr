@@ -61,5 +61,4 @@ pages explain how to use those specifications.
 
 The [performance log](perf-log.md), [architecture decisions](adr/),
 [internals notes](internals/README.md), and [release procedure](RELEASING.md)
-are maintainer-facing documents. Release notes are kept under
-[releases](releases/v1.1.0.md).
+are maintainer-facing documents.
