@@ -243,14 +243,28 @@ module Flexr
       def trailing_length(rule, buffer, position)
         return 0 unless rule.trailing
 
-        regexp = rule.trailing
-        match = streamed_match(
-          regexp, buffer, position, reference: reference_pattern?(regexp),
-          limit: :lookahead, rule: rule
-        )
-        return nil unless match&.begin(0)&.zero?
+        dfa = trailing_dfa(rule.trailing)
+        state = dfa.start
+        cursor = position
+        longest = 0 unless dfa.accepts[state].empty?
+        while buffer.ensure_available?(cursor + 1)
+          state = dfa.transition(state, buffer.getbyte(cursor))
+          break unless state
 
-        match[0].bytesize.tap { |size| @lexer.ensure_lookahead_size!(size, rule: rule) }
+          cursor += 1
+          @lexer.consume_step!
+          size = cursor - position
+          @lexer.ensure_lookahead_size!(size, rule: rule)
+          longest = size unless dfa.accepts[state].empty?
+        end
+        longest
+      end
+
+      def trailing_dfa(pattern)
+        @trailing_dfas ||= {}
+        @trailing_dfas[pattern] ||= Flexr.compile_pattern(
+          pattern, encoding: @config.encoding, options: { unicode: @config.options[:unicode] == true }
+        )
       end
 
       def streamed_match(pattern, buffer, position, limit:, rule:, reference: false)
@@ -269,7 +283,7 @@ module Flexr
           end
           ensure_stream_limit!(limit, position, subject.bytesize, rule) unless match
           @lexer.consume_step!
-          return match unless can_refill_match?(buffer, position, subject.bytesize, tail)
+          return match unless can_refill_match?(buffer)
         end
       end
 
@@ -327,13 +341,8 @@ module Flexr
         [:complete, length]
       end
 
-      def can_refill_match?(buffer, position, subject_size, tail)
-        target = if tail == :incomplete
-          position + subject_size + 1
-        else
-          buffer.bytesize + 1
-        end
-        buffer.ensure_available?(target)
+      def can_refill_match?(buffer)
+        buffer.ensure_available?(buffer.bytesize + 1)
       end
 
       def minimum_match_bytes(pattern)
@@ -540,8 +549,8 @@ module Flexr
           @acceleration_scanner.pos = position
           @acceleration_scanner.skip(regexp)
         else
-          match = regexp.match(segment, position)
-          match&.begin(0) == position ? match.end(0) - position : nil
+          match = regexp.match(segment.byteslice(position..).to_s, 0)
+          match&.begin(0)&.zero? ? match[0].bytesize : nil
         end
       rescue ArgumentError
         nil

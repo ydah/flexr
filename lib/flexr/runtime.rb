@@ -40,9 +40,9 @@ require_relative "generated"
 
 module Flexr
   class << self
-    def compile_pattern(pattern, options: {})
+    def compile_pattern(pattern, options: {}, encoding: nil)
       regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
-      encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
+      encoding ||= regexp.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
       rule = IR::Rule.new(index: 0, patterns: [regexp], action: :skip, states: [:initial])
       state = IR::State.new(name: :initial, inclusive: true, id: 0)
       spec = IR::Spec.new(
