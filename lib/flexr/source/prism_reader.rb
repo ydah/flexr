@@ -174,7 +174,7 @@ module Flexr
           reject_unhandled_dsl!(node)
           return
         end
-        record_deletion(node) unless %i[rule state all_states].include?(name)
+        record_deletion(node) unless %i[rule state all_states on_eof].include?(name)
         case name
         when :rule
           collect_rule(node, states)
@@ -187,7 +187,13 @@ module Flexr
           action = if action_source
             action_source.start_with?("do") ? "proc #{action_source}" : "proc#{action_source}"
           end
-          @eof_rules[states.last.to_sym] = action if action
+          if action
+            state = states.last.to_sym
+            @eof_rules[state] = "proc { instance_exec(&self.class.__flexr_generated_eof_actions.fetch(#{state.inspect})) }"
+            record_eof_edit(node, state, action)
+          else
+            record_deletion(node)
+          end
         when :emits
           values = positional(node).map { |item| static(item) }.compact.flatten
           @config[:declared_tokens].concat(values.map(&:to_sym))
@@ -196,7 +202,7 @@ module Flexr
         when :token_kind
           @config[:token_kind] = Configuration.token_kind!(static(positional(node).first))
         when :encoding
-          @config[:encoding] = static(positional(node).first)
+          @config[:encoding] = Configuration.encoding!(static(positional(node).first))
         when :option
           @config[:options] ||= {}
           positional(node).each { |item| @config[:options][Configuration.option!(static(item))] = true }
@@ -249,7 +255,7 @@ module Flexr
         options = keywords(node)
         validate_keywords!(node, %i[skip emit followed_by])
         action_source = node.block && source_slice(node.block)
-        if action_source&.match?(/\breject\b/)
+        if action_source && reject_action?(node.block)
           diagnostic = Diagnostics.error(
             "FLEXR-E013", "reject is not supported by flexr",
             help: "use a state transition and less(n) to express the fallback"
@@ -313,6 +319,22 @@ module Flexr
         replacement = block_action ? "__flexr_bind_generated_action(#{rule_index}, #{block_action})" : ""
         @spans << span
         @edits << [*span, replacement]
+      end
+
+      def record_eof_edit(node, state, action)
+        span = [node.location.start_offset, node.location.end_offset]
+        @spans << span
+        @edits << [*span, "__flexr_bind_generated_eof(#{state.inspect}, #{action})"]
+      end
+
+      def reject_action?(block)
+        found = false
+        each_node_including_self(block.body) do |child|
+          next unless child.class.name.end_with?("CallNode") && child.name.to_sym == :reject
+
+          found ||= child.receiver.nil? || child.receiver.class.name.end_with?("SelfNode")
+        end
+        found
       end
 
       def record_state_wrapper(node, block)

@@ -21,6 +21,14 @@ module Flexr
       validated_symbol!(value, ACCELERATORS, :accel)
     end
 
+    def encoding!(value)
+      encoding = value.is_a?(Encoding) ? value : Encoding.find(value.to_s)
+      return encoding if [Encoding::UTF_8, Encoding::BINARY].include?(encoding)
+
+      diagnostic = Diagnostics.error("FLEXR-E011", "flexr supports UTF-8 and BINARY only")
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+    end
+
     def option!(value)
       validated_symbol!(value, BOOLEAN_OPTIONS, :option)
     end

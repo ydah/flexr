@@ -71,4 +71,35 @@ RSpec.describe "adversarial regressions" do
     expect(byte_escape_lexer.new("é").tokens).to eq([[:E_ACUTE, "é"]])
   end
 
+  it "preserves source bytes, configuration, actions, and EOF bindings when generating" do
+    Dir.mktmpdir("flexr-adversarial-") do |directory|
+      source = File.join(directory, "lexer.flexr.rb")
+      output = File.join(directory, "lexer.rb")
+      File.binwrite(source, <<~'RUBY')
+        require "flexr"
+        # 日本語
+        class AdversarialGeneratedLexer < Flexr::Lexer
+          encoding "BINARY"
+          marker = :DONE
+          rule(/\xFF/n) { emit :VALUES, [1, 2].reject(&:odd?) }
+          rule(/a/) { emit :WORD, "reject" }
+          on_eof { emit marker, "" }
+        end
+      RUBY
+
+      Flexr::Generator.new(source, output: output).generate
+      load output
+
+      expect(AdversarialGeneratedLexer.new("\xFFa".b).tokens)
+        .to eq([[:VALUES, [2]], [:WORD, "reject"], [:DONE, ""]])
+
+      File.write(source, "class RejectedGeneratedLexer < Flexr::Lexer; rule(/a/) { reject }; end\n")
+      expect { Flexr::Generator.new(source).generate }
+        .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E013") }
+    ensure
+      Object.send(:remove_const, :AdversarialGeneratedLexer) if
+        Object.const_defined?(:AdversarialGeneratedLexer, false)
+    end
+  end
+
 end

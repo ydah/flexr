@@ -20,6 +20,7 @@ module Flexr
       @__flexr_compiled = nil
       @__flexr_generated = false
       @__flexr_generated_actions = []
+      @__flexr_generated_eof_actions = {}
       @__flexr_specification_frozen = false
       @__flexr_compile_mutex = Monitor.new
     end
@@ -96,12 +97,7 @@ module Flexr
     end
 
     def encoding(value)
-      encoding = value.is_a?(Encoding) ? value : Encoding.find(value.to_s)
-      unless [Encoding::UTF_8, Encoding::BINARY].include?(encoding)
-        diagnostic = Diagnostics.error("FLEXR-E011", "flexr supports UTF-8 and BINARY only")
-        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
-      end
-
+      encoding = Configuration.encoding!(value)
       __flexr_mutate! { @__flexr_config.encoding = encoding }
     end
 
@@ -151,7 +147,8 @@ module Flexr
       )
     end
 
-    attr_reader :__flexr_rules, :__flexr_states, :__flexr_config, :__flexr_compiled, :__flexr_generated_actions
+    attr_reader :__flexr_rules, :__flexr_states, :__flexr_config, :__flexr_compiled, :__flexr_generated_actions,
+                :__flexr_generated_eof_actions
 
     def __flexr_add_generated_eof(state, action)
       __flexr_mutate! { @__flexr_eof_rules[state.to_sym] = action }
@@ -172,6 +169,12 @@ module Flexr
       raise FrozenSpecificationError, "generated actions can only be bound on a generated lexer" unless @__flexr_generated
 
       @__flexr_generated_actions[index] = action
+    end
+
+    def __flexr_bind_generated_eof(state, action)
+      raise FrozenSpecificationError, "generated actions can only be bound on a generated lexer" unless @__flexr_generated
+
+      @__flexr_generated_eof_actions[state.to_sym] = action
     end
 
     def __flexr_generated?

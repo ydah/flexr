@@ -14,7 +14,7 @@ module Flexr
       end
 
       def rewrite(source, edits, insertion:, payload:)
-        result = source.dup
+        result = source.b.dup
         normalized_edits = edits.map do |start_offset, end_offset, replacement|
           start_offset = line_start_offset(source, start_offset) if replacement.empty? && start_offset != insertion
           [start_offset, end_offset, replacement]
@@ -30,7 +30,7 @@ module Flexr
           result[start_offset...end_offset] = replacement
         end
         result.insert(adjusted_insertion, payload)
-        result
+        result.force_encoding(source.encoding)
       end
 
       def insert_after_preamble(source, payload)
@@ -46,26 +46,29 @@ module Flexr
           line, next_offset = next_line(source, offset)
         end
 
-        source.dup.insert(offset, payload)
+        source.b.dup.insert(offset, payload).force_encoding(source.encoding)
       end
 
       def indentation(source, offset)
-        line_start = source.rindex("\n", offset - 1)
-        source[(line_start ? line_start + 1 : 0)...offset].to_s[/\A[ \t]*/].to_s
+        binary = source.b
+        line_start = binary.rindex("\n", offset - 1)
+        binary.byteslice((line_start ? line_start + 1 : 0)...offset).to_s[/\A[ \t]*/].to_s
       end
 
       def line_start_offset(source, offset)
-        line_start = source.rindex("\n", offset - 1) unless offset.zero?
+        binary = source.b
+        line_start = binary.rindex("\n", offset - 1) unless offset.zero?
         line_start = line_start ? line_start + 1 : 0
-        prefix = source.byteslice(line_start...offset)
+        prefix = binary.byteslice(line_start...offset)
         prefix&.match?(/\A[ \t]*\z/) ? line_start : offset
       end
 
       def next_line(source, offset)
         return [nil, offset] if offset >= source.bytesize
 
-        ending = source.index("\n", offset)
-        ending ? [source.byteslice(offset..ending), ending + 1] : [source.byteslice(offset..), source.bytesize]
+        binary = source.b
+        ending = binary.index("\n", offset)
+        ending ? [binary.byteslice(offset..ending), ending + 1] : [binary.byteslice(offset..), source.bytesize]
       end
 
       def magic_comment?(line)
