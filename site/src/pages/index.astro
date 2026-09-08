@@ -11,117 +11,71 @@ const repo = 'https://github.com/ydah/flexr';
 >
   <main class="landing">
     <section class="landing-hero" aria-labelledby="hero-title">
-      <div class="hero-intro">
-        <p class="hero-kicker">A Ruby-native lexer generator</p>
-        <h1 id="hero-title">Turn Ruby rules into predictable tokens.</h1>
-        <p class="hero-summary">
-          Write one readable specification. Run it directly while you iterate, inspect why each
-          match wins, then generate deterministic Ruby when it is time to ship.
-        </p>
-        <div class="hero-actions">
-          <a class="landing-button primary" href={`${base}learn/getting-started/`}>Build your first lexer</a>
-          <a class="landing-button secondary" href={`${base}playground/`}>Explore the matching model</a>
-        </div>
-        <dl class="hero-facts">
-          <div><dt>Runs on</dt><dd>Ruby 3.1+</dd></div>
-          <div><dt>Ships as</dt><dd>Runtime or generated Ruby</dd></div>
-        </dl>
+      <p class="hero-kicker">Ruby-native lexer generator</p>
+      <h1 id="hero-title">Turn Ruby rules into predictable tokens.</h1>
+      <p class="hero-summary">
+        Write one readable specification, inspect why each match wins, and generate deterministic
+        Ruby when it is time to ship.
+      </p>
+      <div class="hero-actions">
+        <a class="landing-button primary" href={`${base}learn/getting-started/`}>Build your first lexer</a>
+        <a class="landing-button secondary" href={`${base}playground/`}>Try the matching model</a>
       </div>
 
-      <figure class="lexer-map">
-        <figcaption>
-          <span>lexer.flexr.rb</span>
-          <span>longest match</span>
-        </figcaption>
-        <pre><code><span class="syntax-keyword">class</span> Lexer &lt; Flexr::Lexer
-  rule(<span class="syntax-regexp">/==/</span>) &#123; emit <span class="syntax-token">:EQ</span> &#125;
-  rule(<span class="syntax-regexp">/=/</span>)  &#123; emit <span class="syntax-token">:ASSIGN</span> &#125;
-  rule(<span class="syntax-regexp">/if/</span>) &#123; emit <span class="syntax-token">:IF</span> &#125;
-  rule(<span class="syntax-regexp">/[a-z_][a-z0-9_]*/</span>) &#123; emit <span class="syntax-token">:IDENT</span> &#125;
-<span class="syntax-keyword">end</span></code></pre>
-        <div class="scan" aria-label="Input if equals equals total becomes IF, EQ, and IDENT tokens">
-          <div class="scan-input" aria-hidden="true">
-            <span>if</span><span class="space">·</span><span class="active">==</span><span class="space">·</span><span>total</span>
-          </div>
-          <div class="scan-tokens">
-            <span><small>if</small>IF</span>
-            <span class="active"><small>==</small>EQ</span>
-            <span><small>total</small>IDENT</span>
-          </div>
-          <p><code>/==/</code> wins over <code>/=/</code> because it consumes more input.</p>
+      <figure class="lexer-sample">
+        <figcaption><span>lexer.flexr.rb</span><span>input: if == total</span></figcaption>
+        <pre><code><span>class</span> Lexer &lt; Flexr::Lexer
+  rule(/==/) &#123; emit <span>:EQ</span> &#125;
+  rule(/=/)  &#123; emit :ASSIGN &#125;
+  rule(/if/) &#123; emit :IF &#125;
+  rule(/[a-z_]+/) &#123; emit :IDENT &#125;
+end</code></pre>
+        <div class="sample-result">
+          <small>tokens</small>
+          <code>IF</code><code>EQ</code><code>IDENT</code>
+          <p><code>/==/</code> wins over <code>/=/</code>: longest match wins.</p>
         </div>
       </figure>
     </section>
 
-    <section class="landing-section workflow" aria-labelledby="workflow-title">
+    <section class="landing-section" aria-labelledby="why-title">
       <header class="section-intro">
-        <h2 id="workflow-title">A lexer you can reason about before it reaches your parser.</h2>
-        <p>flexr keeps the specification, the matching contract, and the deployed scanner connected.</p>
+        <h2 id="why-title">One specification from first test to deployment.</h2>
+        <p>No separate lexer language and no hidden matching order.</p>
       </header>
-      <ol class="workflow-list">
-        <li>
-          <span class="step-number">1</span>
-          <div><h3>Write ordinary Ruby</h3><p>Define rules, states, token values, and actions in a class that fits beside the rest of your application.</p></div>
-          <code>class Lexer &lt; Flexr::Lexer</code>
-        </li>
-        <li>
-          <span class="step-number">2</span>
-          <div><h3>Inspect the decision</h3><p>Longest match wins; source order resolves ties. Diagnostics catch unsupported patterns before deployment.</p></div>
-          <code>flexr explain lexer.flexr.rb</code>
-        </li>
-        <li>
-          <span class="step-number">3</span>
-          <div><h3>Generate when needed</h3><p>Produce deterministic Ruby and verify that runtime and generated scanners emit the same token stream.</p></div>
-          <code>flexr generate lexer.flexr.rb</code>
-        </li>
-      </ol>
-    </section>
-
-    <section class="landing-section modes" aria-labelledby="modes-title">
-      <header class="section-intro">
-        <h2 id="modes-title">Keep one source of truth.</h2>
-        <p>Choose the deployment boundary without rewriting the lexer in a second language.</p>
-      </header>
-      <div class="mode-grid">
+      <div class="point-list">
         <article>
-          <h3>Runtime mode</h3>
-          <p>Load the specification directly for a tight development loop, tests, and applications that prefer the readable source.</p>
-          <ul><li>No generation step</li><li>Immediate rule changes</li><li>Full Ruby action context</li></ul>
-          <a href={`${base}learn/runtime-mode/`}>Read the runtime guide</a>
+          <h3>Ruby-native</h3>
+          <p>Use familiar classes, constants, and actions in the language already surrounding your parser.</p>
         </article>
         <article>
-          <h3>Generated mode</h3>
-          <p>Compile the same specification into deterministic Ruby for reproducible builds and controlled startup behavior.</p>
-          <ul><li>Reviewable generated artifact</li><li>Standalone output available</li><li>Runtime parity checks</li></ul>
-          <a href={`${base}learn/generation/`}>Read the generation guide</a>
+          <h3>Explainable</h3>
+          <p>Longest match wins. Source order resolves ties. Diagnostics surface unsupported patterns early.</p>
+        </article>
+        <article>
+          <h3>Same rules, two modes</h3>
+          <p><a href={`${base}learn/runtime-mode/`}>Runtime mode</a> keeps iteration fast; <a href={`${base}learn/generation/`}>Generated mode</a> makes deployment reproducible.</p>
         </article>
       </div>
     </section>
 
-    <section class="parser-strip" aria-label="Parser integrations and project properties">
-      <p>Built for parser authors</p>
-      <ul><li>Racc</li><li>Lrama</li><li>Custom parsers</li><li>Unicode-aware</li><li>Open source</li></ul>
-    </section>
-
-    <section class="landing-cta" aria-labelledby="cta-title">
+    <section class="start" aria-labelledby="start-title">
       <div>
-        <h2 id="cta-title">Start with a lexer you can read.</h2>
-        <p>Install the gem, define your first rules, and see the token stream in a few minutes.</p>
+        <h2 id="start-title">Start with one Ruby file.</h2>
+        <p>Install flexr and follow the short guide.</p>
       </div>
-      <div class="cta-actions">
-        <code>gem install flexr</code>
-        <a class="landing-button light" href={`${base}learn/getting-started/`}>Open the quick start</a>
-      </div>
+      <code>gem install flexr</code>
+      <a class="landing-button primary" href={`${base}learn/getting-started/`}>Open the quick start</a>
     </section>
 
     <footer class="landing-footer">
       <a class="footer-brand" href={base}>flexr/</a>
       <nav aria-label="Footer navigation">
+        <a href={`${base}reference/dsl/`}>Reference</a>
         <a href={`${base}examples/`}>Examples</a>
-        <a href={`${base}reference/cli/`}>CLI reference</a>
         <a href={repo}>GitHub</a>
       </nav>
-      <p>MIT licensed. Built for Ruby parser authors.</p>
+      <p>MIT licensed.</p>
     </footer>
   </main>
 </SiteLayout>
