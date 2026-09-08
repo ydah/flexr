@@ -6,66 +6,73 @@ const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL :
 const repo = 'https://github.com/ydah/flexr';
 ---
 <SiteLayout
-  title="Predictable lexers, written in Ruby"
-  description="Write lexer specifications in Ruby, inspect longest-match decisions, and generate deterministic Ruby for deployment with flexr."
+  title="A lexer generator that speaks Ruby"
+  description="Define lexer rules in Ruby, understand every match, and generate deterministic Ruby with flexr."
 >
   <main class="landing">
-    <section class="landing-hero" aria-labelledby="hero-title">
-      <p class="hero-kicker">Ruby-native lexer generator</p>
-      <h1 id="hero-title">Turn Ruby rules into predictable tokens.</h1>
-      <p class="hero-summary">
-        Write one readable specification, inspect why each match wins, and generate deterministic
-        Ruby when it is time to ship.
-      </p>
-      <div class="hero-actions">
-        <a class="landing-button primary" href={`${base}learn/getting-started/`}>Build your first lexer</a>
-        <a class="landing-button secondary" href={`${base}playground/`}>Try the matching model</a>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-heading">
+        <p>Lexer generation, in Ruby</p>
+        <h1 id="hero-title">Write the rules.<br /><em>Know what wins.</em></h1>
       </div>
-
-      <figure class="lexer-sample">
-        <figcaption><span>lexer.flexr.rb</span><span>input: if == total</span></figcaption>
-        <pre><code><span>class</span> Lexer &lt; Flexr::Lexer
-  rule(/==/) &#123; emit <span>:EQ</span> &#125;
-  rule(/=/)  &#123; emit :ASSIGN &#125;
-  rule(/if/) &#123; emit :IF &#125;
-  rule(/[a-z_]+/) &#123; emit :IDENT &#125;
-end</code></pre>
-        <div class="sample-result">
-          <small>tokens</small>
-          <code>IF</code><code>EQ</code><code>IDENT</code>
-          <p><code>/==/</code> wins over <code>/=/</code>: longest match wins.</p>
+      <div class="hero-intro">
+        <p>
+          flexr keeps lexer specifications in the language they serve. Define readable rules,
+          inspect every decision, then generate deterministic Ruby for deployment.
+        </p>
+        <div class="hero-actions">
+          <a class="action action-primary" href={`${base}learn/getting-started/`}>Build your first lexer</a>
+          <a class="action action-link" href={`${base}playground/`}>Open the playground</a>
         </div>
-      </figure>
+      </div>
     </section>
 
-    <section class="landing-section" aria-labelledby="why-title">
-      <header class="section-intro">
-        <h2 id="why-title">One specification from first test to deployment.</h2>
-        <p>No separate lexer language and no hidden matching order.</p>
+    <section class="specimen" aria-labelledby="specimen-title">
+      <header>
+        <p>One input, four decisions</p>
+        <h2 id="specimen-title">A match you can read.</h2>
       </header>
-      <div class="point-list">
+      <div class="source-line">
+        <span>source</span>
+        <code>if total == 42</code>
+      </div>
+      <ol class="token-line" aria-label="Generated token stream">
+        <li><span>if</span><strong>IF</strong></li>
+        <li><span>total</span><strong>IDENT</strong></li>
+        <li class="token-accent"><span>==</span><strong>EQ</strong></li>
+        <li><span>42</span><strong>INTEGER</strong></li>
+      </ol>
+      <p class="decision"><code>/==/</code> wins over <code>/=/</code> because the longest match wins.</p>
+    </section>
+
+    <section class="principles" aria-labelledby="principles-title">
+      <header>
+        <p>Why flexr</p>
+        <h2 id="principles-title">One specification, from first test to release.</h2>
+      </header>
+      <div class="principle-list">
         <article>
           <h3>Ruby-native</h3>
-          <p>Use familiar classes, constants, and actions in the language already surrounding your parser.</p>
+          <p>Use familiar classes, constants, and actions. There is no separate lexer language to learn.</p>
         </article>
         <article>
           <h3>Explainable</h3>
-          <p>Longest match wins. Source order resolves ties. Diagnostics surface unsupported patterns early.</p>
+          <p>Longest match wins. Source order resolves ties. Unsupported patterns surface early.</p>
         </article>
         <article>
-          <h3>Same rules, two modes</h3>
-          <p><a href={`${base}learn/runtime-mode/`}>Runtime mode</a> keeps iteration fast; <a href={`${base}learn/generation/`}>Generated mode</a> makes deployment reproducible.</p>
+          <h3>Ready both ways</h3>
+          <p><a href={`${base}learn/runtime-mode/`}>Runtime mode</a> keeps iteration quick. <a href={`${base}learn/generation/`}>Generated mode</a> keeps deployment reproducible.</p>
         </article>
       </div>
     </section>
 
     <section class="start" aria-labelledby="start-title">
       <div>
+        <p>Ready when you are</p>
         <h2 id="start-title">Start with one Ruby file.</h2>
-        <p>Install flexr and follow the short guide.</p>
       </div>
       <code>gem install flexr</code>
-      <a class="landing-button primary" href={`${base}learn/getting-started/`}>Open the quick start</a>
+      <a class="action action-primary" href={`${base}learn/getting-started/`}>Read the quick start</a>
     </section>
 
     <footer class="landing-footer">
