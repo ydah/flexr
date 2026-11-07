@@ -89,6 +89,7 @@ matches your task:
 - [Explanation](docs/explanation/) — understand matching, backends, Unicode,
   generation, and security decisions.
 - [Examples](examples/) — executable specifications and parser integrations.
+- [Changelog](CHANGELOG.md) — release highlights and upgrade notes.
 
 ## Compatibility and stability
 

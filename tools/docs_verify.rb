@@ -13,6 +13,7 @@ module FlexrDocumentation
   MARKER_END = "<!-- flexr-help:end -->"
   MARKDOWN_FILES = [
     File.join(ROOT, "README.md"),
+    File.join(ROOT, "CHANGELOG.md"),
     File.join(ROOT, "CONTRIBUTING.md"),
     *Dir[File.join(ROOT, "docs/**/*.md")],
     *Dir[File.join(ROOT, "examples/**/README.md")]
