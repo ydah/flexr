@@ -3,6 +3,43 @@
 Diagnostics have a code, severity, message, optional location, help, and note.
 Use `flexr check SPEC --format json` to consume the structured form.
 
+## Source context in human output
+
+When a diagnostic has a source range, human output includes the file, line,
+column, source line, and carets. For example, given `lexer.flexr.rb`:
+
+```ruby
+class Lexer < Flexr::Lexer
+  rule(/[a-z]+/, skip: true)
+  rule(/if/, skip: true)
+end
+```
+
+`flexr check lexer.flexr.rb --color never` prints:
+
+```text
+warning[FLEXR-W001]: rule 1 is unreachable (shadowed by rule 0)
+  --> lexer.flexr.rb:3:3
+  |
+3 |   rule(/if/, skip: true)
+  |   ^^^^^^^^^^^^^^^^^^^^^^
+  help: remove it, reorder the rules, or make its language distinct
+```
+
+Line and column numbers are one-based. Columns count characters rather than
+UTF-8 bytes. A multiline range shows its first source line; an empty range
+gets one caret. Tabs are preserved, but wide or combining characters can make
+caret alignment differ from terminal display widths.
+
+`FLEXR-W001` and Ruby syntax errors (`FLEXR-E010`) carry source ranges. Other
+diagnostics without ranges, or diagnostics whose source cannot be read, retain
+the message, help, and note without a source excerpt.
+
+For direct rendering, pass the matching source text and optional file path to
+`DiagnosticSet#render(source: source, path: path)`. Without a path, the label is
+`(source)`. JSON output keeps `location` as a pair of byte offsets with an
+exclusive end; source excerpts are not added to JSON.
+
 ## Errors
 
 | Code | Meaning | First fix to try |

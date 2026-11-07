@@ -31,7 +31,8 @@ module Flexr
       err.puts "error: #{e.message}"
       usage(err, status: EXIT_USAGE)
     rescue Flexr::Error, Errno::ENOENT, Errno::EACCES, SyntaxError => e
-      err.puts render_error(e, options: options)
+      err.puts render_error(e, options: options, path: spec,
+                           normalize_source: command == :generate || (command == :check && options&.eval_mode))
       EXIT_FAILURE
     rescue StandardError => e
       err.puts "error: #{e.class}: #{e.message}"
@@ -157,7 +158,8 @@ module Flexr
       if options.format == :json
         out.puts set.render(format: :json)
       elsif !diagnostics.empty?
-        out.puts set.render(format: :human, color: options.color)
+        out.puts set.render(format: :human, color: options.color, path: spec,
+                            source: diagnostic_source(spec, normalize: options.eval_mode))
       end
       return EXIT_FAILURE if options.warn_as_error && diagnostics.any?(&:warning?)
 
@@ -303,10 +305,21 @@ module Flexr
       value
     end
 
-    def render_error(error, options: nil)
+    def diagnostic_source(path, normalize: false)
+      return unless path
+
+      source = File.binread(path).force_encoding(Encoding::UTF_8)
+      normalize ? source.gsub(/\r\n?/, "\n") : source
+    rescue SystemCallError, IOError
+      nil
+    end
+
+    def render_error(error, options: nil, path: nil, normalize_source: false)
       if error.respond_to?(:diagnostic) && error.diagnostic
+        source = diagnostic_source(path, normalize: normalize_source) if
+          error.diagnostic.location && options&.format != :json
         return DiagnosticSet.new.tap { |set| set << error.diagnostic }.render(
-          format: options&.format || :human, color: options&.color || :auto
+          format: options&.format || :human, color: options&.color || :auto, source: source, path: path
         )
       end
 

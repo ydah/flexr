@@ -40,7 +40,8 @@ module Flexr
         end
         unless prism.errors.empty?
           error = prism.errors.first
-          diagnostic = Diagnostics.error("FLEXR-E010", error.message)
+          diagnostic = Diagnostics.error("FLEXR-E010", error.message,
+                                         location: [error.location.start_offset, error.location.end_offset])
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
 
