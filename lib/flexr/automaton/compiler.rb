@@ -58,6 +58,9 @@ module Flexr
             normalized_ast = Regexp::Normalizer.new(ast, encoding: encoding, options: regexp.options).normalize
             normalized << [normalized_ast, condition]
           end
+        rescue CompileError => e
+          e.diagnostic.location ||= rule.location if e.diagnostic
+          raise
         end
         return empty_dfa if normalized.empty?
 
@@ -220,6 +223,9 @@ module Flexr
             diagnostic = Diagnostics.error("FLEXR-E005", "rule #{rule.index} can match an empty string")
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
           end
+        rescue CompileError => e
+          e.diagnostic.location ||= rule.location if e.diagnostic
+          raise
         end
       end
 
@@ -253,6 +259,7 @@ module Flexr
         firstmatch_conflicts(@spec.rules).each do |left, right|
           diagnostics << Diagnostics.warning(
             "FLEXR-W010", "firstmatch rules #{left.index} and #{right.index} may change longest-match semantics",
+            location: right.location,
             help: "use backend :table unless first-match compatibility is required"
           )
         end
@@ -270,20 +277,23 @@ module Flexr
           diagnostics << Diagnostics.warning(
             "FLEXR-W013",
             "rule #{rule.index} uses a capturing group; flexr treats it as non-capturing",
+            location: rule.location,
             help: "rewrite capturing groups as (?:...) and extract text in the action"
           )
         end
 
-        undeclared_tokens.each do |token|
+        undeclared_token_rules.each do |token, rule|
           diagnostics << Diagnostics.warning(
             "FLEXR-W014",
             "token #{token.inspect} is not declared by emits",
+            location: rule.location,
             help: "add the token to emits or remove the declaration if it is intentionally private"
           )
         end
 
         diagnostics.concat(variable_trailing_rules.map do |rule|
           Diagnostics.warning("FLEXR-W003", "rule #{rule.index} uses variable-length trailing context",
+                              location: rule.location,
                               help: "make the body or followed_by expression fixed length when possible")
         end)
 
@@ -292,6 +302,7 @@ module Flexr
             Diagnostics.warning(
               "FLEXR-W012",
               "rule #{rule.index} cannot use region acceleration with trailing context",
+              location: rule.location,
               help: "remove trailing context or set accel: :none when the trade-off is intentional"
             )
           end)
@@ -357,21 +368,22 @@ module Flexr
         false
       end
 
-      def undeclared_tokens
-        return [] if Array(@spec.declared_tokens).empty?
+      def undeclared_token_rules
+        declared = Array(@spec.declared_tokens)
+        return {} if declared.empty?
 
-        emitted = @spec.rules.flat_map do |rule|
+        emitted = @spec.rules.each_with_object({}) do |rule, rules_by_token|
           action = rule.action
-          if action.is_a?(Array) && action.first == :emit
+          tokens = if action.is_a?(Array) && action.first == :emit
             [action.last]
           elsif action.is_a?(String)
             action.scan(/\bemit\s*\(?\s*:([A-Za-z_]\w*)/).flatten.map(&:to_sym)
           else
             []
           end
+          tokens.each { |token| rules_by_token[token] ||= rule }
         end
-        declared = Array(@spec.declared_tokens)
-        emitted.uniq.reject { |token| declared.include?(token) }
+        emitted.except(*declared)
       end
 
       def variable_trailing_rules
