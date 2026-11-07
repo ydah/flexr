@@ -18,7 +18,8 @@ output as SVG and should be run before a release that changes CLI visualization.
 
 Then:
 
-1. Review the commits since the previous release and update `lib/flexr/version.rb`.
+1. Review the commits since the previous release, add a dated version section
+   to [the changelog](../CHANGELOG.md), and update `lib/flexr/version.rb`.
 2. Verify the gemspec metadata URLs.
 3. Build and inspect the package with `gem build flexr.gemspec`.
 4. Confirm generated golden files and the Unicode snapshot are intentional.
@@ -26,5 +27,5 @@ Then:
 
 Unicode snapshot changes are minor-version compatibility changes because they
 can change generated output. Stable runtime and generated-file contracts are
-preserved within a major version unless this document and the release commits
+preserved within a major version unless this document and the changelog
 state a migration.
