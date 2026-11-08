@@ -68,13 +68,14 @@ For direct rendering, pass the matching source text and optional file path to
 `(source)`. JSON output keeps `location` as a pair of byte offsets with an
 exclusive end; source excerpts are not added to JSON.
 
-Runtime guard diagnostics (`FLEXR-E012`, `FLEXR-E021` through `FLEXR-E027`)
+Runtime input diagnostics (`FLEXR-E003`, `FLEXR-E012`, `FLEXR-E013`,
+and `FLEXR-E021` through `FLEXR-E027`)
 use `[byte_pos, byte_pos]` to mark their reported position in the original
 input. Pass the complete input to `DiagnosticSet#render` to show its line and
 caret; see [errors and recovery](errors.md). These offsets remain absolute
 when a streaming buffer discards consumed input. If the CLI reports a runtime
-guard failure, it reads the error's `filename` for context, preserving the
-input's original line endings. To bound memory use while reporting guard
+input failure, it reads the error's `filename` for context, preserving the
+input's original line endings. To bound memory use while reporting input
 failures, the CLI omits excerpts for input files larger than 64 KiB. An absent
 or unreadable input file also produces the diagnostic without an excerpt.
 

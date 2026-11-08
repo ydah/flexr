@@ -103,6 +103,24 @@ RSpec.describe "runtime and generated parity" do
     expect(outcomes[:runtime]).to include("code" => "FLEXR-E021", "byte_pos" => 5, "location" => [5, 5])
   end
 
+  { "push :missing" => "FLEXR-E003", "public_send(:reject)" => "FLEXR-E013" }.each do |action, code|
+    it "preserves #{code} input context and exception class in every mode" do
+      source = <<~RUBY
+        require "flexr"
+        class ActionLocationParityLexer < Flexr::Lexer
+          rule(/é|\\n/, skip: true)
+          rule(/a/) { #{action} }
+        end
+      RUBY
+
+      outcomes = error_outcomes_for(source, "ActionLocationParityLexer", "é\néa")
+
+      expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
+      expect(outcomes[:runtime]).to include("class" => "Flexr::CompileError", "code" => code,
+                                            "filename" => "input.txt", "byte_pos" => 6, "location" => [6, 6])
+    end
+  end
+
   it "uses skip, emit, block, and default action precedence consistently" do
     source = <<~RUBY
       require "flexr"

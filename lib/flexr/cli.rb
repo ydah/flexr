@@ -318,7 +318,7 @@ module Flexr
 
     def render_error(error, options: nil, path: nil, normalize_source: false)
       if error.respond_to?(:diagnostic) && error.diagnostic
-        if error.is_a?(LexError)
+        if error.is_a?(LexError) || (error.is_a?(Error) && error.byte_pos)
           path = error.filename
           normalize_source = false
           # shortcut: omit input excerpts above 64 KiB; use bounded line reads if larger inputs need excerpts.

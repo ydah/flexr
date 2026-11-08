@@ -16,6 +16,13 @@ text, and optional diagnostic. `Flexr::Runtime::TokenTooLargeError` is a
 [diagnostics catalog](diagnostics.md). `StateStackOverflowError` is raised when
 a `push` would exceed `max_state_stack`.
 
+Undefined state transitions (`FLEXR-E003`) and `reject` calls (`FLEXR-E013`)
+at runtime continue to raise `Flexr::CompileError`. These errors also expose
+the input `filename` and `byte_pos`, with a diagnostic point range at the
+current cursor. During a rule action this is after the matched input, unless
+the action moved the cursor with `less`. EOF actions point to the end of input.
+Static `reject` diagnostics still highlight the rule in the specification.
+
 Guard diagnostics include a point range at `byte_pos` when it is known. This
 is the guard's reported input position, which may be the start of a token or
 the end of the loaded buffer. In a rescue handler, render it with the complete
