@@ -87,10 +87,12 @@ RSpec.describe "state diagnostic locations" do
 
       expect(status).to eq(1)
       expect(diagnostics.first).to include("code" => "FLEXR-E006", "location" => expected)
+      expect(diagnostics.first.fetch("message")).to eq("DFA state limit exceeded while compiling rule /ab/")
       expect { Flexr::Generator.new(@path, options: { max_dfa_states: 1 }).generate }
         .to raise_error(Flexr::CompileError) do |error|
           expect(error.diagnostic.code).to eq("FLEXR-E006")
           expect(error.diagnostic.location).to eq(expected)
+          expect(error.diagnostic.message).to eq("DFA state limit exceeded while compiling rule /ab/")
         end
     end
   end
