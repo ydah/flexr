@@ -106,12 +106,51 @@ RSpec.describe "runtime and generated parity" do
                                           "note" => "rule /a/", "rule" => 1)
   end
 
-  %i[table direct].each do |backend|
+  %i[table direct firstmatch].each do |backend|
+    it "preserves trailing-context lookahead errors in every #{backend} mode" do
+      source = <<~RUBY
+        require "flexr"
+        class TrailingGuardParityLexer < Flexr::Lexer
+          backend :#{backend}
+          option :experimental
+          rule(/a/, followed_by: /b+/, skip: true)
+        end
+      RUBY
+
+      outcomes = error_outcomes_for(source, "TrailingGuardParityLexer", "abbbb", options: { max_lookahead_size: 2 })
+
+      expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
+      expect(outcomes[:runtime]).to include("code" => "FLEXR-E024", "rule" => 0, "byte_pos" => 0,
+                                            "note" => "rule /a/, followed_by: /b+/")
+    end
+
+    it "leaves trailing context for subsequent tokens in every #{backend} mode" do
+      source = <<~RUBY
+        require "flexr"
+        class TrailingMatchParityLexer < Flexr::Lexer
+          backend :#{backend}
+          option :experimental
+          rule(/a/, followed_by: /b+/, emit: :A)
+          rule(/ab/, emit: :AB)
+          rule(/b+/, emit: :B)
+          rule(/./, emit: :OTHER)
+        end
+      RUBY
+
+      outcomes = outcomes_for(source, "TrailingMatchParityLexer", %w[abbbb ab a ac])
+
+      expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
+      expect(outcomes[:runtime]).to eq([
+        [%w[A a], %w[B bbbb]], [%w[A a], %w[B b]], [%w[OTHER a]], [%w[OTHER a], %w[OTHER c]]
+      ])
+    end
+
     it "preserves token limit patterns and rule indices in every #{backend} mode" do
       source = <<~RUBY
         require "flexr"
         class GuardPatternParityLexer < Flexr::Lexer
           backend :#{backend}
+          option :experimental
           rule(/a+/i, skip: true)
         end
       RUBY

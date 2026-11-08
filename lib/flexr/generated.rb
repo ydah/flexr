@@ -49,19 +49,7 @@ module Flexr
       validate_artifact!(payload[:artifact])
       install!(klass, payload)
       machines = payload.fetch(:compiled).fetch(:machines).transform_values do |machine|
-        dfa_data = machine.fetch(:dfa)
-        packed = decode_packed(dfa_data[:packed])
-        dfa = Automaton::DFA.new(
-          transitions: dfa_data[:transitions],
-          accepts: dfa_data.fetch(:accepts),
-          ec: dfa_data.fetch(:ec),
-          class_count: dfa_data.fetch(:class_count),
-          start: dfa_data.fetch(:start),
-          rule_ids: dfa_data.fetch(:rule_ids),
-          packed: packed,
-          direct: dfa_data[:direct],
-          state_count: dfa_data.fetch(:state_count)
-        )
+        dfa = load_dfa(machine.fetch(:dfa))
         Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym)
       end
       compiled = Automaton::CompiledSpec.new(
@@ -119,6 +107,14 @@ module Flexr
       }
     end
 
+    def load_dfa(data)
+      Automaton::DFA.new(
+        transitions: data[:transitions], accepts: data.fetch(:accepts), ec: data.fetch(:ec),
+        class_count: data.fetch(:class_count), start: data.fetch(:start), rule_ids: data.fetch(:rule_ids),
+        packed: decode_packed(data[:packed]), direct: data[:direct], state_count: data.fetch(:state_count)
+      )
+    end
+
     def decode_array(encoded, nil_value: nil)
       values = encoded.unpack1("m0").unpack("l<*")
       return values unless nil_value
@@ -138,6 +134,7 @@ module Flexr
           states: Array(definition.fetch(:states)).map(&:to_sym),
           bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
           location: definition[:span] || definition[:location],
+          trailing_dfa: definition[:trailing_dfa] && Generated.load_dfa(definition[:trailing_dfa]),
           pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
             next unless condition
 
