@@ -71,6 +71,53 @@ module Flexr
         representatives.values.sort_by { |byte| [byte.between?(32, 126) ? 0 : 1, byte] }
       end
 
+      def shadowing_examples(dfa, rule_indices)
+        remaining = (rule_indices & dfa.rule_ids).to_h { |index| [index, true] }
+        return {} if remaining.empty?
+
+        examples = {}
+        queue = [[dfa.start, nil, nil]]
+        # Visiting the start again permits a nonempty example when it accepts and loops.
+        visited = {}
+        bytes = joint_byte_representatives(dfa, dfa)
+        cursor = 0
+        while cursor < queue.length
+          state = queue.fetch(cursor).first
+          accepts = dfa.accepts.fetch(state)
+          winner = accepts.min_by(&:rule_index)&.rule_index
+          if cursor.positive? && winner
+            shadowed = accepts.map(&:rule_index).uniq.select { |index| index > winner && remaining.key?(index) }
+            unless shadowed.empty?
+              input = example_input(queue, cursor)
+              shadowed.each do |index|
+                examples[index] = [input, winner]
+                remaining.delete(index)
+              end
+              return examples if remaining.empty?
+            end
+          end
+
+          bytes.each do |byte|
+            target = dfa.transition(state, byte)
+            next if target.nil? || visited[target]
+
+            visited[target] = true
+            queue << [target, cursor, byte]
+          end
+          cursor += 1
+        end
+        examples
+      end
+
+      def example_input(paths, cursor)
+        bytes = []
+        while (parent = paths.fetch(cursor)[1])
+          bytes << paths.fetch(cursor)[2]
+          cursor = parent
+        end
+        bytes.reverse.pack("C*")
+      end
+
       def accepting?(dfa, state)
         state && !dfa.accepts.fetch(state).empty?
       end

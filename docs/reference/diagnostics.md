@@ -24,6 +24,7 @@ warning[FLEXR-W001]: rule /if/ is unreachable (shadowed by rule /[a-z]+/)
 3 |   rule(/if/, skip: true)
   |   ^^^^^^^^^^^^^^^^^^^^^^
   help: remove it, reorder the rules, or make its language distinct
+  note: example: "if" selects rule /[a-z]+/ (same length, earlier rule wins)
 ```
 
 Line and column numbers are one-based. Columns count characters rather than
@@ -57,6 +58,17 @@ that shadow the unreachable rule; `FLEXR-E006` lists the patterns in the state
 being compiled. String trailing context is shown as its compiled literal
 regexp. These labels also appear in JSON messages and when source ranges are
 unavailable.
+
+`FLEXR-W001` notes include a shortest nonempty input, measured in bytes, and
+the earlier rule selected for that input. Examples for named lexical states
+include the state name. Control characters and binary bytes are escaped, and
+the same note is preserved in JSON and generated artifacts.
+
+Examples currently cover `table`, `direct`, and `auto` states without
+`followed_by:`. Warnings for `firstmatch` or states using trailing context
+retain their messages without an example. An example is also omitted when
+only empty input reaches the rule or the shortest candidate is invalid in
+the specification's encoding.
 
 Static DSL errors highlight the offending DSL call. Unresolved expressions
 point to the expression instead; ambiguous lexer selection points to the
