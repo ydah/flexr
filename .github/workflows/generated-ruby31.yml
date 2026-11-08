@@ -2,7 +2,15 @@ name: generated-ruby31
 
 on:
   push:
+    paths-ignore:
+      - "**/*.md"
+      - "site/**"
+      - ".github/workflows/pages.yml"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "site/**"
+      - ".github/workflows/pages.yml"
   schedule:
     - cron: "17 3 * * *"
 
