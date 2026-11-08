@@ -16,7 +16,7 @@ module Flexr
       end
     end
 
-    State = Struct.new(:name, :inclusive, :id, keyword_init: true)
+    State = Struct.new(:name, :inclusive, :id, :location, keyword_init: true)
 
     Spec = Struct.new(
       :class_name, :superclass, :backend, :token_kind, :encoding, :options,

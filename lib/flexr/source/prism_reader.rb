@@ -48,6 +48,7 @@ module Flexr
         klass, class_name = find_lexer_class(prism.value)
         raise CompileError, "no class inheriting from Flexr::Lexer found" unless klass
 
+        @states[:initial][:location] = [klass.location.start_offset, klass.location.end_offset]
         @lexer_scope = class_name.to_s.delete_prefix("::").split("::").reject(&:empty?)
         collect_constants(prism.value)
         collect_body(klass.body, [:initial])
@@ -231,7 +232,7 @@ module Flexr
           existing = @states[name]
           raise ArgumentError, "state #{name.inspect} already declared with inclusive: #{existing[:inclusive]}" if
             existing && existing[:inclusive] != inclusive
-          @states[name] ||= { inclusive: inclusive }
+          @states[name] ||= { inclusive: inclusive, location: [node.location.start_offset, node.location.end_offset] }
         end
         record_state_wrapper(node, block)
         active_states = parent_states == [:initial] ? names : (parent_states + names).uniq

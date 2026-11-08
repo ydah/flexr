@@ -14,6 +14,9 @@ module Flexr
         machines = state_names.to_h do |state_name|
           rules = rules_for(state_name)
           [state_name, Machine.new(dfa: compile_machine(rules), state_name: state_name)]
+        rescue CompileError => e
+          e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
+          raise
         end
         stats = machines.transform_values { |machine| machine.dfa.stats }
         compiled = CompiledSpec.new(machines: machines, rules: @spec.rules, states: state_names, stats: stats)
@@ -248,11 +251,12 @@ module Flexr
                               help: "remove it, reorder the rules, or make its language distinct")
         end)
 
-        @spec.states.each_key do |state_name|
+        @spec.states.each do |state_name, state|
           next if state_name == :initial
           next unless rules_for(state_name).empty?
 
           diagnostics << Diagnostics.warning("FLEXR-W002", "state #{state_name.inspect} has no rules",
+                                              location: state.location,
                                               help: "add a rule to the state or remove the unused state")
         end
 
@@ -264,11 +268,12 @@ module Flexr
           )
         end
 
-        max_cells = compiled.stats.values.map { |stat| stat[:states] * stat[:classes] }.max.to_i
-        if max_cells > 1_000_000
+        largest_state, max_cells = compiled.stats.map { |name, stat| [name, stat[:states] * stat[:classes]] }.max_by(&:last)
+        if max_cells && max_cells > 1_000_000
           diagnostics << Diagnostics.warning(
             "FLEXR-W011",
             "generated transition table is large",
+            location: @spec.states.fetch(largest_state).location,
             help: "use backend :direct, table compression, or split the specification"
           )
         end
@@ -310,6 +315,7 @@ module Flexr
 
         if elapsed > 0.5
           diagnostics << Diagnostics.warning("FLEXR-W016", format("DFA construction took %.3fs", elapsed),
+                                              location: @spec.states.fetch(:initial).location,
                                               help: "use generated mode for production startup")
         end
         diagnostics

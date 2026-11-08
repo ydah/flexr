@@ -42,6 +42,9 @@ Source ranges are available for:
   constructs (`FLEXR-E014`), including errors in trailing context.
 - Rule warnings: `FLEXR-W001`, `FLEXR-W003`, `FLEXR-W010`, `FLEXR-W012`,
   `FLEXR-W013`, and `FLEXR-W014`.
+- State and specification diagnostics: DFA state limits (`FLEXR-E006`), empty
+  states (`FLEXR-W002`), large transition tables (`FLEXR-W011`), and slow DFA
+  construction (`FLEXR-W016`).
 
 Rule diagnostics highlight the complete rule declaration. `FLEXR-W010` points
 to the later rule in the reported pair. `FLEXR-W014` points to the first rule
@@ -51,10 +54,14 @@ Static DSL errors highlight the offending DSL call. Unresolved expressions
 point to the expression instead; ambiguous lexer selection points to the
 second lexer class containing DSL calls.
 
-Rules created directly through the runtime DSL do not carry source ranges.
-Diagnostics without ranges, including whole-specification and state warnings,
-or diagnostics whose source cannot be read, retain the message, help, and note
-without a source excerpt.
+State diagnostics point to the first declaration of the affected state.
+`FLEXR-E006` identifies the state being compiled, while `FLEXR-W011` identifies
+the state with the largest transition table. The implicit `initial` state
+and the total construction time (`FLEXR-W016`) point to the lexer class.
+
+Rules and states created directly through the runtime DSL do not carry source
+ranges. Diagnostics without ranges, or whose source cannot be read, retain
+the message, help, and note without a source excerpt.
 
 For direct rendering, pass the matching source text and optional file path to
 `DiagnosticSet#render(source: source, path: path)`. Without a path, the label is
