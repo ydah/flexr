@@ -65,12 +65,13 @@ RSpec.describe "runtime and generated parity" do
       load ARGV.fetch(0)
       lexer = Object.const_get(ARGV.fetch(1))
       begin
-        lexer.new(ARGV.fetch(2), filename: "input.txt").tokens
+        lexer.new(JSON.parse(ARGV.fetch(2)), filename: "input.txt").tokens
         outcome = { kind: "tokens" }
       rescue => error
         outcome = {
           kind: "error", class: error.class.name, message: error.message,
           code: error.respond_to?(:diagnostic) && error.diagnostic&.code,
+          location: error.respond_to?(:diagnostic) && error.diagnostic&.location,
           filename: error.respond_to?(:filename) && error.filename,
           byte_pos: error.respond_to?(:byte_pos) && error.byte_pos,
           line: error.respond_to?(:line) && error.line,
@@ -81,10 +82,25 @@ RSpec.describe "runtime and generated parity" do
     RUBY
     command = [RbConfig.ruby]
     command.push("-I", File.join(repository_root, "lib")) if load_path
-    command.push("-e", script, path, class_name, input)
+    command.push("-e", script, path, class_name, JSON.generate(input))
     stdout, stderr, status = Open3.capture3(*command)
     expect(status).to be_success, stderr
     JSON.parse(stdout)
+  end
+
+  it "preserves runtime guard input locations in generated and standalone scanners" do
+    source = <<~'RUBY'
+      require "flexr"
+      class GuardLocationParityLexer < Flexr::Lexer
+        rule(/é|\n/, skip: true)
+        rule(/a/) { less(0) }
+      end
+    RUBY
+
+    outcomes = error_outcomes_for(source, "GuardLocationParityLexer", "é\néa")
+
+    expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
+    expect(outcomes[:runtime]).to include("code" => "FLEXR-E021", "byte_pos" => 5, "location" => [5, 5])
   end
 
   it "uses skip, emit, block, and default action precedence consistently" do

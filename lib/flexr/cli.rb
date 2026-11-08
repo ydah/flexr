@@ -304,10 +304,13 @@ module Flexr
       value
     end
 
-    def diagnostic_source(path, normalize: false)
+    def diagnostic_source(path, normalize: false, max_bytes: nil)
       return unless path
 
-      source = File.binread(path).force_encoding(Encoding::UTF_8)
+      source = File.binread(path, max_bytes && (max_bytes + 1))
+      return if max_bytes && source.bytesize > max_bytes
+
+      source.force_encoding(Encoding::UTF_8)
       normalize ? source.gsub(/\r\n?/, "\n") : source
     rescue SystemCallError, IOError
       nil
@@ -315,7 +318,13 @@ module Flexr
 
     def render_error(error, options: nil, path: nil, normalize_source: false)
       if error.respond_to?(:diagnostic) && error.diagnostic
-        source = diagnostic_source(path, normalize: normalize_source) if
+        if error.is_a?(LexError)
+          path = error.filename
+          normalize_source = false
+          # shortcut: omit input excerpts above 64 KiB; use bounded line reads if larger inputs need excerpts.
+          max_bytes = 64 * 1024
+        end
+        source = diagnostic_source(path, normalize: normalize_source, max_bytes: max_bytes) if
           error.diagnostic.location && options&.format != :json
         return DiagnosticSet.new.tap { |set| set << error.diagnostic }.render(
           format: options&.format || :human, color: options&.color || :auto, source: source, path: path

@@ -14,6 +14,7 @@ module Flexr
         diagnostic = Diagnostics.error(
           CODE,
           message,
+          location: byte_pos && [byte_pos, byte_pos],
           help: "increase max_token_size or split the input token",
           note: rule.nil? ? nil : "rule #{rule} at byte #{byte_pos}"
         )
@@ -27,7 +28,8 @@ module Flexr
       def initialize(code, message, help:, filename: nil, byte_pos: nil, line: nil, text: nil, rule: nil)
         @code = code
         @rule = rule
-        diagnostic = Diagnostics.error(code, message, help: help, note: rule.nil? ? nil : "rule #{rule}")
+        diagnostic = Diagnostics.error(code, message, location: byte_pos && [byte_pos, byte_pos],
+                                       help: help, note: rule.nil? ? nil : "rule #{rule}")
         super(message, filename: filename, byte_pos: byte_pos, line: line, text: text, diagnostic: diagnostic)
       end
     end
