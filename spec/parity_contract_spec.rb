@@ -65,7 +65,7 @@ RSpec.describe "runtime and generated parity" do
       load ARGV.fetch(0)
       lexer = Object.const_get(ARGV.fetch(1))
       begin
-        lexer.new(ARGV.fetch(2), filename: "input.txt").tokens
+        lexer.new(JSON.parse(ARGV.fetch(2)), filename: "input.txt").tokens
         outcome = { kind: "tokens" }
       rescue => error
         outcome = {
@@ -82,7 +82,7 @@ RSpec.describe "runtime and generated parity" do
     RUBY
     command = [RbConfig.ruby]
     command.push("-I", File.join(repository_root, "lib")) if load_path
-    command.push("-e", script, path, class_name, input)
+    command.push("-e", script, path, class_name, JSON.generate(input))
     stdout, stderr, status = Open3.capture3(*command)
     expect(status).to be_success, stderr
     JSON.parse(stdout)
