@@ -201,11 +201,7 @@ module Flexr
       end
 
       def reference_pattern?(pattern)
-        return false unless pattern.is_a?(::Regexp)
-        return true if pattern.source.match?(/\\[pP]\{/) || pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
-
-        @config.options[:unicode] == true && @lexer.utf8_input? &&
-          pattern.source.match?(/\\[dDwWsS]/)
+        Regexp::Matcher.reference?(pattern, encoding: @config.encoding, unicode: @config.options[:unicode] == true)
       end
 
       def scan_firstmatch(position)
@@ -293,16 +289,8 @@ module Flexr
       end
 
       def match_stream_pattern(pattern, subject, reference:)
-        if reference
-          Unicode::ReferenceRegexp.match(
-            pattern, subject, encoding: @config.encoding,
-            options: pattern.options, unicode: @config.options[:unicode] == true
-          )
-        else
-          pattern.match(subject, 0)
-        end
-      rescue ArgumentError, RegexpError
-        nil
+        Regexp::Matcher.match(pattern, subject, encoding: @config.encoding,
+                              unicode: @config.options[:unicode] == true, reference: reference)
       end
 
       def stream_subject(buffer, position)

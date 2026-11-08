@@ -64,11 +64,18 @@ the earlier rule selected for that input. Examples for named lexical states
 include the state name. Control characters and binary bytes are escaped, and
 the same note is preserved in JSON and generated artifacts.
 
-Examples currently cover `table`, `direct`, and `auto` states without
-`followed_by:`. Warnings for `firstmatch` or states using trailing context
-retain their messages without an example. An example is also omitted when
-only empty input reaches the rule or the shortest candidate is invalid in
-the specification's encoding.
+For `firstmatch`, the candidate is checked with the scanner's regexp matcher
+without running actions. The note identifies the first rule selected and its
+matched byte count, which can be shorter than the example input. For example,
+`"ab"` can select an earlier `/a/` rule with a one-byte match. If the candidate
+selects the supposedly unreachable rule in any lexical state, W001 is omitted
+for that rule.
+
+Examples currently cover states without `followed_by:`. Warnings for states
+using trailing context retain their messages without an example. An example
+is also omitted when only empty input reaches the rule, the shortest candidate
+is invalid in the specification's encoding, or the firstmatch check cannot
+confirm the match.
 
 Static DSL errors highlight the offending DSL call. Unresolved expressions
 point to the expression instead; ambiguous lexer selection points to the

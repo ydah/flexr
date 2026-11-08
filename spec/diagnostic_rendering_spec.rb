@@ -127,21 +127,25 @@ RSpec.describe "CLI diagnostic source context" do
     TEXT
   end
 
-  it "preserves the example in JSON and generated diagnostics" do
-    status, output, errors = run_cli("check", @path, "--format", "json")
-    expect(status).to eq(0)
-    expect(errors).to be_empty
-    note = 'example: "if" selects rule /[a-z]+/ (same length, earlier rule wins)'
-    expect(JSON.parse(output).first.fetch("note")).to eq(note)
+  %i[table firstmatch].each do |backend|
+    it "preserves the #{backend} example in JSON and generated diagnostics" do
+      File.binwrite(@path, source.sub("  rule", "  backend :firstmatch\n  option :experimental\n  rule")) if backend == :firstmatch
+      status, output, errors = run_cli("check", @path, "--format", "json")
+      expect(status).to eq(0)
+      expect(errors).to be_empty
+      reason = backend == :firstmatch ? "first match wins, matched 2 bytes" : "same length, earlier rule wins"
+      note = %(example: "if" selects rule /[a-z]+/ (#{reason}))
+      expect(JSON.parse(output).first.fetch("note")).to eq(note)
 
-    generated_path = File.join(File.dirname(@path), "lexer.rb")
-    generator = Flexr::Generator.new(@path, output: generated_path)
-    generator.generate
-    expect(generator.diagnostics.find { |item| item.code == "FLEXR-W001" }.note).to eq(note)
-    load generated_path
-    expect(DiagnosticSourceFixture.__flexr_compiled.diagnostics.find { |item| item.code == "FLEXR-W001" }.note).to eq(note)
-  ensure
-    Object.send(:remove_const, :DiagnosticSourceFixture) if Object.const_defined?(:DiagnosticSourceFixture, false)
+      generated_path = File.join(File.dirname(@path), "lexer.rb")
+      generator = Flexr::Generator.new(@path, output: generated_path)
+      generator.generate
+      expect(generator.diagnostics.find { |item| item.code == "FLEXR-W001" }.note).to eq(note)
+      load generated_path
+      expect(DiagnosticSourceFixture.__flexr_compiled.diagnostics.find { |item| item.code == "FLEXR-W001" }.note).to eq(note)
+    ensure
+      Object.send(:remove_const, :DiagnosticSourceFixture) if Object.const_defined?(:DiagnosticSourceFixture, false)
+    end
   end
 
   it "uses normalized source offsets for generation failures on CRLF files" do
