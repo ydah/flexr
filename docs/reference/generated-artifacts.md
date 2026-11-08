@@ -75,3 +75,14 @@ These settings affect artifact size and loading cost, not matching semantics.
 Standalone output embeds a runtime core, not the compiler or generator. The
 regexp reference matcher and vendored Unicode tables are added only for a
 `firstmatch` backend or trailing-context rules that can use that matcher.
+
+The generator compiles `followed_by:` expressions into read-only DFA tables
+stored with their rules. These tables use the selected compression and table
+format, so scanning trailing context does not require the compiler at runtime.
+Any errors found while compiling them are reported at the rule declaration
+before an existing output file is replaced.
+
+The optional `trailing_dfa` rule field is compatible with schema 1. The runtime
+continues to compile trailing context lazily for older generated files without
+this field. Regenerate older standalone lexers that use `followed_by:` to fix
+their missing `Flexr.compile_pattern` error.

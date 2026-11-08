@@ -4,7 +4,7 @@ module Flexr
   module IR
     Rule = Struct.new(
       :index, :patterns, :trailing, :action, :states, :bol_only, :end_anchor, :location,
-      :pattern_conditions,
+      :pattern_conditions, :trailing_dfa,
       keyword_init: true
     ) do
       def skip?

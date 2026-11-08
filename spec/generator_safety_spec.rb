@@ -137,6 +137,76 @@ RSpec.describe "generated artifact safety" do
     end
   end
 
+  it "scans generated trailing context without a compiler, including chunked Unicode input" do
+    source = <<~'RUBY'
+      require "flexr"
+      class GeneratedTrailingLexer < Flexr::Lexer
+        option :unicode
+        rule(/a/, followed_by: /b+$/i, emit: :A)
+        rule(/x/, followed_by: /\w+/, emit: :X)
+        rule(/é/, followed_by: "日", emit: :E)
+        rule(/./, emit: :CHAR)
+      end
+    RUBY
+
+    Dir.mktmpdir("flexr-generated-trailing-") do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      output = File.join(directory, "lexer.rb")
+      File.binwrite(path, source)
+      formats = [{ table_compression: :none }, { table_compression: :rows },
+                 { table_compression: :full, table_format: :packed }]
+      [false, true].product(formats).each do |standalone, format_options|
+        generated = Flexr::Generator.new(path, output: output,
+                                         options: { standalone: standalone, **format_options }).generate
+        expect(generated).not_to include("class Compiler", "class NFABuilder", "class BackendCostModel")
+
+        script = <<~'RUBY'
+          require "stringio"
+          load ARGV.fetch(0)
+          Flexr.singleton_class.remove_method(:compile_pattern) if Flexr.respond_to?(:compile_pattern)
+          cases = {
+            "abB" => [[:A, "a"], [:CHAR, "b"], [:CHAR, "B"]],
+            "abBc" => [[:CHAR, "a"], [:CHAR, "b"], [:CHAR, "B"], [:CHAR, "c"]],
+            "x日" => [[:X, "x"], [:CHAR, "日"]],
+            "é日" => [[:E, "é"], [:CHAR, "日"]],
+            "é" => [[:CHAR, "é"]]
+          }
+          cases.each do |input, expected|
+            [input, StringIO.new(input)].each do |stream|
+              actual = GeneratedTrailingLexer.new(stream, chunk_size: 1).tokens
+              bytes = actual.map { |kind, text| [kind, text.b] }
+              abort "wrong tokens for #{input.inspect}: #{actual.inspect}" unless
+                bytes == expected.map { |kind, text| [kind, text.b] }
+            end
+          end
+        RUBY
+        command = [RbConfig.ruby]
+        command.push("-I", File.expand_path("../lib", __dir__)) unless standalone
+        _, stderr, status = Open3.capture3(*command, "-e", script, output)
+        expect(status).to be_success, stderr
+      end
+    end
+  end
+
+  it "locates errors found while compiling trailing context before replacing an artifact" do
+    Dir.mktmpdir("flexr-invalid-trailing-") do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      output = File.join(directory, "lexer.rb")
+      statement = "rule(/a/, followed_by: /b*/, skip: true)"
+      source = "class InvalidTrailingLexer < Flexr::Lexer\n  #{statement}\nend\n"
+      File.binwrite(path, source)
+      File.binwrite(output, "previous artifact")
+
+      expect { Flexr::Generator.new(path, output: output).generate }
+        .to raise_error(Flexr::CompileError) do |error|
+          first = source.index(statement)
+          expect(error.diagnostic.code).to eq("FLEXR-E005")
+          expect(error.diagnostic.location).to eq([first, first + statement.bytesize])
+        end
+      expect(File.binread(output)).to eq("previous artifact")
+    end
+  end
+
   it "rejects direct, symlink, and hard-link input collisions without changing the source" do
     Dir.mktmpdir("flexr-collision-") do |directory|
       path = File.join(directory, "lexer.rb")

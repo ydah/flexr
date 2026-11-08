@@ -89,6 +89,7 @@ module Flexr
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
+          "#{trailing_dfa_expression(rule, parsed)}" \
           "action: #{action_expression(rule.action)}, states: #{rule.states.inspect}, " \
           "bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
@@ -163,28 +164,8 @@ module Flexr
 
     def compiled_expression(compiled, compression: :none, backend: :table)
       machines = compiled.machines.map do |name, machine|
-        dfa = machine.dfa
-        data = {
-          accepts: dfa.accepts,
-          ec: dfa.ec,
-          class_count: dfa.class_count,
-          state_count: dfa.states,
-          start: dfa.start,
-          rule_ids: dfa.rule_ids
-        }
-        pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
-        if backend == :direct
-          data[:direct] = Codegen::Direct.new(compiled).generate(state: name)
-        elsif pack_tables
-          packed = Codegen::TablePacker.pack(dfa.transitions, compression: compression)
-          data[:packed] = if @options.fetch(:table_format, :literal).to_sym == :packed
-            Codegen::TablePacker.encode(packed)
-          else
-            packed
-          end
-        else
-          data[:transitions] = dfa.transitions
-        end
+        direct = Codegen::Direct.new(compiled).generate(state: name) if backend == :direct
+        data = dfa_data(machine.dfa, compression: compression, direct: direct)
         "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)} }"
       end
       # W016 is derived from wall-clock compilation time and must not make
@@ -192,6 +173,38 @@ module Flexr
       diagnostics = compiled.diagnostics.reject { |diagnostic| diagnostic.code == "FLEXR-W016" }.map(&:to_h)
       "{ machines: { #{machines.join(', ')} }, states: #{ruby_literal(compiled.states)}, " \
         "stats: #{ruby_literal(compiled.stats)}, diagnostics: #{ruby_literal(diagnostics)} }"
+    end
+
+    def trailing_dfa_expression(rule, parsed)
+      return "" unless rule.trailing
+
+      dfa = Flexr.compile_pattern(normalize_trailing(rule.trailing), encoding: parsed.config[:encoding],
+                                  options: { unicode: effective_options(parsed)[:unicode] == true })
+      "trailing_dfa: #{ruby_literal(dfa_data(dfa, compression: table_compression(parsed)))}, "
+    rescue CompileError => e
+      e.diagnostic.location ||= rule.span if e.diagnostic
+      raise
+    end
+
+    def dfa_data(dfa, compression:, direct: nil)
+      data = {
+        accepts: dfa.accepts, ec: dfa.ec, class_count: dfa.class_count,
+        state_count: dfa.states, start: dfa.start, rule_ids: dfa.rule_ids
+      }
+      pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
+      if direct
+        data[:direct] = direct
+      elsif pack_tables
+        packed = Codegen::TablePacker.pack(dfa.transitions, compression: compression)
+        data[:packed] = if @options.fetch(:table_format, :literal).to_sym == :packed
+          Codegen::TablePacker.encode(packed)
+        else
+          packed
+        end
+      else
+        data[:transitions] = dfa.transitions
+      end
+      data
     end
 
     def standalone?(parsed)

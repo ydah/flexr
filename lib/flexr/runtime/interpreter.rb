@@ -243,7 +243,7 @@ module Flexr
       def trailing_length(rule, buffer, position)
         return 0 unless rule.trailing
 
-        dfa = trailing_dfa(rule.trailing)
+        dfa = rule.trailing_dfa || trailing_dfa(rule.trailing)
         state = dfa.start
         cursor = position
         longest = 0 if trailing_accept?(dfa, state, buffer, cursor)
