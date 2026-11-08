@@ -117,6 +117,9 @@ module Flexr
         IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),
                      action: rule.action, states: rule.states, bol_only: rule.bol_only,
                      end_anchor: rule.end_anchor, location: rule.span)
+      rescue CompileError => e
+        e.diagnostic.location ||= rule.span if e.diagnostic
+        raise
       end
       spec = IR::Spec.new(
         class_name: parsed.class_name, superclass: "Flexr::Lexer",
