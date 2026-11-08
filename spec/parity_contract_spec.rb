@@ -42,7 +42,7 @@ RSpec.describe "runtime and generated parity" do
     JSON.parse(stdout)
   end
 
-  def error_outcomes_for(source, class_name, input)
+  def error_outcomes_for(source, class_name, input, options: {})
     Dir.mktmpdir("flexr-error-parity-") do |directory|
       spec = File.join(directory, "lexer.flexr.rb")
       generated = File.join(directory, "lexer.generated.rb")
@@ -52,26 +52,28 @@ RSpec.describe "runtime and generated parity" do
       Flexr::Generator.new(spec, output: standalone, options: { standalone: true }).generate
 
       {
-        runtime: run_error_file(spec, class_name, input, load_path: true),
-        generated: run_error_file(generated, class_name, input, load_path: true),
-        standalone: run_error_file(standalone, class_name, input, load_path: false)
+        runtime: run_error_file(spec, class_name, input, options: options, load_path: true),
+        generated: run_error_file(generated, class_name, input, options: options, load_path: true),
+        standalone: run_error_file(standalone, class_name, input, options: options, load_path: false)
       }
     end
   end
 
-  def run_error_file(path, class_name, input, load_path:)
+  def run_error_file(path, class_name, input, options:, load_path:)
     script = <<~RUBY
       require "json"
       load ARGV.fetch(0)
       lexer = Object.const_get(ARGV.fetch(1))
       begin
-        lexer.new(JSON.parse(ARGV.fetch(2)), filename: "input.txt").tokens
+        lexer.new(JSON.parse(ARGV.fetch(2)), filename: "input.txt", **JSON.parse(ARGV.fetch(3), symbolize_names: true)).tokens
         outcome = { kind: "tokens" }
       rescue => error
         outcome = {
           kind: "error", class: error.class.name, message: error.message,
           code: error.respond_to?(:diagnostic) && error.diagnostic&.code,
           location: error.respond_to?(:diagnostic) && error.diagnostic&.location,
+          note: error.respond_to?(:diagnostic) && error.diagnostic&.note,
+          rule: error.respond_to?(:rule) && error.rule,
           filename: error.respond_to?(:filename) && error.filename,
           byte_pos: error.respond_to?(:byte_pos) && error.byte_pos,
           line: error.respond_to?(:line) && error.line,
@@ -82,7 +84,7 @@ RSpec.describe "runtime and generated parity" do
     RUBY
     command = [RbConfig.ruby]
     command.push("-I", File.join(repository_root, "lib")) if load_path
-    command.push("-e", script, path, class_name, JSON.generate(input))
+    command.push("-e", script, path, class_name, JSON.generate(input), JSON.generate(options))
     stdout, stderr, status = Open3.capture3(*command)
     expect(status).to be_success, stderr
     JSON.parse(stdout)
@@ -100,7 +102,25 @@ RSpec.describe "runtime and generated parity" do
     outcomes = error_outcomes_for(source, "GuardLocationParityLexer", "é\néa")
 
     expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
-    expect(outcomes[:runtime]).to include("code" => "FLEXR-E021", "byte_pos" => 5, "location" => [5, 5])
+    expect(outcomes[:runtime]).to include("code" => "FLEXR-E021", "byte_pos" => 5, "location" => [5, 5],
+                                          "note" => "rule /a/", "rule" => 1)
+  end
+
+  %i[table direct].each do |backend|
+    it "preserves token limit patterns and rule indices in every #{backend} mode" do
+      source = <<~RUBY
+        require "flexr"
+        class GuardPatternParityLexer < Flexr::Lexer
+          backend :#{backend}
+          rule(/a+/i, skip: true)
+        end
+      RUBY
+
+      outcomes = error_outcomes_for(source, "GuardPatternParityLexer", "AAaa", options: { max_token_size: 2 })
+
+      expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
+      expect(outcomes[:runtime]).to include("code" => "FLEXR-E012", "rule" => 0, "note" => "rule /a+/i at byte 0")
+    end
   end
 
   { "push :missing" => "FLEXR-E003", "public_send(:reject)" => "FLEXR-E013" }.each do |action, code|

@@ -196,7 +196,7 @@ module Flexr
 
       raise Runtime::TokenTooLargeError.new(
         filename: @filename, byte_pos: @more_start || @position, line: @line,
-        rule: rule_index(rule || @active_rule)
+        rule: diagnostic_rule(rule || @active_rule)
       )
     end
 
@@ -205,7 +205,7 @@ module Flexr
 
       raise Runtime::LookaheadTooLargeError.new(
         filename: @filename, byte_pos: @position, line: @line,
-        rule: rule_index(rule || @active_rule)
+        rule: diagnostic_rule(rule || @active_rule)
       )
     end
 
@@ -215,13 +215,13 @@ module Flexr
       @steps += count
       if @max_steps && @steps > @max_steps
         raise Runtime::StepLimitError.new(
-          filename: @filename, byte_pos: @position, line: @line, rule: rule_index(@active_rule)
+          filename: @filename, byte_pos: @position, line: @line, rule: @active_rule
         )
       end
       return unless cancelled?
 
       raise Runtime::CancelledError.new(
-        filename: @filename, byte_pos: @position, line: @line, rule: rule_index(@active_rule)
+        filename: @filename, byte_pos: @position, line: @line, rule: @active_rule
       )
     end
 
@@ -291,7 +291,7 @@ module Flexr
 
         raise Runtime::InvalidRecoveryActionError.new(
           action: action, filename: @filename, byte_pos: @match_start, line: @text_line,
-          text: text, rule: rule_index(@active_rule)
+          text: text, rule: @active_rule
         )
       end
       case @error_mode
@@ -323,7 +323,7 @@ module Flexr
         raise Runtime::StateStackOverflowError.new(
           "state stack exceeds max_state_stack (#{@max_state_stack})",
           filename: @filename, byte_pos: @position, line: @line, text: text,
-          rule: rule_index(@active_rule)
+          rule: @active_rule
         )
       end
 
@@ -490,7 +490,7 @@ module Flexr
 
       raise Runtime::NonProgressError.new(
         filename: @filename, byte_pos: match.start_pos, line: @line,
-        text: text, rule: match.rule.index
+        text: text, rule: match.rule
       )
     end
 
@@ -550,8 +550,10 @@ module Flexr
       @cancellation.arity.zero? ? @cancellation.call : @cancellation.call(self)
     end
 
-    def rule_index(rule)
-      rule.respond_to?(:index) ? rule.index : rule
+    def diagnostic_rule(rule)
+      return rule unless rule.is_a?(Integer) && rule >= 0
+
+      self.class.__flexr_rules.fetch(rule, rule)
     end
   end
 end

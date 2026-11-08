@@ -136,7 +136,7 @@ module Flexr
             unless destination
               destination = sets.length
               if destination >= limit
-                message = "DFA state limit exceeded while compiling #{@active_rules.map { |rule| rule_label(rule) }.join(', ')}"
+                message = "DFA state limit exceeded while compiling #{@active_rules.map { |rule| Diagnostics.rule_label(rule) }.join(', ')}"
                 diagnostic = Diagnostics.error("FLEXR-E006", message,
                                                 help: "raise max_dfa_states or split the listed rules")
                 raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
@@ -223,7 +223,7 @@ module Flexr
             parse_regexp(regexp) if regexp.is_a?(::Regexp)
             next unless regexp.is_a?(::Regexp) && regexp.match?("")
 
-            diagnostic = Diagnostics.error("FLEXR-E005", "#{rule_label(rule)} can match an empty string")
+            diagnostic = Diagnostics.error("FLEXR-E005", "#{Diagnostics.rule_label(rule)} can match an empty string")
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
           end
         rescue CompileError => e
@@ -246,9 +246,9 @@ module Flexr
         shadowers = shadowed_rules(compiled)
         rules_by_index = @spec.rules.to_h { |rule| [rule.index, rule] }
         diagnostics.concat(@spec.rules.reject { |rule| present.include?(rule.index) }.map do |rule|
-          winners = shadowers.fetch(rule.index, []).uniq.sort.map { |index| rule_label(rules_by_index.fetch(index)) }
+          winners = shadowers.fetch(rule.index, []).uniq.sort.map { |index| Diagnostics.rule_label(rules_by_index.fetch(index)) }
           suffix = winners.empty? ? "" : " (shadowed by #{winners.join(', ')})"
-          Diagnostics.warning("FLEXR-W001", "#{rule_label(rule)} is unreachable#{suffix}", location: rule.location,
+          Diagnostics.warning("FLEXR-W001", "#{Diagnostics.rule_label(rule)} is unreachable#{suffix}", location: rule.location,
                               help: "remove it, reorder the rules, or make its language distinct")
         end)
 
@@ -263,7 +263,7 @@ module Flexr
 
         firstmatch_conflicts(@spec.rules).each do |left, right|
           diagnostics << Diagnostics.warning(
-            "FLEXR-W010", "firstmatch #{rule_label(left)} and #{rule_label(right)} may change longest-match semantics",
+            "FLEXR-W010", "firstmatch #{Diagnostics.rule_label(left)} and #{Diagnostics.rule_label(right)} may change longest-match semantics",
             location: right.location,
             help: "use backend :table unless first-match compatibility is required"
           )
@@ -282,7 +282,7 @@ module Flexr
         capture_rules.each do |rule|
           diagnostics << Diagnostics.warning(
             "FLEXR-W013",
-            "#{rule_label(rule)} uses a capturing group; flexr treats it as non-capturing",
+            "#{Diagnostics.rule_label(rule)} uses a capturing group; flexr treats it as non-capturing",
             location: rule.location,
             help: "rewrite capturing groups as (?:...) and extract text in the action"
           )
@@ -298,7 +298,7 @@ module Flexr
         end
 
         diagnostics.concat(variable_trailing_rules.map do |rule|
-          Diagnostics.warning("FLEXR-W003", "#{rule_label(rule)} uses variable-length trailing context",
+          Diagnostics.warning("FLEXR-W003", "#{Diagnostics.rule_label(rule)} uses variable-length trailing context",
                               location: rule.location,
                               help: "make the body or followed_by expression fixed length when possible")
         end)
@@ -307,7 +307,7 @@ module Flexr
           diagnostics.concat(@spec.rules.select(&:trailing).map do |rule|
             Diagnostics.warning(
               "FLEXR-W012",
-              "#{rule_label(rule)} cannot use region acceleration with trailing context",
+              "#{Diagnostics.rule_label(rule)} cannot use region acceleration with trailing context",
               location: rule.location,
               help: "remove trailing context or set accel: :none when the trade-off is intentional"
             )
@@ -320,12 +320,6 @@ module Flexr
                                               help: "use generated mode for production startup")
         end
         diagnostics
-      end
-
-      def rule_label(rule)
-        pattern = rule.patterns.one? ? rule.patterns.first : rule.patterns
-        label = "rule #{pattern.inspect}"
-        rule.trailing ? "#{label}, followed_by: #{rule.trailing.inspect}" : label
       end
 
       def shadowed_rules(compiled)
