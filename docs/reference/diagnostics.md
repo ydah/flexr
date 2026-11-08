@@ -31,9 +31,23 @@ UTF-8 bytes. A multiline range shows its first source line; an empty range
 gets one caret. Tabs are preserved, but wide or combining characters can make
 caret alignment differ from terminal display widths.
 
-`FLEXR-W001` and Ruby syntax errors (`FLEXR-E010`) carry source ranges. Other
-diagnostics without ranges, or diagnostics whose source cannot be read, retain
-the message, help, and note without a source excerpt.
+Source ranges are available for:
+
+- Ruby syntax errors (`FLEXR-E010`).
+- Rule compilation errors, including empty matches (`FLEXR-E005`), repetition
+  limits (`FLEXR-E007`), misplaced anchors (`FLEXR-E009`), and unsupported regexp
+  constructs (`FLEXR-E014`), including errors in trailing context.
+- Rule warnings: `FLEXR-W001`, `FLEXR-W003`, `FLEXR-W010`, `FLEXR-W012`,
+  `FLEXR-W013`, and `FLEXR-W014`.
+
+Rule diagnostics highlight the complete rule declaration. `FLEXR-W010` points
+to the later rule in the reported pair. `FLEXR-W014` points to the first rule
+emitting the undeclared token, with one warning per token.
+
+Rules created directly through the runtime DSL do not carry source ranges.
+Diagnostics without ranges, including whole-specification and state warnings,
+or diagnostics whose source cannot be read, retain the message, help, and note
+without a source excerpt.
 
 For direct rendering, pass the matching source text and optional file path to
 `DiagnosticSet#render(source: source, path: path)`. Without a path, the label is
