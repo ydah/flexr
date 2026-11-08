@@ -311,9 +311,10 @@ module Flexr
     def reject
       diagnostic = Diagnostics.error(
         "FLEXR-E013", "reject is not supported by flexr",
+        location: [@position, @position],
         help: "use a state transition and less(n) to express the fallback"
       )
-      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic, filename: @filename, byte_pos: @position)
     end
 
     def push(name)
@@ -465,8 +466,8 @@ module Flexr
     def ensure_state!(name)
       return if self.class.__flexr_config.states.key?(name.to_sym)
 
-      diagnostic = Diagnostics.error("FLEXR-E003", "undefined state: #{name}")
-      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+      diagnostic = Diagnostics.error("FLEXR-E003", "undefined state: #{name}", location: [@position, @position])
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic, filename: @filename, byte_pos: @position)
     end
 
     def ensure_progress!(match, scan_state, empty_match:)
