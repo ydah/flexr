@@ -1,0 +1,35 @@
+name: generated-alt-compatibility
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+
+jobs:
+  generated-alt-compatibility:
+    name: generated-only / ${{ matrix.ruby }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: [jruby, truffleruby]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Load a generated lexer without the generator
+        run: >-
+          bundle exec ruby -Ilib -e
+          'require "flexr"; load "spec/fixtures/generated.rb";
+          lexer = GeneratedFixture::Lexer.new("42");
+          abort "generated lexer mismatch" unless lexer.tokens == [[:INT, 42]]'
+      - name: Run the runtime specification without the generator
+        run: >-
+          bundle exec ruby -Ilib -e
+          'require "flexr"; load "examples/json/lexer.flexr.rb";
+          lexer = JsonExample::Lexer.new(%q({"answer":42}));
+          abort "runtime lexer mismatch" unless lexer.tokens == [[:LBRACE, "{"], [:STRING, "answer"],
+          [:COLON, ":"], [:NUMBER, 42.0], [:RBRACE, "}"]]'

@@ -1,0 +1,37 @@
+name: generator
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+
+jobs:
+  generator:
+    name: generator / ${{ matrix.os }} / ruby ${{ matrix.ruby }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ruby: ["3.3", "3.4", "4.0", head]
+    continue-on-error: ${{ matrix.ruby == 'head' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle exec rake golden:verify
+      - run: bundle exec rake generated:verify
+      - run: bundle exec rake dogfood:verify
+      - run: bundle exec rake direct:verify
+      - run: bundle exec rake examples:check
+      # The throughput baseline is host-specific; run its gate on one canonical
+      # environment instead of comparing different OS/CPU combinations.
+      - name: Run benchmark regression on the canonical environment
+        if: matrix.os == 'ubuntu-latest' && matrix.ruby == '3.4'
+        env:
+          # Shared runners do not provide a stable absolute throughput floor;
+          # the release command still enforces the measured 0.18x floor.
+          FLEXR_BENCHMARK_PORTABLE: "1"
+        run: bundle exec rake bench:regression
