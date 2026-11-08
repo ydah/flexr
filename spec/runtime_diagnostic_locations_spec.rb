@@ -37,6 +37,32 @@ RSpec.describe "runtime diagnostic locations" do
       expect(JSON.parse(set.render(format: :json)).first).to include("code" => code, "location" => [0, 0])
       expect(error_class.new(**options).diagnostic.to_h).not_to have_key(:location)
     end
+
+    it "keeps #{code} rule indices while describing known patterns" do
+      error_class = Flexr::Runtime.const_get(name)
+      options = name == :InvalidRecoveryActionError ? { action: :continue } : {}
+      lexer = Class.new(Flexr::Lexer) { rule(["a", /b/i], followed_by: "\t", skip: true) }
+      rule = lexer.__flexr_rules.fetch(0)
+      error = error_class.new(**options, rule: rule, byte_pos: 2)
+      suffix = name == :TokenTooLargeError ? " at byte 2" : ""
+
+      expect(error.rule).to eq(0)
+      expect(error.diagnostic.note).to eq(%(rule ["a", /b/i], followed_by: /\\t/#{suffix}))
+      expect(error_class.new(**options, rule: 3, byte_pos: 2).diagnostic.note).to eq("rule 3#{suffix}")
+      expect(error_class.new(**options).diagnostic.note).to be_nil
+    end
+  end
+
+  it "retains numeric fallback labels when a guard receives an unknown rule index" do
+    lexer = Class.new(Flexr::Lexer) { rule(/a+/, skip: true) }.new("aaaa", max_token_size: 2)
+
+    [-1, 99].each do |index|
+      expect { lexer.defer_token_size_check!(4, rule: index) }
+        .to raise_error(Flexr::Runtime::TokenTooLargeError) do |error|
+          expect(error.rule).to eq(index)
+          expect(error.diagnostic.note).to eq("rule #{index} at byte 0")
+        end
+    end
   end
 
   %i[runtime generated].each do |mode|
@@ -62,7 +88,7 @@ RSpec.describe "runtime diagnostic locations" do
           2 | éaaaa
             |  ^
             help: increase max_token_size or split the input token
-            note: rule 1 at byte 6
+            note: rule /a+/ at byte 6
         TEXT
       end
     end
@@ -90,7 +116,8 @@ RSpec.describe "runtime diagnostic locations" do
   it "keeps absolute input offsets in CLI JSON" do
     rendered = check_with_runtime_error(@input_path, "--format", "json")
 
-    expect(JSON.parse(rendered).first).to include("code" => "FLEXR-E012", "location" => [6, 6])
+    expect(JSON.parse(rendered).first).to include("code" => "FLEXR-E012", "location" => [6, 6],
+                                                "note" => "rule /a+/ at byte 6")
   end
 
   it "keeps CLI reporting bounded when a guard fails on a large input file" do
@@ -99,7 +126,7 @@ RSpec.describe "runtime diagnostic locations" do
 
     rendered = check_with_runtime_error(@input_path)
 
-    expect(rendered).to include("error[FLEXR-E012]", "note: rule 1 at byte 6")
+    expect(rendered).to include("error[FLEXR-E012]", "note: rule /a+/ at byte 6")
     expect(rendered).not_to include("-->")
   end
 

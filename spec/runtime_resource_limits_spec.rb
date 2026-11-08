@@ -28,7 +28,11 @@ RSpec.describe "Flexr runtime resource limits" do
     end
 
     expect { lexer_class.new("a").tokens }
-      .to raise_error(Flexr::Runtime::NonProgressError) { |error| expect(error.code).to eq("FLEXR-E021") }
+      .to raise_error(Flexr::Runtime::NonProgressError) do |error|
+        expect(error.code).to eq("FLEXR-E021")
+        expect(error.rule).to eq(0)
+        expect(error.diagnostic.note).to eq("rule /a/")
+      end
   end
 
   it "detects an empty-match cycle across lexical states" do
@@ -78,6 +82,7 @@ RSpec.describe "Flexr runtime resource limits" do
       .to raise_error(Flexr::Runtime::LookaheadTooLargeError) do |error|
         expect(error.code).to eq("FLEXR-E024")
         expect(error.rule).to eq(0)
+        expect(error.diagnostic.note).to eq("rule /a/, followed_by: /b+/")
       end
   end
 
@@ -88,7 +93,10 @@ RSpec.describe "Flexr runtime resource limits" do
     end
 
     expect { lexer_class.new(input, chunk_size: 2, max_buffer_size: 3).tokens }
-      .to raise_error(Flexr::Runtime::BufferTooLargeError) { |error| expect(error.code).to eq("FLEXR-E022") }
+      .to raise_error(Flexr::Runtime::BufferTooLargeError) do |error|
+        expect(error.code).to eq("FLEXR-E022")
+        expect(error.diagnostic.note).to be_nil
+      end
     expect(input.reads.sum).to be <= 4
   end
 
@@ -98,7 +106,10 @@ RSpec.describe "Flexr runtime resource limits" do
     end
 
     expect { lexer_class.new("aaaa", max_steps: 2).tokens }
-      .to raise_error(Flexr::Runtime::StepLimitError) { |error| expect(error.code).to eq("FLEXR-E023") }
+      .to raise_error(Flexr::Runtime::StepLimitError) do |error|
+        expect(error.code).to eq("FLEXR-E023")
+        expect(error.diagnostic.note).to be_nil
+      end
   end
 
   it "bounds a long viable prefix before it reaches an accepting state" do
@@ -107,7 +118,7 @@ RSpec.describe "Flexr runtime resource limits" do
     end
 
     expect { lexer_class.new("aaaa", max_token_size: 2).tokens }
-      .to raise_error(Flexr::Runtime::TokenTooLargeError)
+      .to raise_error(Flexr::Runtime::TokenTooLargeError) { |error| expect(error.diagnostic.note).to be_nil }
   end
 
   it "supports cooperative cancellation" do
@@ -163,6 +174,7 @@ RSpec.describe "Flexr runtime resource limits" do
 
     expect { lexer.next_token }.to raise_error(Flexr::Runtime::InvalidRecoveryActionError) do |error|
       expect(error.code).to eq("FLEXR-E027")
+      expect(error.diagnostic.note).to be_nil
     end
   end
 
@@ -186,10 +198,43 @@ RSpec.describe "Flexr runtime resource limits" do
       expect { GeneratedResourceLimitLexer.new("aaaa", max_token_size: 2).tokens }
         .to raise_error(Flexr::Runtime::TokenTooLargeError) do |error|
           expect([error.code, error.rule]).to eq(["FLEXR-E012", 0])
+          expect(error.diagnostic.note).to eq("rule /a+/ at byte 0")
         end
     ensure
       Object.send(:remove_const, :GeneratedResourceLimitLexer) if
         Object.const_defined?(:GeneratedResourceLimitLexer, false)
+    end
+  end
+
+  {
+    StepLimitError: { max_steps: 10 },
+    CancelledError: { cancellation: ->(lexer) { lexer.byte_pos.positive? } }
+  }.each do |name, options|
+    it "identifies the active rule when #{name} is raised during its action" do
+      lexer_class = Class.new(Flexr::Lexer) { rule(/a/i) { consume_step!(10) } }
+      lexer = lexer_class.new("a", **options)
+
+      expect { lexer.tokens }.to raise_error(Flexr::Runtime.const_get(name)) do |error|
+        expect(error.rule).to eq(0)
+        expect(error.diagnostic.note).to eq("rule /a/i")
+      end
+    end
+  end
+
+  it "identifies the active rule in stack and recovery errors" do
+    lexer_class = Class.new(Flexr::Lexer) { rule(/a/) { push :initial } }
+    expect { lexer_class.new("a", max_state_stack: 0).tokens }
+      .to raise_error(Flexr::Runtime::StateStackOverflowError) do |error|
+        expect(error.rule).to eq(0)
+        expect(error.diagnostic.note).to eq("rule /a/")
+      end
+
+    lexer_class = Class.new(Flexr::Lexer) { rule("a") { error!("bad token") } }
+    lexer = lexer_class.new("a")
+    lexer.on_error = ->(_error) { :continue }
+    expect { lexer.tokens }.to raise_error(Flexr::Runtime::InvalidRecoveryActionError) do |error|
+      expect(error.rule).to eq(0)
+      expect(error.diagnostic.note).to eq('rule "a"')
     end
   end
 end

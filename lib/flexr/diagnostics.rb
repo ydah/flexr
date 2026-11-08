@@ -101,6 +101,15 @@ module Flexr
   module Diagnostics
     module_function
 
+    def rule_label(rule)
+      return if rule.nil?
+      return "rule #{rule}" unless rule.is_a?(IR::Rule)
+
+      pattern = rule.patterns.one? ? rule.patterns.first : rule.patterns
+      label = "rule #{pattern.inspect}"
+      rule.trailing ? "#{label}, followed_by: #{rule.trailing.inspect}" : label
+    end
+
     def error(code, message, location: nil, help: nil, note: nil)
       Diagnostic.new(code: code, severity: :error, message: message, location: location, help: help, note: note)
     end

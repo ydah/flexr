@@ -10,13 +10,13 @@ module Flexr
       def initialize(message = "token exceeds max_token_size", filename: nil, byte_pos: nil, line: nil, text: nil,
                      rule: nil)
         @code = CODE
-        @rule = rule
+        @rule = rule.is_a?(IR::Rule) ? rule.index : rule
         diagnostic = Diagnostics.error(
           CODE,
           message,
           location: byte_pos && [byte_pos, byte_pos],
           help: "increase max_token_size or split the input token",
-          note: rule.nil? ? nil : "rule #{rule} at byte #{byte_pos}"
+          note: rule.nil? ? nil : "#{Diagnostics.rule_label(rule)} at byte #{byte_pos}"
         )
         super(message, filename: filename, byte_pos: byte_pos, line: line, text: text, diagnostic: diagnostic)
       end
@@ -27,9 +27,9 @@ module Flexr
 
       def initialize(code, message, help:, filename: nil, byte_pos: nil, line: nil, text: nil, rule: nil)
         @code = code
-        @rule = rule
+        @rule = rule.is_a?(IR::Rule) ? rule.index : rule
         diagnostic = Diagnostics.error(code, message, location: byte_pos && [byte_pos, byte_pos],
-                                       help: help, note: rule.nil? ? nil : "rule #{rule}")
+                                       help: help, note: Diagnostics.rule_label(rule))
         super(message, filename: filename, byte_pos: byte_pos, line: line, text: text, diagnostic: diagnostic)
       end
     end

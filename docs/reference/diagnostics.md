@@ -79,8 +79,10 @@ exclusive end; source excerpts are not added to JSON.
 Runtime input diagnostics (`FLEXR-E003`, `FLEXR-E012`, `FLEXR-E013`,
 and `FLEXR-E021` through `FLEXR-E027`)
 use `[byte_pos, byte_pos]` to mark their reported position in the original
-input. Pass the complete input to `DiagnosticSet#render` to show its line and
-caret; see [errors and recovery](errors.md). These offsets remain absolute
+input. Guard notes identify the affected rule by its pattern when available,
+using the same labels as compiler diagnostics. Pass the complete input to
+`DiagnosticSet#render` to show its line and caret; see
+[errors and recovery](errors.md). These offsets remain absolute
 when a streaming buffer discards consumed input. If the CLI reports a runtime
 input failure, it reads the error's `filename` for context, preserving the
 input's original line endings. To bound memory use while reporting input

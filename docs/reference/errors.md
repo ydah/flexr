@@ -37,6 +37,13 @@ With `retain_input: false`, `lexer.input` contains only the retained buffer;
 keep the original input separately if a source excerpt is needed. JSON
 diagnostics retain absolute byte offsets even after input has been discarded.
 
+When a guard knows the affected rule, its diagnostic note shows the pattern,
+including regexp options and trailing context, for example `rule /a+/i at
+byte 0`. The error's `rule` attribute still returns the numeric rule index.
+Errors constructed with only a numeric index retain a numeric label; guards
+without an identified rule omit the note. The diagnostic location continues
+to refer to the input, not the rule declaration.
+
 The default `error_mode: :raise` raises the lexical error. `:token` queues
 `[:error, text]`; `:panic` discards the unmatched byte and continues. An
 `on_error` callback can return `:skip`, `:raise`, `:token`, or `:halt` for
