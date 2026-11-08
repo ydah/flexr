@@ -117,7 +117,7 @@ RSpec.describe "CLI diagnostic source context" do
     expect(status).to eq(0)
     expect(errors).to be_empty
     expect(output).to eq(<<~TEXT)
-      warning[FLEXR-W001]: rule 1 is unreachable (shadowed by rule 0)
+      warning[FLEXR-W001]: rule /if/ is unreachable (shadowed by rule /[a-z]+/)
         --> #{@path}:3:3
         |
       3 |   rule(/if/, skip: true)

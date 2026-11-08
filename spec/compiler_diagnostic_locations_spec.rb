@@ -81,12 +81,18 @@ RSpec.describe "compiler diagnostic locations" do
     warnings = diagnostics.reject { |item| item.fetch("code") == "FLEXR-W016" }
     expect(warnings.map { |item| item.fetch("code") }).to match_array(expected_codes)
     expect(warnings.map { |item| item.fetch("location", nil) }.uniq).to eq([span(statement)])
+    expect(warnings.to_h { |item| [item.fetch("code"), item.fetch("message")] }).to include(
+      "FLEXR-W003" => "rule /(a)+/, followed_by: /b+/ uses variable-length trailing context",
+      "FLEXR-W012" => "rule /(a)+/, followed_by: /b+/ cannot use region acceleration with trailing context",
+      "FLEXR-W013" => "rule /(a)+/, followed_by: /b+/ uses a capturing group; flexr treats it as non-capturing"
+    )
 
     generator = Flexr::Generator.new(@path, output: @output_path)
     generator.generate
     generated_warnings = generator.diagnostics.reject { |item| item.code == "FLEXR-W016" }
     expect(generated_warnings.map(&:code)).to match_array(expected_codes)
     expect(generated_warnings.map(&:location).uniq).to eq([span(statement)])
+    expect(generated_warnings.map(&:message)).to match_array(warnings.map { |item| item.fetch("message") })
 
     load @output_path
     expect(CompilerLocationFixture.__flexr_compiled.diagnostics.map(&:to_h))
@@ -101,7 +107,8 @@ RSpec.describe "compiler diagnostic locations" do
 
     expect(status).to eq(0)
     expect(diagnostics.find { |item| item.fetch("code") == "FLEXR-W010" })
-      .to include("location" => span(statement))
+      .to include("location" => span(statement),
+                  "message" => "firstmatch rule /a/ and rule /aa/ may change longest-match semantics")
   end
 
   it "locates the first block emitting a token even when later rules use emit options" do
@@ -135,6 +142,7 @@ RSpec.describe "compiler diagnostic locations" do
 
     expect { lexer.compile! }.to raise_error(Flexr::CompileError) do |error|
       expect(error.diagnostic.code).to eq("FLEXR-E005")
+      expect(error.diagnostic.message).to eq("rule /a*/ can match an empty string")
       expect(error.diagnostic.location).to be_nil
     end
   end

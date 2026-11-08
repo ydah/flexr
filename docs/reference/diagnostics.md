@@ -18,7 +18,7 @@ end
 `flexr check lexer.flexr.rb --color never` prints:
 
 ```text
-warning[FLEXR-W001]: rule 1 is unreachable (shadowed by rule 0)
+warning[FLEXR-W001]: rule /if/ is unreachable (shadowed by rule /[a-z]+/)
   --> lexer.flexr.rb:3:3
   |
 3 |   rule(/if/, skip: true)
@@ -49,6 +49,14 @@ Source ranges are available for:
 Rule diagnostics highlight the complete rule declaration. `FLEXR-W010` points
 to the later rule in the reported pair. `FLEXR-W014` points to the first rule
 emitting the undeclared token, with one warning per token.
+
+Compiler diagnostics identify rules by their patterns rather than numeric
+indices. Regexp options, quoted strings, arrays of patterns, and `followed_by:`
+context are preserved in these labels. `FLEXR-W001` also names the patterns
+that shadow the unreachable rule; `FLEXR-E006` lists the patterns in the state
+being compiled. String trailing context is shown as its compiled literal
+regexp. These labels also appear in JSON messages and when source ranges are
+unavailable.
 
 Static DSL errors highlight the offending DSL call. Unresolved expressions
 point to the expression instead; ambiguous lexer selection points to the
