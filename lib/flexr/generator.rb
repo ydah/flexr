@@ -15,7 +15,7 @@ module Flexr
 
     RUNTIME_SOURCES = %w[
       version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
-      unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/analysis.rb automaton/accel.rb
+      unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/accel.rb
       runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
       runtime/interpreter.rb runtime/core.rb dsl.rb lexer.rb generated.rb
     ].freeze

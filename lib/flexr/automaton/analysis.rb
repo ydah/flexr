@@ -19,13 +19,7 @@ module Flexr
       end
 
       def self_loop_set(dfa, state)
-        representatives = Array.new(dfa.class_count)
-        dfa.ec.each_with_index { |class_id, byte| representatives[class_id] ||= byte }
-        self_loops = representatives.each_index.map do |class_id|
-          byte = representatives.fetch(class_id)
-          byte && dfa.transition(state, byte) == state
-        end
-        dfa.ec.each_index.select { |byte| self_loops.fetch(dfa.ec.fetch(byte)) }
+        Accel.self_loop_set(dfa, state)
       end
 
       def dead_states(dfa)
