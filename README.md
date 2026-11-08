@@ -1,6 +1,6 @@
 # flexr
 
-[![CI](https://github.com/ydah/flexr/actions/workflows/main.yml/badge.svg)](https://github.com/ydah/flexr/actions/workflows/main.yml)
+[![Runtime](https://github.com/ydah/flexr/actions/workflows/runtime.yml/badge.svg)](https://github.com/ydah/flexr/actions/workflows/runtime.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 
 [Product site](https://ydah.github.io/flexr/) · [Playground](https://ydah.github.io/flexr/playground/) · [Documentation](docs/README.md)
