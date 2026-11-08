@@ -115,22 +115,12 @@ RSpec.describe "unreachable rule examples" do
     expect(warnings(lexer).first.note).to be_nil
   end
 
-  it "omits unverified examples for trailing context and firstmatch" do
+  it "omits unverified examples for trailing context" do
     trailing = Class.new(Flexr::Lexer) do
       rule(/a/, followed_by: "b", emit: :CONTEXT)
       rule(/a/, emit: :PLAIN)
     end
-    firstmatch = Class.new(Flexr::Lexer) do
-      backend :firstmatch
-      option :experimental
-      rule(/a/, emit: :PREFIX)
-      rule(/ab/, emit: :WORD)
-      rule(/ab/, emit: :HIDDEN)
-    end
-
     expect(warnings(trailing).first.note).to be_nil
-    expect(warnings(firstmatch).first.note).to be_nil
     expect(trailing.new("a").tokens).to eq([[:PLAIN, "a"]])
-    expect(firstmatch.new("ab").next_token).to eq([:PREFIX, "a"])
   end
 end

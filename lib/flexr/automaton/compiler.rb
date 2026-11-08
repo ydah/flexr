@@ -247,12 +247,16 @@ module Flexr
         rules_by_index = @spec.rules.to_h { |rule| [rule.index, rule] }
         unreachable = @spec.rules.reject { |rule| present.include?(rule.index) }
         examples = unreachable_examples(compiled, unreachable, rules_by_index)
-        diagnostics.concat(unreachable.map do |rule|
-          winners = shadowers.fetch(rule.index, []).uniq.sort.map { |index| Diagnostics.rule_label(rules_by_index.fetch(index)) }
+        diagnostics.concat(unreachable.filter_map do |rule|
+          example = examples[rule.index]
+          next if example && example.fetch(:winner) == rule.index
+
+          winner_indices = @spec.backend == :firstmatch ? [] : shadowers.fetch(rule.index, [])
+          winners = winner_indices.uniq.sort.map { |index| Diagnostics.rule_label(rules_by_index.fetch(index)) }
           suffix = winners.empty? ? "" : " (shadowed by #{winners.join(', ')})"
           Diagnostics.warning("FLEXR-W001", "#{Diagnostics.rule_label(rule)} is unreachable#{suffix}", location: rule.location,
                               help: "remove it, reorder the rules, or make its language distinct",
-                              note: examples[rule.index])
+                              note: example&.fetch(:note))
         end)
 
         @spec.states.each do |state_name, state|
@@ -326,26 +330,41 @@ module Flexr
       end
 
       def unreachable_examples(compiled, rules, rules_by_index)
-        # shortcut: examples use longest-match body DFAs; model firstmatch and trailing context before covering them.
-        return {} if rules.empty? || @spec.backend == :firstmatch
+        # shortcut: examples use body DFAs; model trailing context before covering states that use it.
+        return {} if rules.empty?
 
         indices = rules.map(&:index)
         examples = {}
         compiled.machines.each do |state_name, machine|
-          next if rules_for(state_name).any?(&:trailing)
+          active_rules = rules_for(state_name)
+          next if active_rules.any?(&:trailing)
 
           Analysis.shadowing_examples(machine.dfa, indices).each do |index, (bytes, winner)|
             input = bytes.dup.force_encoding(@spec.encoding)
             next unless input.valid_encoding?
-            next if examples[index] && examples[index].first.bytesize <= input.bytesize
+            next if examples[index] && examples[index][1] == index
 
-            examples[index] = [input, winner, state_name]
+            if @spec.backend == :firstmatch
+              result = Analysis.firstmatch_example(active_rules, rules_by_index.fetch(index), input,
+                                                    encoding: @spec.encoding, unicode: @spec.options[:unicode] == true)
+              next unless result
+
+              winner, length = result
+            end
+            next if winner != index && examples[index] && examples[index].first.bytesize <= input.bytesize
+
+            examples[index] = [input, winner, state_name, length]
           end
         end
-        examples.transform_values do |input, winner, state_name|
+        examples.transform_values do |input, winner, state_name, length|
           state = state_name == :initial ? "" : " in state #{state_name.inspect}"
-          "example: #{input.inspect} selects #{Diagnostics.rule_label(rules_by_index.fetch(winner))}#{state} " \
-            "(same length, earlier rule wins)"
+          reason = if @spec.backend == :firstmatch
+            "first match wins, matched #{length} #{length == 1 ? 'byte' : 'bytes'}"
+          else
+            "same length, earlier rule wins"
+          end
+          note = "example: #{input.inspect} selects #{Diagnostics.rule_label(rules_by_index.fetch(winner))}#{state} (#{reason})"
+          { note: note, winner: winner }
         end
       end
 

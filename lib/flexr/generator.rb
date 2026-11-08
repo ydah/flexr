@@ -23,7 +23,7 @@ module Flexr
     MATCHER_RUNTIME_SOURCES = %w[
       regexp/ast.rb regexp/parser.rb regexp/unsupported.rb
       unicode/utf8_splitter.rb unicode/data/properties.rb unicode/data/case_folding.rb
-      unicode/property.rb unicode/reference_regexp.rb unicode/case_fold.rb
+      unicode/property.rb unicode/reference_regexp.rb unicode/case_fold.rb regexp/matcher.rb
     ].freeze
 
     def initialize(path, output: nil, eval_mode: false, options: {})

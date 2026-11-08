@@ -118,6 +118,38 @@ module Flexr
         bytes.reverse.pack("C*")
       end
 
+      def firstmatch_example(rules, target, input, encoding:, unicode: false)
+        target_length = firstmatch_length(target, input, encoding: encoding, unicode: unicode)
+        return unless target_length
+
+        rules.sort_by(&:index).each do |rule|
+          break if rule.index >= target.index
+
+          length = firstmatch_length(rule, input, encoding: encoding, unicode: unicode)
+          return [rule.index, length] if length
+        end
+        [target.index, target_length]
+      rescue EncodingError
+        nil
+      end
+
+      def firstmatch_length(rule, input, encoding:, unicode:)
+        matches = rule.patterns.each_with_index.filter_map do |pattern, index|
+          regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
+          reference = Regexp::Matcher.reference?(regexp, encoding: encoding, unicode: unicode)
+          match = Regexp::Matcher.match(regexp, input, encoding: encoding, unicode: unicode, reference: reference)
+          next unless match&.begin(0)&.zero?
+
+          [match[0].bytesize, rule.pattern_conditions.fetch(index)]
+        end
+        length, condition = matches.max_by(&:first)
+        return unless length
+        return if encoding == Encoding::UTF_8 && !input.byteslice(0, length).valid_encoding?
+        return if condition.end_anchor && length < input.bytesize && input.getbyte(length) != 0x0a
+
+        length
+      end
+
       def accepting?(dfa, state)
         state && !dfa.accepts.fetch(state).empty?
       end
