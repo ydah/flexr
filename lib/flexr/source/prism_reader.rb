@@ -65,7 +65,7 @@ module Flexr
       def find_lexer_class(node, namespace = [])
         candidates = lexer_class_candidates(node, namespace)
         dsl_candidates = candidates.select { |candidate, _name| lexer_has_dsl?(candidate.body) }
-        unsupported_static!("multiple lexer classes require an explicit selection") if dsl_candidates.length > 1
+        unsupported_static!("multiple lexer classes require an explicit selection", dsl_candidates[1].first) if dsl_candidates.length > 1
 
         dsl_candidates.first || candidates.first
       end
@@ -211,6 +211,9 @@ module Flexr
           @config[:options] ||= {}
           @config[:options][:accel] = Configuration.accelerator!(static(positional(node).first))
         end
+      rescue CompileError => e
+        e.diagnostic.location ||= [node.location.start_offset, node.location.end_offset] if e.diagnostic
+        raise
       end
 
       def collect_state(node, parent_states)
@@ -240,7 +243,7 @@ module Flexr
         raise ArgumentError, "all_states requires a block" unless block
 
         validate_keywords!(node, [])
-        unsupported_static!("all_states does not accept arguments") unless positional(node).empty?
+        unsupported_static!("all_states does not accept arguments", node) unless positional(node).empty?
         record_state_wrapper(node, block)
         collect_body(block.body, (parent_states + @states.keys).uniq)
       end
@@ -285,7 +288,8 @@ module Flexr
 
       def static(node, scope: @lexer_scope)
         StaticEval.new(@source, constants: @constants, scope: scope).call(node)
-      rescue StaticResolutionError
+      rescue StaticResolutionError => e
+        e.diagnostic.location ||= [node.location.start_offset, node.location.end_offset] if e.diagnostic && node
         raise unless @allow_dynamic
 
         nil
@@ -306,7 +310,7 @@ module Flexr
 
       def validate_keywords!(node, allowed)
         unknown = keywords(node).keys - allowed
-        unsupported_static!("unknown keyword #{unknown.first.inspect} for #{node.name}") unless unknown.empty?
+        unsupported_static!("unknown keyword #{unknown.first.inspect} for #{node.name}", node) unless unknown.empty?
       end
 
       def record_deletion(node)
@@ -357,12 +361,12 @@ module Flexr
           next unless child.class.name.end_with?("CallNode")
           if %i[send public_send].include?(child.name.to_sym)
             dynamic_name = dynamically_dispatched_dsl(child)
-            unsupported_static!("dynamic dispatch of #{dynamic_name} is not statically supported") if dynamic_name
+            unsupported_static!("dynamic dispatch of #{dynamic_name} is not statically supported", child) if dynamic_name
           end
           next unless DSL_NAMES.include?(child.name.to_sym)
           next unless child.receiver.nil? || child.receiver.class.name.end_with?("SelfNode")
 
-          unsupported_static!("#{child.name} must be a direct receiverless statement in a lexer or state body")
+          unsupported_static!("#{child.name} must be a direct receiverless statement in a lexer or state body", child)
         end
       end
 
@@ -374,9 +378,10 @@ module Flexr
         name if DSL_NAMES.include?(name)
       end
 
-      def unsupported_static!(reason)
+      def unsupported_static!(reason, node)
         diagnostic = Diagnostics.error(
           "FLEXR-E017", "DSL structure is not statically supported",
+          location: [node.location.start_offset, node.location.end_offset],
           help: "move the DSL call to the lexer or state body, or use --eval", note: reason
         )
         raise StaticResolutionError.new(diagnostic.message, diagnostic: diagnostic)

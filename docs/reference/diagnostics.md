@@ -34,6 +34,9 @@ caret alignment differ from terminal display widths.
 Source ranges are available for:
 
 - Ruby syntax errors (`FLEXR-E010`).
+- Static DSL errors: unsupported encoding (`FLEXR-E011`), `reject` actions
+  (`FLEXR-E013`), unresolved expressions or unsupported DSL structure
+  (`FLEXR-E017`), and invalid pattern or trailing-context types (`FLEXR-E018`).
 - Rule compilation errors, including empty matches (`FLEXR-E005`), repetition
   limits (`FLEXR-E007`), misplaced anchors (`FLEXR-E009`), and unsupported regexp
   constructs (`FLEXR-E014`), including errors in trailing context.
@@ -43,6 +46,10 @@ Source ranges are available for:
 Rule diagnostics highlight the complete rule declaration. `FLEXR-W010` points
 to the later rule in the reported pair. `FLEXR-W014` points to the first rule
 emitting the undeclared token, with one warning per token.
+
+Static DSL errors highlight the offending DSL call. Unresolved expressions
+point to the expression instead; ambiguous lexer selection points to the
+second lexer class containing DSL calls.
 
 Rules created directly through the runtime DSL do not carry source ranges.
 Diagnostics without ranges, including whole-specification and state warnings,

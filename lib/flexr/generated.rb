@@ -146,6 +146,9 @@ module Flexr
           end
         )
       end
+    rescue CompileError => e
+      e.diagnostic.location ||= definition[:span] || definition[:location] if e.diagnostic
+      raise
     end
   end
 end
