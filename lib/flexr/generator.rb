@@ -111,7 +111,7 @@ module Flexr
 
     def compile_parsed(parsed)
       states = parsed.states.each_with_index.to_h do |(name, value), index|
-        [name.to_sym, IR::State.new(name: name.to_sym, inclusive: value[:inclusive], id: index)]
+        [name.to_sym, IR::State.new(name: name.to_sym, inclusive: value[:inclusive], id: index, location: value[:location])]
       end
       rules = parsed.rules.map do |rule|
         IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),

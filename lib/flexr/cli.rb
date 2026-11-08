@@ -290,9 +290,8 @@ module Flexr
       accel = overrides.fetch(:accel, config_options[:accel])
       klass.accel(accel) if accel
       parsed.states.each do |name, value|
-        next if name.to_sym == :initial
-
-        klass.state(name, inclusive: value[:inclusive]) { nil }
+        klass.state(name, inclusive: value[:inclusive]) { nil } unless name.to_sym == :initial
+        klass.__flexr_states.fetch(name.to_sym).location = value[:location]
       end
       parsed.rules.each { |rule| klass.__flexr_add_generated_rule(rule.to_h) }
       klass.compile!
