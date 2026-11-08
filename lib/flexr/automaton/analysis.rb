@@ -71,7 +71,7 @@ module Flexr
         representatives.values.sort_by { |byte| [byte.between?(32, 126) ? 0 : 1, byte] }
       end
 
-      def shadowing_examples(dfa, rule_indices)
+      def shadowing_examples(dfa, rule_indices, include_empty: false)
         remaining = (rule_indices & dfa.rule_ids).to_h { |index| [index, true] }
         return {} if remaining.empty?
 
@@ -85,7 +85,7 @@ module Flexr
           state = queue.fetch(cursor).first
           accepts = dfa.accepts.fetch(state)
           winner = accepts.min_by(&:rule_index)&.rule_index
-          if cursor.positive? && winner
+          if (include_empty || cursor.positive?) && winner
             shadowed = accepts.map(&:rule_index).uniq.select { |index| index > winner && remaining.key?(index) }
             unless shadowed.empty?
               input = example_input(queue, cursor)
@@ -116,6 +116,79 @@ module Flexr
           cursor = parent
         end
         bytes.reverse.pack("C*")
+      end
+
+      def shortest_input(dfa)
+        queue = [[dfa.start, nil, nil]]
+        visited = { dfa.start => true }
+        bytes = joint_byte_representatives(dfa, dfa)
+        cursor = 0
+        while cursor < queue.length
+          state = queue.fetch(cursor).first
+          return example_input(queue, cursor) if accepting?(dfa, state)
+
+          bytes.each do |byte|
+            target = dfa.transition(state, byte)
+            next if target.nil? || visited[target]
+
+            visited[target] = true
+            queue << [target, cursor, byte]
+          end
+          cursor += 1
+        end
+        nil
+      end
+
+      def trailing_example(dfa, rules, target, input, trailing_dfas, encoding:, unicode:, firstmatch:)
+        lengths = if firstmatch
+          rules.filter_map do |rule|
+            next if rule.index > target.index
+
+            length = firstmatch_length(rule, input, encoding: encoding, unicode: unicode)
+            [rule.index, length] if length
+          end
+        else
+          dfa_match_lengths(dfa, input, encoding: encoding)
+        end
+        matches = {}
+        lengths.each do |index, length|
+          trailing = trailing_dfas[index]
+          lookahead = trailing ? dfa_match_lengths(trailing, input, offset: length).map(&:last).max : 0
+          next unless lookahead
+
+          total = length + lookahead
+          next if matches[index] && matches[index].last > total
+
+          matches[index] = [length, total]
+        end
+        return unless matches.key?(target.index)
+
+        winner, (length, total) = matches.max_by { |index, (_, size)| firstmatch ? -index : [size, -index] }
+        [winner, length, total - length]
+      rescue EncodingError
+        nil
+      end
+
+      def dfa_match_lengths(dfa, input, offset: 0, encoding: Encoding::BINARY)
+        state = dfa.start
+        cursor = offset
+        matches = []
+        loop do
+          if encoding != Encoding::UTF_8 || input.byteslice(0, cursor).valid_encoding?
+            dfa.accepts.fetch(state).each do |acceptance|
+              next if acceptance.end_anchor && cursor < input.bytesize && input.getbyte(cursor) != 0x0a
+
+              matches << [acceptance.rule_index, cursor - offset]
+            end
+          end
+          break if cursor == input.bytesize
+
+          state = dfa.transition(state, input.getbyte(cursor))
+          break unless state
+
+          cursor += 1
+        end
+        matches
       end
 
       def firstmatch_example(rules, target, input, encoding:, unicode: false)

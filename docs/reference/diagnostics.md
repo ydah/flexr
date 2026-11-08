@@ -53,29 +53,39 @@ emitting the undeclared token, with one warning per token.
 
 Compiler diagnostics identify rules by their patterns rather than numeric
 indices. Regexp options, quoted strings, arrays of patterns, and `followed_by:`
-context are preserved in these labels. `FLEXR-W001` also names the patterns
-that shadow the unreachable rule; `FLEXR-E006` lists the patterns in the state
-being compiled. String trailing context is shown as its compiled literal
-regexp. These labels also appear in JSON messages and when source ranges are
-unavailable.
+context are preserved in these labels. For longest-match specifications without
+trailing context, `FLEXR-W001` also names the patterns that shadow the unreachable
+rule; otherwise, its example identifies the verified winner. `FLEXR-E006` lists
+the patterns in the state being compiled. String trailing context is shown as
+its compiled literal regexp. These labels also appear in JSON messages and when
+source ranges are unavailable.
 
 `FLEXR-W001` notes include a shortest nonempty input, measured in bytes, and
-the earlier rule selected for that input. Examples for named lexical states
+the rule selected for that input. Examples for named lexical states
 include the state name. Control characters and binary bytes are escaped, and
 the same note is preserved in JSON and generated artifacts.
 
 For `firstmatch`, the candidate is checked with the scanner's regexp matcher
 without running actions. The note identifies the first rule selected and its
 matched byte count, which can be shorter than the example input. For example,
-`"ab"` can select an earlier `/a/` rule with a one-byte match. If the candidate
-selects the supposedly unreachable rule in any lexical state, W001 is omitted
-for that rule.
+`"ab"` can select an earlier `/a/` rule with a one-byte match.
 
-Examples currently cover states without `followed_by:`. Warnings for states
-using trailing context retain their messages without an example. An example
-is also omitted when only empty input reaches the rule, the shortest candidate
-is invalid in the specification's encoding, or the firstmatch check cannot
-confirm the match.
+For states using `followed_by:`, the candidate includes the shortest trailing
+input and is checked using the active rules. Longest-match backends compare
+the combined body and lookahead length; `firstmatch` keeps rule-order priority.
+The note separates consumed bytes from lookahead bytes. For example, two rules
+with body `/a/` and trailing context `/b+/` produce this note with backend `table`:
+
+```text
+example: "ab" selects rule /a/, followed_by: /b+/ (longest total match, then rule order; matched 1 byte, looked ahead 1 byte)
+```
+
+If a checked candidate selects the supposedly unreachable rule in any lexical
+state, W001 is omitted for that rule. No rule actions run during these checks.
+An example is omitted when the candidate is empty, invalid in the specification's
+encoding, or cannot be confirmed by the matcher. This includes trailing patterns
+that the runtime cannot compile. Candidate generation does not search for an
+alternative if anchor or encoding checks reject the shortest candidate.
 
 Static DSL errors highlight the offending DSL call. Unresolved expressions
 point to the expression instead; ambiguous lexer selection points to the
