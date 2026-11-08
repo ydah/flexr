@@ -28,7 +28,6 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       - run: bundle exec rake test
-      - run: bundle exec rubocop
       - run: bundle exec rake modes:equivalence
       - run: bundle exec rake accel:equivalence
 
@@ -49,11 +48,8 @@ jobs:
       - run: bundle exec rake golden:verify
       - run: bundle exec rake generated:verify
       - run: bundle exec rake dogfood:verify
-      - run: bundle exec rake unicode:verify
       - run: bundle exec rake direct:verify
       - run: bundle exec rake examples:check
-      - run: bundle exec rake docs:verify
-      - run: bundle exec rake coverage
       # The throughput baseline is host-specific; run its gate on one canonical
       # environment instead of comparing different OS/CPU combinations.
       - name: Run benchmark regression on the canonical environment
@@ -63,6 +59,20 @@ jobs:
           # the release command still enforces the measured 0.18x floor.
           FLEXR_BENCHMARK_PORTABLE: "1"
         run: bundle exec rake bench:regression
+
+  quality:
+    name: quality / ruby 4.0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+      - run: bundle exec rubocop
+      - run: bundle exec rake unicode:verify
+      - run: bundle exec rake docs:verify
+      - run: bundle exec rake coverage
 
   differential-fuzz:
     name: verification / differential and fuzz
