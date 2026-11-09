@@ -43,6 +43,7 @@ Source ranges are available for:
   constructs (`FLEXR-E014`), including errors in trailing context.
 - Rule warnings: `FLEXR-W001`, `FLEXR-W003`, `FLEXR-W010`, `FLEXR-W012`,
   `FLEXR-W013`, and `FLEXR-W014`.
+- Rule overlap information: `FLEXR-I001`, pointing to the later rule.
 - State and specification diagnostics: DFA state limits (`FLEXR-E006`), empty
   states (`FLEXR-W002`), large transition tables (`FLEXR-W011`), and slow DFA
   construction (`FLEXR-W016`).
@@ -162,3 +163,28 @@ or unreadable input file also produces the diagnostic without an excerpt.
 Warnings are reported by `check` according to `--warn`. The default omits the
 wall-clock `FLEXR-W016`; `--warn all` includes it, and `--warn none` suppresses
 warnings. `--warn-as-error` turns selected warnings into a failed command.
+
+## Informational diagnostics
+
+`check --warn all` also reports `FLEXR-I001` when multiple rules match the same
+input at the same length. This can happen even when both rules are reachable.
+For example, `rule(%w[a c], emit: :FIRST)` followed by
+`rule(%w[b c], emit: :SECOND)` produces:
+
+```text
+info[FLEXR-I001]: rule ["b", "c"] overlaps rule ["a", "c"] at the same length
+  help: reorder the rules if the later rule should take priority
+  note: example: "c" selects rule ["a", "c"] (1 byte, earlier rule wins)
+```
+
+Source context highlights the later rule. At most one shortest nonempty example
+is reported for each later rule in each lexical state; this is not an exhaustive
+list of overlapping rule pairs. Named states appear in the note, and lengths
+are measured in bytes. Invalid input for the specification's encoding is omitted.
+
+This analysis currently covers `table`, `direct`, and `auto` states without
+`followed_by:`. `firstmatch` and states using trailing context do not report
+`FLEXR-I001` yet. `--warn default` and `--warn none` omit this information, and
+`--warn-as-error` does not turn informational diagnostics into failures.
+Generation with `--warn all` also preserves the information in generated and
+standalone artifacts.

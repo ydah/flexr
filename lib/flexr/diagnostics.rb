@@ -118,6 +118,10 @@ module Flexr
       Diagnostic.new(code: code, severity: :warning, message: message, location: location, help: help, note: note)
     end
 
+    def info(code, message, location: nil, help: nil, note: nil)
+      Diagnostic.new(code: code, severity: :info, message: message, location: location, help: help, note: note)
+    end
+
     def raise!(diagnostic)
       klass = diagnostic.code == "FLEXR-E014" ? UnsupportedRegexpError : CompileError
       raise klass.new(diagnostic.message, diagnostic: diagnostic)
