@@ -331,23 +331,31 @@ module Flexr
       end
 
       def overlap_diagnostics(compiled, rules_by_index)
-        # shortcut: body-DFA ties apply to longest match; verify firstmatch and trailing context before covering them.
-        return [] if @spec.backend == :firstmatch
-
+        # shortcut: verify one shortest body-DFA candidate per rule; search alternatives and model trailing context for wider coverage.
         compiled.machines.flat_map do |state_name, machine|
-          next [] if rules_for(state_name).any?(&:trailing)
+          active_rules = rules_for(state_name)
+          next [] if active_rules.any?(&:trailing)
 
           Analysis.shadowing_examples(machine.dfa, machine.dfa.rule_ids).filter_map do |index, (bytes, winner)|
             input = bytes.dup.force_encoding(@spec.encoding)
             next unless input.valid_encoding?
 
             rule = rules_by_index.fetch(index)
+            length = input.bytesize
+            if @spec.backend == :firstmatch
+              result = Analysis.firstmatch_example(active_rules, rule, input, encoding: @spec.encoding,
+                                                    unicode: @spec.options[:unicode] == true, same_length: true)
+              next unless result && result.first != index
+
+              winner, length = result
+            end
             selected = Diagnostics.rule_label(rules_by_index.fetch(winner))
             state = state_name == :initial ? "" : " in state #{state_name.inspect}"
-            size = "#{input.bytesize} #{input.bytesize == 1 ? 'byte' : 'bytes'}"
+            size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
+            reason = @spec.backend == :firstmatch ? "first match wins, matched #{size}" : "#{size}, earlier rule wins"
             Diagnostics.info("FLEXR-I001", "#{Diagnostics.rule_label(rule)} overlaps #{selected} at the same length",
                              location: rule.location, help: "reorder the rules if the later rule should take priority",
-                             note: "example: #{input.inspect} selects #{selected}#{state} (#{size}, earlier rule wins)")
+                             note: "example: #{input.inspect} selects #{selected}#{state} (#{reason})")
           end
         end
       end
