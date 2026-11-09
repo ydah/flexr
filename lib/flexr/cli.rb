@@ -151,7 +151,8 @@ module Flexr
                  end
       diagnostics = (compiled.is_a?(Array) ? compiled : Array(compiled&.diagnostics)).dup
       diagnostics.select! do |diagnostic|
-        options.warn_level == :all || (options.warn_level == :default && diagnostic.code != "FLEXR-W016")
+        options.warn_level == :all ||
+          (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
       end
       set = DiagnosticSet.new
       diagnostics.each { |diagnostic| set << diagnostic }
@@ -287,6 +288,7 @@ module Flexr
         klass.option(name) if value
       end
       klass.__flexr_config.options[:max_dfa_states] = overrides[:max_dfa_states] if overrides[:max_dfa_states]
+      klass.__flexr_config.options[:warn_level] = overrides[:warn_level] if overrides[:warn_level]
       accel = overrides.fetch(:accel, config_options[:accel])
       klass.accel(accel) if accel
       parsed.states.each do |name, value|

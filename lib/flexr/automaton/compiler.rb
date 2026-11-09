@@ -258,6 +258,7 @@ module Flexr
                               help: "remove it, reorder the rules, or make its language distinct",
                               note: example&.fetch(:note))
         end)
+        diagnostics.concat(overlap_diagnostics(compiled, rules_by_index)) if @spec.options[:warn_level] == :all
 
         @spec.states.each do |state_name, state|
           next if state_name == :initial
@@ -327,6 +328,28 @@ module Flexr
                                               help: "use generated mode for production startup")
         end
         diagnostics
+      end
+
+      def overlap_diagnostics(compiled, rules_by_index)
+        # shortcut: body-DFA ties apply to longest match; verify firstmatch and trailing context before covering them.
+        return [] if @spec.backend == :firstmatch
+
+        compiled.machines.flat_map do |state_name, machine|
+          next [] if rules_for(state_name).any?(&:trailing)
+
+          Analysis.shadowing_examples(machine.dfa, machine.dfa.rule_ids).filter_map do |index, (bytes, winner)|
+            input = bytes.dup.force_encoding(@spec.encoding)
+            next unless input.valid_encoding?
+
+            rule = rules_by_index.fetch(index)
+            selected = Diagnostics.rule_label(rules_by_index.fetch(winner))
+            state = state_name == :initial ? "" : " in state #{state_name.inspect}"
+            size = "#{input.bytesize} #{input.bytesize == 1 ? 'byte' : 'bytes'}"
+            Diagnostics.info("FLEXR-I001", "#{Diagnostics.rule_label(rule)} overlaps #{selected} at the same length",
+                             location: rule.location, help: "reorder the rules if the later rule should take priority",
+                             note: "example: #{input.inspect} selects #{selected}#{state} (#{size}, earlier rule wins)")
+          end
+        end
       end
 
       def unreachable_examples(compiled, rules, rules_by_index)

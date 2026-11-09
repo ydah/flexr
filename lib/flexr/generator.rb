@@ -126,7 +126,7 @@ module Flexr
         class_name: parsed.class_name, superclass: "Flexr::Lexer",
         backend: @options.fetch(:backend, parsed.config[:backend]),
         token_kind: @options.fetch(:token_kind, parsed.config[:token_kind]),
-        encoding: parsed.config[:encoding], options: effective_options(parsed),
+        encoding: parsed.config[:encoding], options: effective_options(parsed).merge(warn_level: @options[:warn_level]),
         declared_tokens: parsed.config[:declared_tokens], states: states, rules: rules,
         eof_rules: parsed.config[:eof_rules] || {}, verbatim: parsed.source
       )

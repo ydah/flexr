@@ -39,7 +39,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `--table-compression VALUE` | `none`, `rows`, `full` | Generation |
 | `--table-format VALUE` | `literal`, `packed` | Generation |
 | `--max-dfa-states N` | Positive integer | Compilation |
-| `-W, --warn LEVEL` | `all`, `default`, `none` | Check |
+| `-W, --warn LEVEL` | `all`, `default`, `none` | Check and generation |
 | `--warn-as-error` | Flag | Check and generation |
 | `--color WHEN` | `auto`, `always`, `never` | Human diagnostics |
 | `--format FMT` | `human`, `json` | Check and stats |
@@ -78,3 +78,8 @@ Options:
 `check --format json` writes one JSON array to stdout. Human diagnostics go to
 stdout for `check` and errors go to stderr for command failures. Use
 `--warn-as-error` when a warning should fail CI.
+
+`--warn all` also includes informational equal-length rule overlaps
+(`FLEXR-I001`). These reports include an input example and do not fail
+`--warn-as-error`. See [Diagnostics](diagnostics.md#informational-diagnostics)
+for the supported backends and states.
