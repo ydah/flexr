@@ -135,9 +135,7 @@ RSpec.describe "equal-length overlap diagnostics" do
     ])
   end
 
-  it "does not report an unchecked firstmatch or trailing-context tie" do
-    File.binwrite(@path, source.sub("  rule", "  backend :firstmatch\n  option :experimental\n  rule"))
-    expect(infos).to be_empty
+  it "does not report an unchecked trailing-context tie" do
     File.binwrite(@path, source.sub("emit: :FIRST", 'followed_by: "d", emit: :FIRST'))
     expect(infos).to be_empty
   end

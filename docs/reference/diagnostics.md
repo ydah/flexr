@@ -182,9 +182,17 @@ is reported for each later rule in each lexical state; this is not an exhaustive
 list of overlapping rule pairs. Named states appear in the note, and lengths
 are measured in bytes. Invalid input for the specification's encoding is omitted.
 
-This analysis currently covers `table`, `direct`, and `auto` states without
-`followed_by:`. `firstmatch` and states using trailing context do not report
-`FLEXR-I001` yet. `--warn default` and `--warn none` omit this information, and
+For `firstmatch`, the candidate is checked with the scanner's regexp matcher.
+The diagnostic is emitted only if the first selected rule and the later rule
+match the same number of bytes. For example, `/a|ab/` followed by `/ab/` does not
+produce a tie for `"ab"`: the first rule matches one byte and the second matches
+two. The note reports the actual matched byte count, including zero when empty
+matches are allowed. No actions run during the check. If the shortest candidate
+does not confirm a tie, no alternative candidate is searched.
+
+This analysis covers `table`, `direct`, `auto`, and `firstmatch` states without
+`followed_by:`. States using trailing context do not report `FLEXR-I001` yet.
+`--warn default` and `--warn none` omit this information, and
 `--warn-as-error` does not turn informational diagnostics into failures.
 Generation with `--warn all` also preserves the information in generated and
 standalone artifacts.

@@ -185,7 +185,7 @@ module Flexr
         matches
       end
 
-      def firstmatch_example(rules, target, input, encoding:, unicode: false)
+      def firstmatch_example(rules, target, input, encoding:, unicode: false, same_length: false)
         target_length = firstmatch_length(target, input, encoding: encoding, unicode: unicode)
         return unless target_length
 
@@ -193,7 +193,11 @@ module Flexr
           break if rule.index >= target.index
 
           length = firstmatch_length(rule, input, encoding: encoding, unicode: unicode)
-          return [rule.index, length] if length
+          next unless length
+
+          return nil if same_length && length != target_length
+
+          return [rule.index, length]
         end
         [target.index, target_length]
       rescue EncodingError
