@@ -70,17 +70,32 @@ RSpec.describe "generated artifact safety" do
     end
   end
 
-  it "embeds only the runtime core for a compiled standalone lexer" do
-    Dir.mktmpdir("flexr-standalone-core-") do |directory|
-      path = File.join(directory, "lexer.flexr.rb")
-      generated = Flexr::Generator.new(path, options: { standalone: true }).tap do
-        File.binwrite(path, lexer_source)
-      end.generate
+  { "LF" => "\n", "CRLF" => "\r\n" }.each do |format, newline|
+    it "embeds only the runtime core from #{format} sources for a compiled standalone lexer" do
+      allow(File).to receive(:binread).and_call_original
+      Flexr::Generator::RUNTIME_SOURCES.each do |relative|
+        runtime_path = File.expand_path("../lib/flexr/#{relative}", __dir__)
+        contents = File.binread(runtime_path).gsub(/\r\n?/, "\n").gsub("\n", newline)
+        allow(File).to receive(:binread).with(runtime_path).and_return(contents)
+      end
 
-      expect(generated.bytesize).to be < 100_000
-      expect(generated).not_to include(
-        "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel"
-      )
+      Dir.mktmpdir("flexr-standalone-core-") do |directory|
+        path = File.join(directory, "lexer.flexr.rb")
+        output = File.join(directory, "lexer.rb")
+        File.binwrite(path, lexer_source.sub("rule(/a/)", "rule(/a+/)"))
+        generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
+
+        expect(generated.bytesize).to be < 100_000
+        expect(generated).not_to include(
+          "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis"
+        )
+        script = <<~RUBY
+          load ARGV.fetch(0)
+          abort "wrong tokens" unless GeneratorSafetyLexer.new("a" * 100).tokens == [[:A, "a" * 100]]
+        RUBY
+        _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, output)
+        expect(status).to be_success, stderr
+      end
     end
   end
 

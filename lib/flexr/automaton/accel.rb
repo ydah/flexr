@@ -9,7 +9,7 @@ module Flexr
 
       def extract(dfa)
         dfa.transitions.each_index.filter_map do |state|
-          bytes = Analysis.self_loop_set(dfa, state)
+          bytes = self_loop_set(dfa, state)
           next if bytes.empty?
 
           Region.new(
@@ -18,6 +18,16 @@ module Flexr
             utf8_regexp: bytes.all? { |byte| byte < 128 } ? regexp_for(bytes, binary: false) : nil
           )
         end
+      end
+
+      def self_loop_set(dfa, state)
+        representatives = Array.new(dfa.class_count)
+        dfa.ec.each_with_index { |class_id, byte| representatives[class_id] ||= byte }
+        self_loops = representatives.each_index.map do |class_id|
+          byte = representatives.fetch(class_id)
+          byte && dfa.transition(state, byte) == state
+        end
+        dfa.ec.each_index.select { |byte| self_loops.fetch(dfa.ec.fetch(byte)) }
       end
 
       def regexp_for(bytes, binary: true)
