@@ -171,7 +171,14 @@ module Flexr
           end
           raise_syntax("invalid inline option group")
         end
-        raise unsupported("look-around", "use followed_by: or a state instead") if peek_prefix?("=") || peek_prefix?("!") || peek_prefix?("<=") || peek_prefix?("<!")
+        if peek_prefix?("=")
+          raise unsupported("look-around",
+                            "for a trailing positive lookahead, rewrite rule(/a(?=b)/) as rule(/a/, followed_by: /b/); keep the action")
+        end
+        if peek_prefix?("!") || peek_prefix?("<=") || peek_prefix?("<!")
+          raise unsupported("look-around",
+                            "use separate rules or states; followed_by: cannot express negative lookahead or lookbehind")
+        end
         raise unsupported("atomic groups", "rewrite the expression as a DFA-compatible expression") if consume?(">")
         raise unsupported("unsupported group syntax", "use a non-capturing group (?:...)")
       end

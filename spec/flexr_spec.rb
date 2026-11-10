@@ -117,11 +117,31 @@ RSpec.describe Flexr do
     expect(lexer_class.new("A").tokens).to eq([[:A, "A"]])
   end
 
-  it "provides diagnostics for unsupported regexp features" do
+  it "shows a trailing positive lookahead rewrite in unsupported regexp diagnostics" do
     expect { Flexr::Regexp::Parser.new("a(?=b)").parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
       expect(error.diagnostic.code).to eq("FLEXR-E014")
-      expect(error.diagnostic.help).to include("followed_by")
+      expect(error.diagnostic.help).to include("trailing positive lookahead", "rule(/a(?=b)/)",
+                                               "rule(/a/, followed_by: /b/)", "keep the action")
     end
+  end
+
+  it "does not suggest the positive lookahead rewrite for negative lookahead or lookbehind" do
+    ["a(?!b)", "(?<=a)b", "(?<!a)b"].each do |source|
+      expect { Flexr::Regexp::Parser.new(source).parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include("separate rules or states", "cannot express negative lookahead or lookbehind")
+        expect(error.diagnostic.help).not_to include("rule(/a/, followed_by: /b/)")
+      end
+    end
+  end
+
+  it "keeps the suggested lookahead unconsumed while preserving the rule action" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/a/, followed_by: /b/) { emit :A }
+      rule(/./) { emit :OTHER }
+    end
+
+    expect(lexer.new("abac").tokens).to eq([[:A, "a"], [:OTHER, "b"], [:OTHER, "a"], [:OTHER, "c"]])
   end
 
   it "validates trailing context with the same regexp parser as rule patterns" do
