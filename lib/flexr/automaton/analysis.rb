@@ -65,7 +65,7 @@ module Flexr
         representatives.values.sort_by { |byte| [byte.between?(32, 126) ? 0 : 1, byte] }
       end
 
-      def shadowing_examples(dfa, rule_indices, include_empty: false)
+      def shadowing_examples(dfa, rule_indices, include_empty: false, include_unshadowed: false)
         remaining = (rule_indices & dfa.rule_ids).to_h { |index| [index, true] }
         return {} if remaining.empty?
 
@@ -80,7 +80,9 @@ module Flexr
           accepts = dfa.accepts.fetch(state)
           winner = accepts.min_by(&:rule_index)&.rule_index
           if (include_empty || cursor.positive?) && winner
-            shadowed = accepts.map(&:rule_index).uniq.select { |index| index > winner && remaining.key?(index) }
+            shadowed = accepts.map(&:rule_index).uniq.select do |index|
+              (include_unshadowed || index > winner) && remaining.key?(index)
+            end
             unless shadowed.empty?
               input = example_input(queue, cursor)
               shadowed.each do |index|
@@ -133,7 +135,7 @@ module Flexr
         nil
       end
 
-      def trailing_example(dfa, rules, target, input, trailing_dfas, encoding:, unicode:, firstmatch:)
+      def trailing_example(dfa, rules, target, input, trailing_dfas, encoding:, unicode:, firstmatch:, same_length: false)
         lengths = if firstmatch
           rules.filter_map do |rule|
             next if rule.index > target.index
@@ -158,6 +160,8 @@ module Flexr
         return unless matches.key?(target.index)
 
         winner, (length, total) = matches.max_by { |index, (_, size)| firstmatch ? -index : [size, -index] }
+        return if same_length && total != matches.fetch(target.index).last
+
         [winner, length, total - length]
       rescue EncodingError
         nil
