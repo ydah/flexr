@@ -339,8 +339,10 @@ module Flexr
         char = advance_raw
         raise_syntax("trailing backslash") unless char
         if ESCAPES.key?(char)
-          raise unsupported("octal escapes", "use an explicit hexadecimal escape") if
-            char == "0" && current&.match?(/[0-9]/)
+          if char == "0" && current&.match?(/[0-9]/)
+            raise unsupported("octal escapes",
+                              'use an explicit hexadecimal escape: rewrite rule(/\011/) as rule(/\x09/) for a tab; keep the action')
+          end
 
           @escaped_value = true
           @last_codepoint = ESCAPES.fetch(char)
@@ -378,8 +380,15 @@ module Flexr
 
           @escaped_value = true
           @last_codepoint = 0x08
+        when "R"
+          example = if @encoding == Encoding::BINARY
+            'rule(/\r\n|[\n\v\f\r]/n)'
+          else
+            'rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/)'
+          end
+          raise unsupported("\\R", "for a standalone line-break token, use #{example}; keep the action")
         when "G", "K", "B", "A", "z", "Z", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-             "g", "R", "X", "c", "C", "M"
+             "g", "X", "c", "C", "M"
           raise unsupported("\\#{char}", "use a state or followed_by: instead")
         when "k"
           read_until(">") if consume?("<")
@@ -388,7 +397,8 @@ module Flexr
           @escaped_value = true
           @last_codepoint = char.ord
         else
-          raise unsupported("unknown escape \\#{char}", "remove the backslash or use a supported escape")
+          raise unsupported("unknown escape \\#{char}",
+                            'if q is literal, rewrite rule(/\q/) as rule(/q/); otherwise use a supported escape; keep the action')
         end
       end
 
