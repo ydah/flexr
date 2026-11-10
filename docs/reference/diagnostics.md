@@ -165,6 +165,21 @@ needs a separate rewrite. Negative lookahead and lookbehind receive separate
 guidance to use rules or states because `followed_by:` cannot express those
 assertions.
 
+For lazy and possessive quantifiers, `FLEXR-E014` shows a negated character
+class for unescaped, single-line quoted text:
+
+```text
+error[FLEXR-E014]: lazy or possessive quantifier is not supported by flexr
+  help: for unescaped single-line quoted text, use a negated character class: rule(/"[^"\n]*"/); keep the action; removing lazy or possessive modifiers can change matches
+```
+
+For this form of quoted text, `/".*?"/` and `/"[^"\n]*+"/` can both be
+rewritten as `/"[^"\n]*"/`. Excluding the closing quote makes the match stop
+at the first delimiter, so adjacent strings remain separate tokens. Excluding
+`\n` preserves the line-feed restriction of `.` without `/m`. Escaped quotes
+and multiline strings need a different pattern. Simply dropping a lazy or
+possessive modifier can change which inputs match or how much text is consumed.
+
 ## Warnings
 
 | Code | Meaning | First fix to try |

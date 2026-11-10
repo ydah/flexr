@@ -53,6 +53,33 @@ RSpec.describe "regexp engine contracts" do
     expect { Flexr::Regexp::Parser.new("\\.").parse }.not_to raise_error
   end
 
+  it "shows a delimited-text rewrite for lazy and possessive quantifiers" do
+    [/".*?"/, /"[^"\n]*+"/].each do |pattern|
+      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include('rule(/"[^"\n]*"/)', "unescaped single-line quoted text",
+                                                 "keep the action", "removing lazy or possessive modifiers can change matches")
+      end
+    end
+  end
+
+  it "keeps the suggested quoted token at the first closing quote and rejects line breaks" do
+    rewritten = /"[^"\n]*"/
+    originals = [/".*?"/, /"[^"\n]*+"/]
+    lexer = Class.new(Flexr::Lexer) do
+      rule(rewritten) { emit :STRING }
+      rule(/./m) { emit :OTHER }
+    end
+
+    ['""', '"a""b"', '"a" rest', "\"a\nb\"", '"unfinished'].each do |input|
+      match = rewritten.match(input)
+      expected = match ? [:STRING, match[0]] : [:OTHER, input[0]]
+      originals.each { |pattern| expect(pattern.match(input)&.[](0)).to eq(match&.[](0)) }
+      expect(lexer.new(input).next_token).to eq(expected)
+    end
+    expect(lexer.new('"a""b"').tokens).to eq([[:STRING, '"a"'], [:STRING, '"b"']])
+  end
+
   it "compiles Unicode properties into the DFA with longest-match semantics" do
     dfa = Flexr.compile_pattern(/\p{L}|\p{L}{2}/)
     lexer_class = Class.new(Flexr::Lexer) do
