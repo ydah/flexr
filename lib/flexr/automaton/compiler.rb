@@ -331,18 +331,35 @@ module Flexr
       end
 
       def overlap_diagnostics(compiled, rules_by_index)
-        # shortcut: verify one shortest body-DFA candidate per rule; search alternatives and model trailing context for wider coverage.
+        # shortcut: verify one shortest body and trailing candidate per rule; search alternatives if rejected examples need coverage.
         compiled.machines.flat_map do |state_name, machine|
           active_rules = rules_for(state_name)
-          next [] if active_rules.any?(&:trailing)
+          trailing_dfas = diagnostic_trailing_dfas(active_rules)
+          next [] unless trailing_dfas
 
-          Analysis.shadowing_examples(machine.dfa, machine.dfa.rule_ids).filter_map do |index, (bytes, winner)|
+          has_trailing = !trailing_dfas.empty?
+          candidates = Analysis.shadowing_examples(machine.dfa, machine.dfa.rule_ids,
+                                                    include_empty: has_trailing, include_unshadowed: has_trailing)
+          candidates.filter_map do |index, (bytes, winner)|
+            if (trailing = trailing_dfas[index])
+              suffix = Analysis.shortest_input(trailing)
+              next unless suffix
+
+              bytes += suffix
+            end
             input = bytes.dup.force_encoding(@spec.encoding)
-            next unless input.valid_encoding?
+            next if input.empty? || !input.valid_encoding?
 
             rule = rules_by_index.fetch(index)
             length = input.bytesize
-            if @spec.backend == :firstmatch
+            if has_trailing
+              result = Analysis.trailing_example(machine.dfa, active_rules, rule, input, trailing_dfas,
+                                                  encoding: @spec.encoding, unicode: @spec.options[:unicode] == true,
+                                                  firstmatch: @spec.backend == :firstmatch, same_length: true)
+              next unless result && result.first != index
+
+              winner, length, lookahead = result
+            elsif @spec.backend == :firstmatch
               result = Analysis.firstmatch_example(active_rules, rule, input, encoding: @spec.encoding,
                                                     unicode: @spec.options[:unicode] == true, same_length: true)
               next unless result && result.first != index
@@ -352,8 +369,16 @@ module Flexr
             selected = Diagnostics.rule_label(rules_by_index.fetch(winner))
             state = state_name == :initial ? "" : " in state #{state_name.inspect}"
             size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
-            reason = @spec.backend == :firstmatch ? "first match wins, matched #{size}" : "#{size}, earlier rule wins"
-            Diagnostics.info("FLEXR-I001", "#{Diagnostics.rule_label(rule)} overlaps #{selected} at the same length",
+            reason = if has_trailing
+              priority = @spec.backend == :firstmatch ? "first match wins" : "same total length, earlier rule wins"
+              "#{priority}; matched #{size}, looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}"
+            elsif @spec.backend == :firstmatch
+              "first match wins, matched #{size}"
+            else
+              "#{size}, earlier rule wins"
+            end
+            match_size = has_trailing ? "total length" : "length"
+            Diagnostics.info("FLEXR-I001", "#{Diagnostics.rule_label(rule)} overlaps #{selected} at the same #{match_size}",
                              location: rule.location, help: "reorder the rules if the later rule should take priority",
                              note: "example: #{input.inspect} selects #{selected}#{state} (#{reason})")
           end

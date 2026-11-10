@@ -135,7 +135,7 @@ RSpec.describe "equal-length overlap diagnostics" do
     ])
   end
 
-  it "does not report an unchecked trailing-context tie" do
+  it "does not report a tie when trailing context gives the rules different total lengths" do
     File.binwrite(@path, source.sub("emit: :FIRST", 'followed_by: "d", emit: :FIRST'))
     expect(infos).to be_empty
   end

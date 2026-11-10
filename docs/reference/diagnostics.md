@@ -190,8 +190,26 @@ two. The note reports the actual matched byte count, including zero when empty
 matches are allowed. No actions run during the check. If the shortest candidate
 does not confirm a tie, no alternative candidate is searched.
 
-This analysis covers `table`, `direct`, `auto`, and `firstmatch` states without
-`followed_by:`. States using trailing context do not report `FLEXR-I001` yet.
+For states using `followed_by:`, the candidate combines the shortest body with
+the shortest trailing input. The check compares the total length, so rules can
+overlap even when they consume different numbers of bytes. For example,
+`rule(/a/, followed_by: /bc/, emit: :FIRST)` followed by
+`rule(/ab/, followed_by: /c/, emit: :SECOND)` produces:
+
+```text
+info[FLEXR-I001]: rule /ab/, followed_by: /c/ overlaps rule /a/, followed_by: /bc/ at the same total length
+  help: reorder the rules if the later rule should take priority
+  note: example: "abc" selects rule /a/, followed_by: /bc/ (same total length, earlier rule wins; matched 1 byte, looked ahead 2 bytes)
+```
+
+The winner is checked against the full candidate, including trailing matches
+and end anchors. The note separates the bytes consumed from those looked ahead.
+For `firstmatch`, it says `first match wins` and requires the selected rule and
+the later rule to have equal total lengths. Empty input, invalid character
+boundaries, and candidates the runtime's trailing matcher cannot verify are
+omitted. A rejected shortest candidate does not trigger a search for alternatives.
+
+This analysis covers `table`, `direct`, `auto`, and `firstmatch` states.
 `--warn default` and `--warn none` omit this information, and
 `--warn-as-error` does not turn informational diagnostics into failures.
 Generation with `--warn all` also preserves the information in generated and
