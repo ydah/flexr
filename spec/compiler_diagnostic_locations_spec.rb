@@ -61,16 +61,22 @@ RSpec.describe "compiler diagnostic locations" do
     end
   end
 
-  it "preserves the lookahead rewrite example in check JSON and generator errors" do
-    write_spec("  rule(/a(?=b)/, emit: :A)")
+  it "preserves regexp rewrite examples in check JSON and generator errors" do
+    {
+      "/a(?=b)/" => "rule(/a/, followed_by: /b/)",
+      '/".*?"/' => 'rule(/"[^"\n]*"/)',
+      '/"[^"\n]*+"/' => 'rule(/"[^"\n]*"/)'
+    }.each do |pattern, example|
+      write_spec("  rule(#{pattern}, emit: :A)")
 
-    status, diagnostics = check
+      status, diagnostics = check
 
-    expect(status).to eq(1)
-    help = diagnostics.first.fetch("help")
-    expect(help).to include("rule(/a/, followed_by: /b/)", "keep the action")
-    expect { Flexr::Generator.new(@path).generate }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-      expect(error.diagnostic.help).to eq(help)
+      expect(status).to eq(1)
+      help = diagnostics.first.fetch("help")
+      expect(help).to include(example, "keep the action")
+      expect { Flexr::Generator.new(@path).generate }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.help).to eq(help)
+      end
     end
   end
 

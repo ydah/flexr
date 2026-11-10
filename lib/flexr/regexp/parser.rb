@@ -480,7 +480,8 @@ module Flexr
       def reject_postfix_quantifier
         return unless ["?", "+"].include?(current)
 
-        raise unsupported("lazy or possessive quantifier", "use a negated character class")
+        raise unsupported("lazy or possessive quantifier",
+                          'for unescaped single-line quoted text, use a negated character class: rule(/"[^"\n]*"/); keep the action; removing lazy or possessive modifiers can change matches')
       end
 
       def merge_ranges(ranges)
