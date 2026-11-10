@@ -146,6 +146,25 @@ or unreadable input file also produces the diagnostic without an excerpt.
 | `FLEXR-E026` | A cancellation callback stopped lexing | Resume with a new lexer when ready |
 | `FLEXR-E027` | An error callback returned an unknown action | Return `:skip`, `:raise`, `:token`, or `:halt` |
 
+### Regexp rewrite help
+
+For positive lookahead, `FLEXR-E014` includes a concrete example:
+
+```text
+error[FLEXR-E014]: look-around is not supported by flexr
+  help: for a trailing positive lookahead, rewrite rule(/a(?=b)/) as rule(/a/, followed_by: /b/); keep the action
+```
+
+Keep the action or `emit:` / `skip:` options on the rewritten rule. The example
+consumes `a` only when `b` follows, leaving `b` for the next token. The combined
+body and trailing length participates in longest-match selection.
+
+Adapt this example to positive lookahead at the end of a rule's pattern,
+preserving the regexp options needed by each part. Lookahead inside a pattern
+needs a separate rewrite. Negative lookahead and lookbehind receive separate
+guidance to use rules or states because `followed_by:` cannot express those
+assertions.
+
 ## Warnings
 
 | Code | Meaning | First fix to try |

@@ -61,6 +61,19 @@ RSpec.describe "compiler diagnostic locations" do
     end
   end
 
+  it "preserves the lookahead rewrite example in check JSON and generator errors" do
+    write_spec("  rule(/a(?=b)/, emit: :A)")
+
+    status, diagnostics = check
+
+    expect(status).to eq(1)
+    help = diagnostics.first.fetch("help")
+    expect(help).to include("rule(/a/, followed_by: /b/)", "keep the action")
+    expect { Flexr::Generator.new(@path).generate }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.help).to eq(help)
+    end
+  end
+
   it "locates regexp errors when empty matches bypass the initial validation" do
     statement = "rule(/a(?=b)/, skip: true)"
     write_spec("  option :allow_empty_match\n  #{statement}")
@@ -134,7 +147,8 @@ RSpec.describe "compiler diagnostic locations" do
     expect(status).to eq(1)
     expect(output.string).to be_empty
     expect(errors.string).to include("error[FLEXR-E014]", "  --> #{@path}:3:3\n",
-                                    "3 |   rule(/a(?=b)/, skip: true)\n", "  |   ^")
+                                    "3 |   rule(/a(?=b)/, skip: true)\n", "  |   ^",
+                                    "rule(/a/, followed_by: /b/)", "keep the action")
   end
 
   it "leaves location absent when compiling a runtime rule without source metadata" do
