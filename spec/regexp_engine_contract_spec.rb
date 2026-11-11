@@ -53,6 +53,62 @@ RSpec.describe "regexp engine contracts" do
     expect { Flexr::Regexp::Parser.new("\\.").parse }.not_to raise_error
   end
 
+  it "shows literal rewrite examples for octal and unknown escapes" do
+    {
+      '\\011' => ['rule(/\\x09/)', 'rule(/\\011/)'],
+      '\\q' => ['rule(/q/)', "if q is literal"]
+    }.each do |source, expected|
+      expect { Flexr::Regexp::Parser.new(source).parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include(*expected, "keep the action")
+      end
+    end
+
+    expect(Flexr.compile_pattern(/\x09/).accept?("\t")).to be(true)
+    expect(Flexr.compile_pattern(/\x09/).accept?("0")).to be(false)
+    expect(Flexr.compile_pattern(/q/).accept?("q")).to be(true)
+  end
+
+  {
+    Encoding::UTF_8 => /\r\n|[\n\v\f\r\u0085\u2028\u2029]/,
+    Encoding::BINARY => /\r\n|[\n\v\f\r]/n
+  }.each do |encoding, replacement|
+    it "shows a standalone line-break rule for #{encoding}" do
+      lexer = Class.new(Flexr::Lexer) do
+        encoding encoding
+        rule(/\R/, emit: :NEWLINE)
+      end
+
+      expect { lexer.compile! }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include("standalone line-break token", "rule(#{replacement.inspect})", "keep the action")
+      end
+    end
+
+    %i[table direct auto firstmatch].each do |backend|
+      it "preserves #{encoding} line breaks and CRLF with #{backend}" do
+        lexer = Class.new(Flexr::Lexer) do
+          encoding encoding
+          backend backend
+          option :experimental if backend == :firstmatch
+          rule(replacement) { emit :NEWLINE }
+          rule(/./m, skip: true)
+        end
+        input = "\r\n\r\n\n\v\f\r\u0085\u2028\u2029x\t\u0086"
+        input = input.b if encoding == Encoding::BINARY
+        original = encoding == Encoding::BINARY ? /\R/n : /\R/
+        expected = input.scan(original).map { |text| [:NEWLINE, text.bytes] }
+
+        [input, StringIO.new(input)].each do |source|
+          tokens = lexer.new(source, chunk_size: 1).tokens.map { |token, text| [token, text.bytes] }
+          expect(tokens).to eq(expected)
+        end
+        expect(expected.first).to eq([:NEWLINE, [13, 10]])
+        expect(expected.length).to eq(encoding == Encoding::BINARY ? 6 : 9)
+      end
+    end
+  end
+
   it "shows a delimited-text rewrite for lazy and possessive quantifiers" do
     [/".*?"/, /"[^"\n]*+"/].each do |pattern|
       expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|

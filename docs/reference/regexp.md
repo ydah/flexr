@@ -15,6 +15,8 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `/i`, `/m`, `/x`, `/n` | Supported | Inline forms are supported where Ruby permits them |
 | `\d`, `\w`, `\s` | Supported | Unicode-aware with `option :unicode` in UTF-8 |
 | `\h`, `\H` | Supported | Hexadecimal digits and their complement |
+| Octal escapes such as `\011` | Unsupported | Use a hexadecimal escape such as `\x09` |
+| `\R` | Unsupported | Use the standalone line-break rule shown by `FLEXR-E014` for the specification's encoding |
 | Lookahead / lookbehind | Unsupported | Use `followed_by:` for trailing positive lookahead; other forms need rules or states; `FLEXR-E014` |
 | Backreferences | Unsupported | Split the language into states or actions |
 | `\b`, `\B`, `\A`, `\z`, `\G`, `\K` | Unsupported | Use rule boundaries or state/action logic |
@@ -23,7 +25,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 
 Malformed syntax produces `FLEXR-E001`. Unsupported constructs produce
 `FLEXR-E014`; the diagnostic help normally names the supported replacement.
-For trailing positive lookahead and lazy or possessive quantifiers, it includes concrete
+Several `FLEXR-E014` diagnostics include concrete
 [rule rewrite examples](diagnostics.md#regexp-rewrite-help).
 Unknown alphabetic escapes are rejected rather than silently treated as
 literals; escaped regexp punctuation remains supported.

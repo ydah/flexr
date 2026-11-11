@@ -180,6 +180,29 @@ at the first delimiter, so adjacent strings remain separate tokens. Excluding
 and multiline strings need a different pattern. Simply dropping a lazy or
 possessive modifier can change which inputs match or how much text is consumed.
 
+Escape diagnostics also include concrete examples. For an octal tab,
+rewrite `rule(/\011/)` as `rule(/\x09/)`. For an unknown escape such as `\q`,
+use `rule(/q/)` only if `q` is the intended literal character. Keep the original
+action and regexp options when adapting either example.
+
+For `\R`, the help chooses a standalone line-break rule for the specification's
+encoding. In UTF-8, use:
+
+```ruby
+rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/) { emit :NEWLINE }
+```
+
+This covers the [line breaks recognized by Ruby's `\R`](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Shorthand+Character+Classes).
+With `encoding Encoding::BINARY`, the example uses only ASCII line breaks:
+
+```ruby
+rule(/\r\n|[\n\v\f\r]/n) { emit :NEWLINE }
+```
+
+CRLF comes first so that `firstmatch` also consumes the pair as one token.
+Apply these examples as separate token rules. Replacing `\R` inside a larger
+expression can change how the surrounding pattern matches.
+
 ## Warnings
 
 | Code | Meaning | First fix to try |
