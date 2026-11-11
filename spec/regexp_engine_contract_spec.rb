@@ -119,9 +119,17 @@ RSpec.describe "regexp engine contracts" do
     end
   end
 
+  it "shows a delimited-text rewrite for atomic groups with a limit on its use" do
+    expect { Flexr.parse_pattern(/"(?>[^"\n]*)"/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.help).to include('rule(/"[^"\n]*"/)', "unescaped single-line quoted text",
+                                               "keep the action", "removing atomic groups can change matches")
+    end
+  end
+
   it "keeps the suggested quoted token at the first closing quote and rejects line breaks" do
     rewritten = /"[^"\n]*"/
-    originals = [/".*?"/, /"[^"\n]*+"/]
+    originals = [/".*?"/, /"[^"\n]*+"/, /"(?>[^"\n]*)"/]
     lexer = Class.new(Flexr::Lexer) do
       rule(rewritten) { emit :STRING }
       rule(/./m) { emit :OTHER }
@@ -134,6 +142,37 @@ RSpec.describe "regexp engine contracts" do
       expect(lexer.new(input).next_token).to eq(expected)
     end
     expect(lexer.new('"a""b"').tokens).to eq([[:STRING, '"a"'], [:STRING, '"b"']])
+  end
+
+  it "shows a finite-choice rewrite for both backreference notations" do
+    [/(a|b)\1/, /(a|b)\k<1>/].each do |pattern|
+      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include('rule(/(a|b)\1/)', 'rule(/(?:aa|bb)/)',
+                                                 "capture limited to a or b", "split the rule", "states", "keep the action")
+      end
+    end
+
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/(?:aa|bb)/) { emit :PAIR }
+      rule(/./) { emit :OTHER }
+    end
+    dfa = Flexr.compile_pattern(/(?:aa|bb)/)
+    ["", "a", "b", "aa", "bb", "ab", "ba", "aaa", "aabb"].each do |input|
+      expect(dfa.accept?(input)).to eq(/\A(a|b)\1\z/.match?(input))
+    end
+    expect(lexer.new("aabbab").tokens).to eq([[:PAIR, "aa"], [:PAIR, "bb"], [:OTHER, "a"], [:OTHER, "b"]])
+  end
+
+  it "treats an octal character-class escape separately from a backreference" do
+    expect { Flexr.parse_pattern(/[\1]/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.help).to include('rule(/[\x01]/)', "character code", "keep the action")
+      expect(error.diagnostic.help).not_to include("capture limited", "aa|bb")
+    end
+    dfa = Flexr.compile_pattern(Regexp.new('[\x01]'))
+    expect(dfa.accept?("\x01")).to be(true)
+    expect(dfa.accept?("1")).to be(false)
   end
 
   it "compiles Unicode properties into the DFA with longest-match semantics" do

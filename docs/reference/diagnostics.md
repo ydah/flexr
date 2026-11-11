@@ -180,10 +180,28 @@ at the first delimiter, so adjacent strings remain separate tokens. Excluding
 and multiline strings need a different pattern. Simply dropping a lazy or
 possessive modifier can change which inputs match or how much text is consumed.
 
+For atomic groups, the same quoted-text rule can replace `/"(?>[^"\n]*)"/`.
+The repeated character class cannot consume the closing quote, so this example
+does not need backtracking to find it. The diagnostic warns against removing
+atomic groups in general: [Ruby's atomic grouping](https://docs.ruby-lang.org/en/4.0/Regexp.html)
+can change whether the rest of a pattern matches. The example still excludes
+escaped quotes and line feeds.
+
+For numbered backreferences, the help uses a capture with only two possible
+values. Rewrite `rule(/(a|b)\1/)` or `rule(/(a|b)\k<1>/)` as
+`rule(/(?:aa|bb)/)` and keep the action. This accepts `aa` and `bb`, while
+rejecting `ab` and `ba`. It reproduces the matched text; flexr does not expose
+capture values to actions. If the repeated text cannot be enumerated, split
+the rule into states and compare the matched text in actions instead.
+
 Escape diagnostics also include concrete examples. For an octal tab,
 rewrite `rule(/\011/)` as `rule(/\x09/)`. For an unknown escape such as `\q`,
 use `rule(/q/)` only if `q` is the intended literal character. Keep the original
 action and regexp options when adapting either example.
+
+Inside a character class, `\1` is a character code. Its diagnostic recommends
+an explicit hexadecimal escape such as `rule(/[\x01]/)`, which matches the same
+control character as `rule(/[\1]/)`.
 
 For `\R`, the help chooses a standalone line-break rule for the specification's
 encoding. In UTF-8, use:

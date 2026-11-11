@@ -18,10 +18,11 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Octal escapes such as `\011` | Unsupported | Use a hexadecimal escape such as `\x09` |
 | `\R` | Unsupported | Use the standalone line-break rule shown by `FLEXR-E014` for the specification's encoding |
 | Lookahead / lookbehind | Unsupported | Use `followed_by:` for trailing positive lookahead; other forms need rules or states; `FLEXR-E014` |
-| Backreferences | Unsupported | Split the language into states or actions |
+| Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
 | `\b`, `\B`, `\A`, `\z`, `\G`, `\K` | Unsupported | Use rule boundaries or state/action logic |
 | Lazy or possessive quantifiers | Unsupported | For unescaped single-line quoted text, use `/"[^"\n]*"/`; other patterns need a separate rewrite |
-| Conditional, atomic, and capture-dependent groups | Unsupported | Rewrite as DFA-compatible rules |
+| Atomic groups | Unsupported | Use the delimited-text example in `FLEXR-E014` where applicable; removing atomic groups can change matches |
+| Conditional and capture-dependent groups | Unsupported | Rewrite as DFA-compatible rules |
 
 Malformed syntax produces `FLEXR-E001`. Unsupported constructs produce
 `FLEXR-E014`; the diagnostic help normally names the supported replacement.
