@@ -68,7 +68,11 @@ RSpec.describe "compiler diagnostic locations" do
       '/"[^"\n]*+"/' => 'rule(/"[^"\n]*"/)',
       '/\011/' => 'rule(/\x09/)',
       '/\R/' => 'rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/)',
-      '/\q/' => 'rule(/q/)'
+      '/\q/' => 'rule(/q/)',
+      '/"(?>[^"\n]*)"/' => 'rule(/"[^"\n]*"/)',
+      '/(a|b)\1/' => 'rule(/(?:aa|bb)/)',
+      '/(a|b)\k<1>/' => 'rule(/(?:aa|bb)/)',
+      '/[\1]/' => 'rule(/[\x01]/)'
     }.each do |pattern, example|
       write_spec("  rule(#{pattern}, emit: :A)")
 

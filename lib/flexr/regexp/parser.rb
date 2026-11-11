@@ -179,7 +179,10 @@ module Flexr
           raise unsupported("look-around",
                             "use separate rules or states; followed_by: cannot express negative lookahead or lookbehind")
         end
-        raise unsupported("atomic groups", "rewrite the expression as a DFA-compatible expression") if consume?(">")
+        if consume?(">")
+          raise unsupported("atomic groups",
+                            'for unescaped single-line quoted text, a DFA-compatible rewrite is rule(/"[^"\n]*"/); keep the action; removing atomic groups can change matches')
+        end
         raise unsupported("unsupported group syntax", "use a non-capturing group (?:...)")
       end
 
@@ -387,12 +390,17 @@ module Flexr
             'rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/)'
           end
           raise unsupported("\\R", "for a standalone line-break token, use #{example}; keep the action")
-        when "G", "K", "B", "A", "z", "Z", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-             "g", "X", "c", "C", "M"
+        when "G", "K", "B", "A", "z", "Z", "g", "X", "c", "C", "M"
           raise unsupported("\\#{char}", "use a state or followed_by: instead")
-        when "k"
-          read_until(">") if consume?("<")
-          raise unsupported("backreferences", "split the rule into DFA-compatible states")
+        when "1".."9", "k"
+          read_until(">") if char == "k" && consume?("<")
+          feature = char == "k" ? "backreferences" : "\\#{char}"
+          help = if @class_depth.positive? && char != "k"
+            'for a character code, use an explicit hexadecimal escape such as rule(/[\x01]/); keep the action'
+          else
+            'for a capture limited to a or b, rewrite rule(/(a|b)\1/) as rule(/(?:aa|bb)/) and keep the action; otherwise split the rule into states and compare matched text in actions'
+          end
+          raise unsupported(feature, help)
         when *LITERAL_ESCAPES
           @escaped_value = true
           @last_codepoint = char.ord
