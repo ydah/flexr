@@ -164,6 +164,56 @@ RSpec.describe "regexp engine contracts" do
     expect(lexer.new("aabbab").tokens).to eq([[:PAIR, "aa"], [:PAIR, "bb"], [:OTHER, "a"], [:OTHER, "b"]])
   end
 
+  it "shows a non-capturing rewrite for named groups only when captures are unused" do
+    [/(?<word>ab)/, /(?'word'ab)/, /(?<word>a)\k<word>/].each do |pattern|
+      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include("rule(/(?:ab)/)", "when only grouping is needed",
+                                                 "capture-dependent patterns need a separate rewrite", "keep the action")
+      end
+    end
+  end
+
+  it "shows a conditional rewrite with an explicit limit on its use" do
+    expect { Flexr.parse_pattern(/(a)?(?(1)b|c)/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.help).to include("rule(/(a)?(?(1)b|c)/)", "rule(/(?:ab|c)/)",
+                                               "other conditions need separate rules or state checks", "keep the action")
+    end
+  end
+
+  it "shows an absence-group rewrite limited to excluding a single literal" do
+    expect { Flexr.parse_pattern(/x(?~a)/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.help).to include("rule(/x(?~a)/)", "rule(/x[^a]*/)", "when excluding a single literal",
+                                               "larger absence expressions need a separate rewrite", "keep the action")
+    end
+  end
+
+  it "preserves accepted input and token text in the suggested group rewrites" do
+    {
+      /(?<word>ab)/ => /(?:ab)/,
+      /(?'word'ab)/ => /(?:ab)/,
+      /(a)?(?(1)b|c)/ => /(?:ab|c)/,
+      /x(?~a)/ => /x[^a]*/
+    }.each do |original, rewritten|
+      dfa = Flexr.compile_pattern(rewritten)
+      full_match = Regexp.new("\\A(?:#{original.source})\\z")
+      prefix_match = Regexp.new("\\A(?:#{original.source})")
+      lexer = Class.new(Flexr::Lexer) do
+        rule(rewritten) { emit :MATCH }
+        rule(/./m) { emit :OTHER }
+      end
+
+      ["", "a", "b", "ab", "c", "ac", "abc", "x", "xa", "xb", "xbax", "x\na", "xé"].each do |input|
+        expect(dfa.accept?(input)).to eq(full_match.match?(input)), "#{original.inspect} on #{input.inspect}"
+        match = prefix_match.match(input)
+        expected = match ? [:MATCH, match[0]] : ([:OTHER, input[0]] unless input.empty?)
+        expect(lexer.new(input).next_token).to eq(expected)
+      end
+    end
+  end
+
   it "treats an octal character-class escape separately from a backreference" do
     expect { Flexr.parse_pattern(/[\1]/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
       expect(error.diagnostic.code).to eq("FLEXR-E014")

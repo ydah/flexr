@@ -194,6 +194,22 @@ rejecting `ab` and `ba`. It reproduces the matched text; flexr does not expose
 capture values to actions. If the repeated text cannot be enumerated, split
 the rule into states and compare the matched text in actions instead.
 
+For named captures used only for grouping, rewrite `rule(/(?<word>ab)/)` or
+`rule(/(?'word'ab)/)` as `rule(/(?:ab)/)` and keep the action. Backreferences
+and conditions that depend on the capture need a separate rewrite; removing
+the name alone does not preserve them.
+
+For the conditional example `rule(/(a)?(?(1)b|c)/)`, use `rule(/(?:ab|c)/)`
+with the same action. The original matches `ab` when the optional `a` was
+captured, or `c` otherwise. Other conditions need their own alternatives,
+separate rules, or state checks.
+
+For an absence group excluding a single literal, rewrite `rule(/x(?~a)/)`
+as `rule(/x[^a]*/)` and keep the action. Both consume `x` and the following
+characters up to the next `a` or end of input, including line feeds. The `x`
+keeps the rule from matching empty input. Larger absence expressions need a
+separate rewrite: `(?~ab)` does not mean `[^ab]*`.
+
 Escape diagnostics also include concrete examples. For an octal tab,
 rewrite `rule(/\011/)` as `rule(/\x09/)`. For an unknown escape such as `\q`,
 use `rule(/q/)` only if `q` is the intended literal character. Keep the original
