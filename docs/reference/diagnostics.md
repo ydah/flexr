@@ -210,6 +210,29 @@ characters up to the next `a` or end of input, including line feeds. The `x`
 keeps the rule from matching empty input. Larger absence expressions need a
 separate rewrite: `(?~ab)` does not mean `[^ab]*`.
 
+For word boundaries, the help uses examples where the surrounding literals
+already determine the assertion. Rewrite `rule(/foo\b:/)` as `rule(/foo:/)`:
+`o` is a word character and `:` is not. Similarly, `rule(/foo\Bbar/)` becomes
+`rule(/foobar/)` because `o` and `b` are both word characters. Keep the action.
+These examples do not cover boundaries at token edges, such as `/if\b/`;
+those need separate rules or state checks. Inside a character class, `[\b]`
+remains a supported backspace escape. The escapes `\A`, `\B`, `\G`, `\z`, and
+`\Z` inside character classes instead receive literal-character examples,
+such as rewriting `rule(/[\A]/)` as `rule(/[A]/)` with the same action.
+
+For `\G` at the start of a rule, rewrite `rule(/\Ga/)` as `rule(/a/)` and
+keep the action. Every flexr rule already starts matching at the current
+lexer position, including after earlier tokens. A `\G` inside a larger
+pattern needs a separate rewrite.
+
+For input without line feeds, `rule(/\Aa/)` can become `rule(/^a/)`, and
+`rule(/a\z/)` or `rule(/a\Z/)` can become `rule(/a$/)`. Keep the action.
+This requires a guarantee about the entire input, not just the token pattern.
+[Ruby's line and string anchors](https://docs.ruby-lang.org/en/4.0/Regexp.html)
+differ when line feeds occur: `^` can match after a line feed, `$` can match
+before one, and `\Z` also permits a final line feed. Do not apply these
+examples to multiline input.
+
 Escape diagnostics also include concrete examples. For an octal tab,
 rewrite `rule(/\011/)` as `rule(/\x09/)`. For an unknown escape such as `\q`,
 use `rule(/q/)` only if `q` is the intended literal character. Keep the original
