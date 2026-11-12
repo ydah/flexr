@@ -363,6 +363,10 @@ module Flexr
           @last_codepoint = ESCAPES.fetch(char)
           return
         end
+        if @class_depth.positive? && %w[A B G z Z].include?(char)
+          raise unsupported("\\#{char}",
+                            "inside a character class this is a literal character: rewrite rule(/[\\#{char}]/) as rule(/[#{char}]/); keep the action")
+        end
         case char
         when "d", "D", "w", "W", "s", "S", "h", "H"
           ranges = shorthand_ranges(char)
@@ -391,10 +395,25 @@ module Flexr
           assign_codepoint(digits)
           nil
         when "b"
-          raise unsupported("\\b", "use an explicit token boundary rule") unless @class_depth.positive?
+          unless @class_depth.positive?
+            raise unsupported("\\b",
+                              'when surrounding literals already establish the boundary, rewrite rule(/foo\b:/) as rule(/foo:/); keep the action; token edges need separate rules or state checks')
+          end
 
           @escaped_value = true
           @last_codepoint = 0x08
+        when "B"
+          raise unsupported("\\B",
+                            'when surrounding literals already establish the non-boundary, rewrite rule(/foo\Bbar/) as rule(/foobar/); keep the action; token edges need separate rules or state checks')
+        when "G"
+          raise unsupported("\\G",
+                            'at the start of a rule, rewrite rule(/\Ga/) as rule(/a/); keep the action; rules already match at the current lexer position; interior \G needs a separate rewrite')
+        when "A"
+          raise unsupported("\\A",
+                            'for input without line feeds, rewrite rule(/\Aa/) as rule(/^a/); keep the action; line boundaries differ from string boundaries')
+        when "z", "Z"
+          raise unsupported("\\#{char}",
+                            "for input without line feeds, rewrite rule(/a\\#{char}/) as rule(/a$/); keep the action; line boundaries differ from string boundaries")
         when "R"
           example = if @encoding == Encoding::BINARY
             'rule(/\r\n|[\n\v\f\r]/n)'
@@ -402,7 +421,7 @@ module Flexr
             'rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/)'
           end
           raise unsupported("\\R", "for a standalone line-break token, use #{example}; keep the action")
-        when "G", "K", "B", "A", "z", "Z", "g", "X", "c", "C", "M"
+        when "K", "g", "X", "c", "C", "M"
           raise unsupported("\\#{char}", "use a state or followed_by: instead")
         when "1".."9", "k"
           read_until(">") if char == "k" && consume?("<")

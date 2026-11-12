@@ -19,7 +19,10 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `\R` | Unsupported | Use the standalone line-break rule shown by `FLEXR-E014` for the specification's encoding |
 | Lookahead / lookbehind | Unsupported | Use `followed_by:` for trailing positive lookahead; other forms need rules or states; `FLEXR-E014` |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
-| `\b`, `\B`, `\A`, `\z`, `\G`, `\K` | Unsupported | Use rule boundaries or state/action logic |
+| `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
+| `\A`, `\z`, `\Z` | Unsupported | The `^` / `$` examples in `FLEXR-E014` apply only to input without line feeds |
+| `\G` | Unsupported | At the start of a rule, omit it: rules already match at the current lexer position |
+| `\K` | Unsupported | Use state/action logic |
 | Lazy or possessive quantifiers | Unsupported | For unescaped single-line quoted text, use `/"[^"\n]*"/`; other patterns need a separate rewrite |
 | Atomic groups | Unsupported | Use the delimited-text example in `FLEXR-E014` where applicable; removing atomic groups can change matches |
 | Named captures | Unsupported | Use `(?:...)` when only grouping is needed; capture-dependent patterns need a separate rewrite |

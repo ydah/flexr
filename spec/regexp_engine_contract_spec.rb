@@ -70,6 +70,92 @@ RSpec.describe "regexp engine contracts" do
   end
 
   {
+    /foo\b:/ => [/foo:/, "surrounding literals already establish the boundary"],
+    /foo\Bbar/ => [/foobar/, "surrounding literals already establish the non-boundary"],
+    /\Ga/ => [/a/, "at the start of a rule"],
+    /\Aa/ => [/^a/, "input without line feeds"],
+    /a\z/ => [/a$/, "input without line feeds"],
+    /a\Z/ => [/a$/, "input without line feeds"]
+  }.each do |original, (rewritten, condition)|
+    it "shows a scoped boundary rewrite for #{original.inspect}" do
+      expect { Flexr.parse_pattern(original) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include("rule(#{original.inspect})", "rule(#{rewritten.inspect})",
+                                                 condition, "keep the action")
+      end
+    end
+
+    it "preserves token text and actions within the scope of the #{original.inspect} rewrite" do
+      inputs = ["", "a", "aa", "ba", "ab", "foo:", "foobar", "xfoo:foobar", "éa"]
+      inputs += ["a\na", "foo:\nfoobar"] unless %w[\\A \\z \\Z].any? { |anchor| original.source.include?(anchor) }
+      reference = Regexp.new("\\G(?:#{original.source})")
+      %i[table direct auto firstmatch].each do |backend|
+        lexer = Class.new(Flexr::Lexer) do
+          backend backend
+          option :experimental if backend == :firstmatch
+          rule(rewritten) { emit :MATCH }
+          rule(/./m) { emit :OTHER }
+        end
+
+        inputs.each do |input|
+          expected = []
+          offset = 0
+          while offset < input.length
+            match = reference.match(input, offset)
+            text = match ? match[0] : input[offset]
+            expected << [match ? :MATCH : :OTHER, text.bytes]
+            offset += text.length
+          end
+
+          [input, StringIO.new(input)].each do |source|
+            actual = lexer.new(source, chunk_size: 1).tokens.map { |type, text| [type, text.bytes] }
+            expect(actual).to eq(expected), "#{original.inspect} on #{input.inspect} with #{backend}"
+          end
+        end
+      end
+    end
+  end
+
+  it "keeps the limits of boundary rewrites explicit" do
+    [/foo\b:/, /foo\Bbar/].each do |pattern|
+      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.help).to include("token edges need separate rules or state checks")
+      end
+    end
+    [/\Aa/, /a\z/, /a\Z/].each do |pattern|
+      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.help).to include("line boundaries differ from string boundaries")
+      end
+    end
+    expect { Flexr.parse_pattern(/a\Gb/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.help).to include('interior \G needs a separate rewrite')
+    end
+
+    expect(/\Aa/.match("b\na")).to be_nil
+    expect(/^a/.match("b\na")[0]).to eq("a")
+    expect(/a\z/.match("a\n")).to be_nil
+    expect(/a\Z/.match("a\nb")).to be_nil
+    expect(/a$/.match("a\nb")[0]).to eq("a")
+    expect(Flexr.compile_pattern(/[\b]/).accept?("\b")).to be(true)
+  end
+
+  it "treats boundary escapes inside character classes as literal characters" do
+    %w[A B G z Z].each do |char|
+      original = Regexp.new("[\\#{char}]")
+      rewritten = Regexp.new("[#{char}]")
+      expect { Flexr.parse_pattern(original) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E014")
+        expect(error.diagnostic.help).to include("rule(#{original.inspect})", "rule(#{rewritten.inspect})",
+                                                 "literal character", "keep the action")
+        expect(error.diagnostic.help).not_to include("state checks", "input without line feeds", "lexer position")
+      end
+
+      dfa = Flexr.compile_pattern(rewritten)
+      %w[A B G z Z x].each { |input| expect(dfa.accept?(input)).to eq(original.match?(input)) }
+    end
+  end
+
+  {
     Encoding::UTF_8 => /\r\n|[\n\v\f\r\u0085\u2028\u2029]/,
     Encoding::BINARY => /\r\n|[\n\v\f\r]/n
   }.each do |encoding, replacement|
