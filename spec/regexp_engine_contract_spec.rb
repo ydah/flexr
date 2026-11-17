@@ -139,8 +139,8 @@ RSpec.describe "regexp engine contracts" do
     expect(Flexr.compile_pattern(/[\b]/).accept?("\b")).to be(true)
   end
 
-  it "treats boundary escapes inside character classes as literal characters" do
-    %w[A B G z Z].each do |char|
+  it "treats unsupported literal escapes inside character classes separately" do
+    %w[A B G z Z K g X].each do |char|
       original = Regexp.new("[\\#{char}]")
       rewritten = Regexp.new("[#{char}]")
       expect { Flexr.parse_pattern(original) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
@@ -151,7 +151,7 @@ RSpec.describe "regexp engine contracts" do
       end
 
       dfa = Flexr.compile_pattern(rewritten)
-      %w[A B G z Z x].each { |input| expect(dfa.accept?(input)).to eq(original.match?(input)) }
+      %w[A B G z Z K g X x].each { |input| expect(dfa.accept?(input)).to eq(original.match?(input)) }
     end
   end
 

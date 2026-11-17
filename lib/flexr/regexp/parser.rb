@@ -363,7 +363,7 @@ module Flexr
           @last_codepoint = ESCAPES.fetch(char)
           return
         end
-        if @class_depth.positive? && %w[A B G z Z].include?(char)
+        if @class_depth.positive? && %w[A B G z Z K g X].include?(char)
           raise unsupported("\\#{char}",
                             "inside a character class this is a literal character: rewrite rule(/[\\#{char}]/) as rule(/[#{char}]/); keep the action")
         end
@@ -421,8 +421,21 @@ module Flexr
             'rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/)'
           end
           raise unsupported("\\R", "for a standalone line-break token, use #{example}; keep the action")
-        when "K", "g", "X", "c", "C", "M"
-          raise unsupported("\\#{char}", "use a state or followed_by: instead")
+        when "K"
+          raise unsupported("\\K",
+                            'for /a\Kb/ in :initial, use rule(/a/, followed_by: /b/) { begin_state :suffix }; state(:suffix) { rule(/b/) { begin_state :initial; emit :B } }; keep the action on the suffix rule after returning to :initial; choose an unused state name')
+        when "g"
+          raise unsupported("\\g",
+                            'for this non-recursive call, rewrite rule(/(a|b)\g<1>/) as rule(/[ab]{2}/); keep the action; recursive calls need a parser or state stack')
+        when "X"
+          raise unsupported("\\X",
+                            'for a standalone grapheme token with ASCII-only input, rewrite rule(/\X/) as rule(/\r\n|[\x00-\x7f]/); keep the action; Unicode graphemes need separate segmentation')
+        when "c", "C"
+          raise unsupported("\\#{char}",
+                            'for control-A, rewrite rule(/\cA/) or rule(/\C-A/) as rule(/\x01/); keep the action; other control characters need their own hexadecimal code')
+        when "M"
+          raise unsupported("\\M",
+                            'for binary input, rewrite rule(/\M-a/n) as rule(/\xE1/n); keep the action; other meta characters need their own byte value')
         when "1".."9", "k"
           read_until(">") if char == "k" && consume?("<")
           feature = char == "k" ? "backreferences" : "\\#{char}"

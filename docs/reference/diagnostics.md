@@ -194,6 +194,12 @@ rejecting `ab` and `ba`. It reproduces the matched text; flexr does not expose
 capture values to actions. If the repeated text cannot be enumerated, split
 the rule into states and compare the matched text in actions instead.
 
+For a non-recursive subexpression call, the help shows
+`rule(/(a|b)\g<1>/)` becoming `rule(/[ab]{2}/)` with the same action.
+A call reuses the expression, not the previously captured text: this example
+accepts `aa`, `ab`, `ba`, and `bb`. Recursive calls need a parser or a state
+stack; they cannot be expanded by this example.
+
 For named captures used only for grouping, rewrite `rule(/(?<word>ab)/)` or
 `rule(/(?'word'ab)/)` as `rule(/(?:ab)/)` and keep the action. Backreferences
 and conditions that depend on the capture need a separate rewrite; removing
@@ -216,8 +222,8 @@ already determine the assertion. Rewrite `rule(/foo\b:/)` as `rule(/foo:/)`:
 `rule(/foobar/)` because `o` and `b` are both word characters. Keep the action.
 These examples do not cover boundaries at token edges, such as `/if\b/`;
 those need separate rules or state checks. Inside a character class, `[\b]`
-remains a supported backspace escape. The escapes `\A`, `\B`, `\G`, `\z`, and
-`\Z` inside character classes instead receive literal-character examples,
+remains a supported backspace escape. The escapes `\A`, `\B`, `\G`, `\z`,
+`\Z`, `\K`, `\g`, and `\X` inside character classes receive literal-character examples,
 such as rewriting `rule(/[\A]/)` as `rule(/[A]/)` with the same action.
 
 For `\G` at the start of a rule, rewrite `rule(/\Ga/)` as `rule(/a/)` and
@@ -233,6 +239,23 @@ differ when line feeds occur: `^` can match after a line feed, `$` can match
 before one, and `\Z` also permits a final line feed. Do not apply these
 examples to multiline input.
 
+For the match-reset example `rule(/a\Kb/) { emit :B }` in `:initial`, the help
+splits the prefix and suffix into separate rules:
+
+```ruby
+rule(/a/, followed_by: /b/) { begin_state :suffix }
+state(:suffix) do
+  rule(/b/) { begin_state :initial; emit :B }
+end
+```
+
+The prefix is consumed only when `b` follows. The suffix rule returns to
+`:initial` before running the original action, so `text` and the token location
+cover only `b`. Keep the original action in place of `emit :B`, choose an unused
+state name, and return to the original state when adapting the example.
+Larger patterns and competing rules need a separate review; this is not an
+automatic replacement for every `\K`.
+
 Escape diagnostics also include concrete examples. For an octal tab,
 rewrite `rule(/\011/)` as `rule(/\x09/)`. For an unknown escape such as `\q`,
 use `rule(/q/)` only if `q` is the intended literal character. Keep the original
@@ -241,6 +264,25 @@ action and regexp options when adapting either example.
 Inside a character class, `\1` is a character code. Its diagnostic recommends
 an explicit hexadecimal escape such as `rule(/[\x01]/)`, which matches the same
 control character as `rule(/[\1]/)`.
+
+When raw regexp sources contain control or meta escapes, their help gives
+hexadecimal alternatives: `rule(/\cA/)` and `rule(/\C-A/)` become
+`rule(/\x01/)`, while `rule(/\M-a/n)` becomes `rule(/\xE1/n)` for binary input.
+Keep the action and use the corresponding hexadecimal value for other
+characters. Ruby may already normalize these escapes in regexp literals;
+the diagnostics apply when the escape reaches the parser unchanged.
+
+For a standalone `\X` token with ASCII-only input, use:
+
+```ruby
+rule(/\r\n|[\x00-\x7f]/) { emit :GRAPHEME }
+```
+
+This keeps CRLF together and consumes other ASCII characters individually.
+Keep the original action; the CRLF alternative must come first for `firstmatch`.
+The example does not cover Unicode graphemes or `\X` inside larger patterns.
+Unicode graphemes need separate segmentation, such as Ruby's
+[`String#each_grapheme_cluster`](https://docs.ruby-lang.org/en/4.0/String.html#method-i-each_grapheme_cluster).
 
 For `\R`, the help chooses a standalone line-break rule for the specification's
 encoding. In UTF-8, use:
