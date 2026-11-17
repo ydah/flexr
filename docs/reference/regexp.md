@@ -22,7 +22,9 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
 | `\A`, `\z`, `\Z` | Unsupported | The `^` / `$` examples in `FLEXR-E014` apply only to input without line feeds |
 | `\G` | Unsupported | At the start of a rule, omit it: rules already match at the current lexer position |
-| `\K` | Unsupported | Use state/action logic |
+| `\K` | Unsupported | Use the prefix/suffix state example in `FLEXR-E014` where applicable to preserve token text and location |
+| Subexpression calls `\g<...>` | Unsupported | Inline non-recursive expressions; recursive calls need a parser or state stack |
+| `\X` | Unsupported | Use the ASCII-only standalone token example in `FLEXR-E014` where applicable; Unicode graphemes need separate segmentation |
 | Lazy or possessive quantifiers | Unsupported | For unescaped single-line quoted text, use `/"[^"\n]*"/`; other patterns need a separate rewrite |
 | Atomic groups | Unsupported | Use the delimited-text example in `FLEXR-E014` where applicable; removing atomic groups can change matches |
 | Named captures | Unsupported | Use `(?:...)` when only grouping is needed; capture-dependent patterns need a separate rewrite |

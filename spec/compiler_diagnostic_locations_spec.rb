@@ -87,7 +87,13 @@ RSpec.describe "compiler diagnostic locations" do
       '/[\B]/' => 'rule(/[B]/)',
       '/[\G]/' => 'rule(/[G]/)',
       '/[\z]/' => 'rule(/[z]/)',
-      '/[\Z]/' => 'rule(/[Z]/)'
+      '/[\Z]/' => 'rule(/[Z]/)',
+      '/a\Kb/' => 'rule(/a/, followed_by: /b/) { begin_state :suffix }',
+      '/(a|b)\g<1>/' => 'rule(/[ab]{2}/)',
+      '/\X/' => 'rule(/\r\n|[\x00-\x7f]/)',
+      '/[\K]/' => 'rule(/[K]/)',
+      '/[\g]/' => 'rule(/[g]/)',
+      '/[\X]/' => 'rule(/[X]/)'
     }.each do |pattern, example|
       write_spec("  rule(#{pattern}, emit: :A)")
 
@@ -99,6 +105,23 @@ RSpec.describe "compiler diagnostic locations" do
       expect { Flexr::Generator.new(@path).generate }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
         expect(error.diagnostic.help).to eq(help)
       end
+    end
+  end
+
+  it "preserves the suggested match-reset suffix location in generated code" do
+    write_spec(<<~RUBY)
+      token_kind :struct
+      rule(/a/, followed_by: /b/) { begin_state :suffix }
+      state(:suffix) { rule(/b/) { begin_state :initial; emit :B } }
+      rule(/./m) { emit :OTHER }
+    RUBY
+    Flexr::Generator.new(@path, output: @output_path).generate
+    load @output_path
+
+    ["aabac", StringIO.new("aabac")].each do |input|
+      tokens = CompilerLocationFixture.new(input, chunk_size: 1).tokens
+      expect(tokens.map { |token| [token.type, token.value, token.location.byte_begin, token.location.byte_end] })
+        .to eq([[:OTHER, "a", 0, 1], [:B, "b", 2, 3], [:OTHER, "a", 3, 4], [:OTHER, "c", 4, 5]])
     end
   end
 
