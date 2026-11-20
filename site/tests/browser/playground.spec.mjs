@@ -85,3 +85,15 @@ test('loads the actual TOML, GraphQL, and SQL example presets', async ({ page })
     expect(JSON.parse(await page.locator('#tokens').textContent()).length).toBeGreaterThan(0);
   }
 });
+
+test('executes literal Unicode action values in runtime and generated modes', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  await page.locator('#spec').fill('class Lexer < Flexr::Lexer\n LABEL = "前"\n rule(/a/) { emit :TEXT, LABEL + "あ" }\n TRAILER = "後"\nend');
+  await page.locator('#input').fill('a');
+  for (const mode of ['runtime', 'generated']) {
+    await page.locator('#mode').selectOption(mode);
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    await expect(page.locator('#status')).toContainText('1 token, 1 step', { timeout: 30_000 });
+    expect(JSON.parse(await page.locator('#tokens').textContent())).toEqual([['TEXT', '前あ']]);
+  }
+});

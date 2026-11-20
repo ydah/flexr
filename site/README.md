@@ -53,15 +53,16 @@ Ruby actions can still modify their VM and interact with worker JavaScript.
 
 ## Size and startup measurements
 
-Measured on 2026-11-20, macOS arm64, Headless Chrome 157, using the local static
+Measured on 2026-11-21, macOS arm64, Headless Chrome 157, using the local static
 preview server without network throttling:
 
 | Asset | Uncompressed bytes | gzip bytes |
 |---|---:|---:|
 | Ruby 4.0.0 and standard library | 32,555,374 | 10,114,484 |
-| flexr Ruby files and bridge | 533,400 | 119,930 |
+| flexr Ruby files and bridge | 533,463 | 119,954 |
+| TOML, GraphQL, and SQL presets | 2,750 | 838 |
 
-One browser run measured 38 ms for downloading/compiling the runtime and 187 ms
+One browser run measured 43 ms for downloading/compiling the runtime and 203 ms
 for starting the VM and loading flexr. These local numbers do not predict a
 remote cold download. The UI reports measured sizes and timings on every run.
 Initial page loading fetches neither Ruby WASM nor Graphviz; the browser test
