@@ -72,6 +72,29 @@ RSpec.describe "Ruby LSP flexr add-on" do
     end
   end
 
+  it "reports invalid configuration repeatedly and recovers after a fixing edit" do
+    source = "class EditorLexer < Flexr::Lexer\n  backend :bogus\n  rule(/a/, skip: true)\nend\n"
+    open_server(source) do |server, uri|
+      [1, 2].each do |id|
+        error = diagnostics(server, uri, id: id).find { |item| item.to_hash[:code] == "FLEXR-E017" }
+        expect(error.message).to include("unsupported backend", "bogus")
+        expect(error.range.start.to_hash).to eq(line: 0, character: 0)
+      end
+      server.process_message(method: "textDocument/didChange", params: {
+        textDocument: { uri: uri, version: 2 },
+        contentChanges: [{ range: { start: { line: 0, character: 0 }, end: { line: 4, character: 0 } }, text: source }]
+      })
+      expect(diagnostics(server, uri, id: 3).map(&:code)).to include("FLEXR-E017")
+
+      server.process_message(method: "textDocument/didChange", params: {
+        textDocument: { uri: uri, version: 3 },
+        contentChanges: [{ range: { start: { line: 0, character: 0 }, end: { line: 4, character: 0 } },
+                           text: source.sub(":bogus", ":table") }]
+      })
+      expect(diagnostics(server, uri, id: 4).map(&:code)).not_to include("FLEXR-E017")
+    end
+  end
+
   it "shows counterexamples and overlap information on rule hover without a diagnostics request" do
     source = "class EditorLexer < Flexr::Lexer\n  emits :WORD, :IF\n  rule(/[a-z]+/, emit: :WORD)\n  rule(/if/, emit: :IF)\nend\n"
     open_server(source) do |server, uri|

@@ -11,14 +11,17 @@ module RubyLsp
       def diagnostics(source)
         return @diagnostics if @source == source
 
-        @source = source.dup.freeze
-        @diagnostics = begin
+        diagnostics = begin
           parsed = ::Flexr::Source::PrismReader.new(source).read
           compiled = ::Flexr::CLI.compile(parsed, overrides: { warn_level: :all })
           compiled.diagnostics.reject { |diagnostic| diagnostic.code == "FLEXR-W016" }
         rescue ::Flexr::Error => e
           e.diagnostic ? [e.diagnostic] : []
+        rescue ArgumentError => e
+          [::Flexr::Diagnostics.error("FLEXR-E017", e.message, location: [0, 0])]
         end
+        @source = source.dup.freeze
+        @diagnostics = diagnostics
       end
 
       def message(diagnostic)
