@@ -1,5 +1,33 @@
 # Performance log
 
+## State-specific dispatch experiment (2026-11-20)
+
+`benchmark/state_dispatch.rb` compares generated table dispatch, the existing
+flattened direct representation, and per-state Ruby `case` branches. It checks
+token equality before timing. The transition test compares every state/byte pair.
+It is a development experiment and does not add a public backend.
+
+```sh
+bundle exec ruby benchmark/state_dispatch.rb --iterations 5
+RUBYOPT=--yjit bundle exec ruby benchmark/state_dispatch.rb --iterations 5
+RUBYOPT=--zjit bundle exec ruby benchmark/state_dispatch.rb --iterations 5
+```
+
+Measured on Ruby 4.0.9, arm64-darwin25, built-in 140,000-byte JSON input:
+
+| Engine | Table MB/s | Direct MB/s | State cases MB/s |
+|---|---:|---:|---:|
+| Interpreter | 1.170 | 1.729 | 1.709 |
+| YJIT | 1.922 | 2.796 | 2.768 |
+| ZJIT | 0.458 | 0.425 | 0.483 |
+
+These short local samples are not release qualification or confidence intervals.
+State cases do not improve on the existing direct representation in the
+interpreter or YJIT samples, and ZJIT needs longer warm-up investigation.
+Keep the existing direct backend and `auto` selection until repeatable gains
+justify adding and maintaining another backend. No regression baseline changes
+are warranted by this experiment.
+
 The benchmark harness reports bytes/s, tokens/s, and allocations per token.
 Numbers are intentionally recorded only after running the harness on the
 target Ruby and hardware; no unmeasured figures are presented as guarantees.
