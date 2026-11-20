@@ -39,7 +39,8 @@ module FlexrPlayground
     Flexr::CLI.print_dot(path, options, dot)
     JSON.generate(tokens: tokens, steps: trace.steps, diagnostics: diagnostics.string,
                   generated: generated, dot: dot.string, ruby_version: RUBY_VERSION,
-                  prism_version: Prism::VERSION, console: ($stdout.string + $stderr.string).byteslice(0, 4096))
+                  prism_version: Prism::VERSION,
+                  console: ($stdout.string + $stderr.string).byteslice(0, 4096).force_encoding(Encoding::UTF_8).scrub)
   rescue StandardError, SyntaxError, LoadError, SystemExit => e
     if e.is_a?(Flexr::LexError) && !e.diagnostic && e.byte_pos
       diagnostic = Flexr::Diagnostics.error("FLEXR-E000", e.message,

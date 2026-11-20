@@ -42,6 +42,18 @@ test('each run starts a fresh Ruby VM', async () => {
   assert.deepEqual((await runtime.run({ source, input: 'a', mode: 'runtime' })).tokens, [['A', 'a']]);
 });
 
+test('console truncation preserves valid UTF-8 and emitted tokens', async () => {
+  const source = 'class Lexer < Flexr::Lexer\n rule(/a/) do\n puts 0x3042.chr(Encoding::UTF_8) * 2000\n emit :A\n end\nend';
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ source, input: 'a', mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [['A', 'a']]);
+    assert.ok(result.console.length < 2000);
+    assert.match(result.console, /^あ+\uFFFD$/);
+    assert.doesNotThrow(() => new TextDecoder('utf-8', { fatal: true }).decode(new TextEncoder().encode(result.console)));
+  }
+});
+
 test('share links retain Unicode source and input without running code', () => {
   const state = { source: 'class Lexer; # café\nend', input: '日本語', mode: 'runtime' };
   assert.deepEqual(decodeState(encodeState(state)), state);
