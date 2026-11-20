@@ -18,12 +18,13 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `stats SPEC` | Report DFA states, byte classes, and table sizes | JSON |
 | `tokens SPEC` | Print names declared by `emits` | Space-separated names |
 | `dot SPEC` | Render the DFA as Graphviz DOT | DOT on stdout |
-| `trace SPEC` | Print DFA states, accepts, and transitions | Text on stdout |
+| `trace SPEC` | Print DFA states, or trace input when supplied | Human or JSON input trace |
 | `explain SPEC` | List parsed rules and patterns | Text on stdout |
 | `bench SPEC` | Run the benchmark harness | Benchmark output |
 | `import INPUT` | Translate flex/Rexical input | Ruby on stdout or `--output` |
 
-`trace` describes the automaton; it does not trace a particular input string.
+`trace` without input describes the automaton. To execute a specification and
+inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 `dot` marks accepting states and accelerated regions for visual inspection.
 
 ## Options
@@ -42,8 +43,11 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `-W, --warn LEVEL` | `all`, `default`, `none` | Check and generation |
 | `--warn-as-error` | Flag | Check and generation |
 | `--color WHEN` | `auto`, `always`, `never` | Human diagnostics |
-| `--format FMT` | `human`, `json` | Check and stats |
+| `--format FMT` | `human`, `json` | Check, stats, and input trace |
 | `--rule N` | Non-negative integer | Explain |
+| `--input STRING` | Literal input, including an empty string | Trace |
+| `--input-file PATH` | Input file | Trace and bench |
+| `--generated` | Run the generated scanner | Input trace |
 
 The complete help output is kept as a checked snapshot:
 
@@ -65,7 +69,46 @@ Options:
       --warn-as-error
       --color WHEN            auto | always | never
       --format FMT            human | json
+      --input STRING          trace input (executes SPEC actions)
+      --input-file PATH       trace or benchmark input
+      --generated             trace generated scanner
 <!-- flexr-help:end -->
+
+## Input trace
+
+```sh
+flexr trace lexer.flexr.rb --input 'if == total'
+flexr trace lexer.flexr.rb --input-file input.txt --generated --format json
+```
+
+Input tracing executes the specification's Ruby code and actions. Use trusted
+specifications, as with running a lexer normally. Actions run once, including
+actions that skip input or change state. `--generated` generates and evaluates
+the scanner in memory; it does not write an output file.
+
+Each step reports byte offsets, matched text, the lexical state before and
+after the action, candidate rule numbers and lengths, the selected rule, and
+the action result (`emit` or `skip`). Human candidate lengths use
+`body/total`, with trailing context included only in the total. `rule_order`
+means several candidates tied at the winning total length; `longest` means a
+longer candidate won. `first_match` reports the experimental backend's rule
+priority and preserves its regexp alternation behavior. `only_match` means
+there was one candidate. EOF actions appear with reason `eof`; recovered
+unmatched bytes appear with reason `unmatched` and no selected rule.
+
+`--format json` returns an object with a `steps` array. Each candidate contains
+`rule`, `patterns`, `length`, `trailing_length`, and `total_length`; lengths are
+bytes. Steps include `byte_begin`, `byte_end`, `next_byte`, `state`,
+`next_state`, `text`, `bytes`, `candidates`, `rule`, `patterns`, `reason`,
+`action`, and `token`. `byte_end` is the scanner's matched end, while
+`next_byte` reflects action changes such as `less`. `token` is the emitted
+token's Ruby inspection string, or null when none was emitted. Invalid UTF-8
+bytes are replaced in display text; `bytes` preserves the exact matched bytes.
+
+Tracing adds candidate analysis and retains steps in memory; it is a debugging
+tool, not a benchmark. Firstmatch candidate analysis reads the remaining
+buffered input to inspect rules beyond the selected first match. It obeys the
+lexer's buffer limit. Normal lexers do not load or run tracing code.
 
 ## Exit statuses
 
