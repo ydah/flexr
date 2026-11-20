@@ -53,6 +53,7 @@ RSpec.describe "v2 runtime contracts" do
             token_kind :struct
             rule(/[a-z]+/) { emit :WORD }
             rule(/[0-9]+/) { emit :INT, text.to_i }
+            rule("!", emit: :BANG)
             rule(/ +/, skip: true)
           end
         RUBY
@@ -63,11 +64,11 @@ RSpec.describe "v2 runtime contracts" do
         expect(Ractor.shareable?(klass.__flexr_compiled)).to be(true)
         workers = Array.new(2) do
           Ractor.new(klass) do |shared|
-            shared.new("abc 12").tokens.map { |token| [token.type, token.value] }
+            shared.new("abc 12!").tokens.map { |token| [token.type, token.value] }
           end
         end
         results = workers.map { |worker| worker.respond_to?(:value) ? worker.value : worker.take }
-        expect(results).to eq(Array.new(2) { [[:WORD, "abc"], [:INT, 12]] })
+        expect(results).to eq(Array.new(2) { [[:WORD, "abc"], [:INT, 12], [:BANG, "!"]] })
       ensure
         Object.send(:remove_const, :RactorGeneratedFixture) if Object.const_defined?(:RactorGeneratedFixture, false)
       end
@@ -95,6 +96,52 @@ RSpec.describe "v2 runtime contracts" do
       expect { Flexr::Generated.shareable!(CapturedRactorFixture) }.to raise_error(ArgumentError, /captured closures/)
     ensure
       Object.send(:remove_const, :CapturedRactorFixture) if Object.const_defined?(:CapturedRactorFixture, false)
+    end
+  end
+
+  %w[text line lineno].each do |name|
+    it "keeps captured #{name} locals instead of inlining runtime method calls" do
+      Dir.mktmpdir do |directory|
+        source = File.join(directory, "shadow.flexr.rb")
+        output = File.join(directory, "shadow.rb")
+        File.write(source, <<~RUBY)
+          class ShadowedRactorFixture < Flexr::Lexer
+            #{name} = "captured"
+            rule(/a/) { emit :A, #{name} }
+          end
+        RUBY
+        load source
+        expected = ShadowedRactorFixture.new("a").tokens
+        Object.send(:remove_const, :ShadowedRactorFixture)
+        Flexr::Generator.new(source, output: output).generate
+        load output
+        expect(ShadowedRactorFixture.new("a").tokens).to eq(expected)
+        expect { Flexr::Generated.shareable!(ShadowedRactorFixture) }.to raise_error(ArgumentError, /captured closures/)
+      ensure
+        Object.send(:remove_const, :ShadowedRactorFixture) if Object.const_defined?(:ShadowedRactorFixture, false)
+      end
+    end
+  end
+
+  it "rejects firstmatch reference patterns before preparing Ractor data" do
+    Dir.mktmpdir do |directory|
+      source = File.join(directory, "reference.flexr.rb")
+      output = File.join(directory, "reference.rb")
+      File.write(source, <<~'RUBY')
+        class ReferenceRactorFixture < Flexr::Lexer
+          backend :firstmatch
+          option :experimental
+          rule(/\p{L}+/, emit: :WORD)
+        end
+      RUBY
+      Flexr::Generator.new(source, output: output).generate
+      load output
+      expect(ReferenceRactorFixture.new("é").tokens).to eq([[:WORD, "é"]])
+      expect { Flexr::Generated.shareable!(ReferenceRactorFixture) }
+        .to raise_error(ArgumentError, /firstmatch reference patterns/)
+      expect(ReferenceRactorFixture.new("a").tokens).to eq([[:WORD, "a"]])
+    ensure
+      Object.send(:remove_const, :ReferenceRactorFixture) if Object.const_defined?(:ReferenceRactorFixture, false)
     end
   end
 end

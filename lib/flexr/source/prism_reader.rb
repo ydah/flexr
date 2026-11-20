@@ -4,7 +4,7 @@ module Flexr
   module Source
       RuleDefinition = Struct.new(
       :index, :patterns, :trailing, :action_source, :action, :states, :bol_only, :end_anchor,
-      :pattern_conditions, :bind_action,
+      :pattern_conditions, :bind_action, :reads_locals,
       :span, keyword_init: true
     )
       SpecSource = Struct.new(
@@ -276,6 +276,12 @@ module Flexr
           skip: skip, emit: emit, block: block_action, default: "proc { emit(nil, text) }"
         )
         bind_action = !block_action.nil? && action.equal?(block_action)
+        reads_locals = false
+        if node.block
+          each_node_including_self(node.block) do |child|
+            reads_locals = true if child.is_a?(Prism::LocalVariableReadNode)
+          end
+        end
         rule_index = @rules.length
         record_rule_edit(node, rule_index, bind_action ? block_action : nil)
         @rules << RuleDefinition.new(
@@ -283,7 +289,7 @@ module Flexr
           trailing: options[:followed_by] && static(options[:followed_by], scope: @lexer_scope),
           action_source: action_source, action: action, states: states.dup,
           bol_only: false, end_anchor: nil,
-          span: [node.location.start_offset, node.location.end_offset], bind_action: bind_action
+          span: [node.location.start_offset, node.location.end_offset], bind_action: bind_action, reads_locals: reads_locals
         )
       end
 

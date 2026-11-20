@@ -63,7 +63,7 @@ module Flexr
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
       parsed.rules.each do |rule|
-        next unless rule.bind_action && inline_simple_action(rule.action_source)
+        next unless rule.bind_action && !rule.reads_locals && inline_simple_action(rule.action_source)
 
         edits.map! { |edit| edit.first(2) == rule.span ? [*rule.span, ""] : edit }
       end
@@ -259,7 +259,7 @@ module Flexr
 
     def generated_rule_action(rule)
       return ruby_literal(:__flexr_generated_method) if rule.action.is_a?(String) &&
-        ((!rule.bind_action && !inline_action_body(rule).nil?) || inline_simple_action(rule.action_source))
+        ((!rule.bind_action && !inline_action_body(rule).nil?) || (!rule.reads_locals && inline_simple_action(rule.action_source)))
 
       action_expression(rule.action)
     end
@@ -268,7 +268,7 @@ module Flexr
       lines = ["#{indent}def __flexr_generated_execute(rule)", "#{indent}  case rule.index"]
       parsed.rules.each do |rule|
         lines << "#{indent}  when #{rule.index}"
-        body = inline_simple_action(rule.action_source) if rule.bind_action
+        body = inline_simple_action(rule.action_source) if rule.bind_action && !rule.reads_locals
         if rule.bind_action && body.nil?
           lines << "#{indent}    instance_exec(&self.class.__flexr_generated_actions.fetch(rule.index))"
           next

@@ -93,6 +93,15 @@ module Flexr
         raise ArgumentError, "Ractor sharing requires generated method actions without captured closures or EOF blocks"
       end
 
+      config = klass.__flexr_config
+      if config.backend == :firstmatch && klass.__flexr_rules.any? do |rule|
+          rule.patterns.any? do |pattern|
+            pattern.is_a?(::Regexp) && Flexr.reference_pattern?(pattern, unicode: config.options[:unicode])
+          end
+        end
+        raise ArgumentError, "Ractor sharing does not support firstmatch reference patterns; use table, direct, or auto"
+      end
+
       original = klass.__flexr_compiled
       rules = original.rules.map do |rule|
         IR::Rule.new(**rule.to_h, trailing_dfa: rule.trailing_dfa && shareable_dfa(rule.trailing_dfa))

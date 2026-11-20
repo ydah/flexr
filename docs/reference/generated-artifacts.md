@@ -31,6 +31,11 @@ the compiled data and configuration. Each Ractor creates its own lexer and
 input. Simple `emit` blocks, `emit:` rules, and `skip:` rules use generated
 methods. Captured closures, runtime specifications, and EOF blocks are rejected
 by `shareable!`; arbitrary user methods must also obey Ruby's Ractor rules.
+`firstmatch` patterns that need the Unicode reference matcher are also rejected
+before preparation, because its shared caches are not Ractor-safe. Use `table`,
+`direct`, or `auto` for those patterns. Local variables that shadow action
+methods such as `text`, `line`, or `lineno` keep their closure bindings and are
+not converted to shareable method actions.
 Preparation may use more memory than lazy packed tables. Call it before
 starting workers; it does not make an existing lexer instance shareable.
 
