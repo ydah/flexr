@@ -16,7 +16,7 @@ can be loaded by a Ruby process that does not have the flexr gem installed:
 ruby -e 'load ARGV.fetch(0); p Lexer.new("12").tokens' lexer_standalone.rb
 ```
 
-Generation still needs the flexr gem and Prism on Ruby 3.3 or newer. Runtime
+Generation still needs the flexr gem and Prism on Ruby 3.4 or newer. Runtime
 execution needs the generated file and Ruby's standard library only.
 
 Standalone output is larger and duplicates the runtime for every artifact.

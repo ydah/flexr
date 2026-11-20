@@ -2,7 +2,12 @@
 
 module Flexr
   module Runtime
-    Token = Struct.new(:type, :value, :location, keyword_init: true)
-    Deprecations.record_mutations(Token)
+    Token = Data.define(:type, :value, :location) do
+      include Record
+
+      def initialize(type: nil, value: nil, location: nil)
+        super
+      end
+    end
   end
 end

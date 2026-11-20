@@ -5,12 +5,12 @@ require "rbconfig"
 require "stringio"
 
 RSpec.describe "firstmatch overlap diagnostics" do
-  def lexer_class(&rules)
+  def lexer_class(&)
     Class.new(Flexr::Lexer) do
       backend :firstmatch
       option :experimental
       __flexr_config.options[:warn_level] = :all
-      class_eval(&rules)
+      class_eval(&)
     end
   end
 

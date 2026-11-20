@@ -1,4 +1,4 @@
-name: generated-ruby31
+name: generated-ruby34
 
 on:
   push:
@@ -19,8 +19,8 @@ permissions:
   contents: read
 
 jobs:
-  generated-ruby31:
-    name: generated-only / ruby 3.1
+  generated-ruby34:
+    name: generated-only / ruby 3.4
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
       - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
         with:
-          ruby-version: "3.1"
+          ruby-version: "3.4"
           bundler-cache: true
       - name: Load a generated lexer without the generator
         run: >-

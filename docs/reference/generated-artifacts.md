@@ -5,12 +5,39 @@
 | Use | Build-time requirement | Runtime requirement |
 |---|---|---|
 | Runtime mode | None beyond the flexr gem | `flexr` gem |
-| Normal generated mode | flexr gem and Prism on Ruby 3.3+ | `flexr` gem |
-| Standalone generated mode | flexr gem and Prism on Ruby 3.3+ | Generated file and Ruby standard library |
+| Normal generated mode | flexr gem and Prism on Ruby 3.4+ | `flexr` gem and Ruby 3.4+ |
+| Standalone generated mode | flexr gem and Prism on Ruby 3.4+ | Generated file and Ruby 3.4+ standard library |
 
-The runtime gem supports Ruby 3.1 and newer. The generator's Prism path is
-supported on Ruby 3.3 and newer. A generated file can be loaded by a compatible
+The runtime gem and generator support Ruby 3.4 and newer. A generated file can be loaded by a compatible
 runtime without the generator installed.
+
+Version 2 artifacts use schema 2 and runtime ABI 2. Regenerate v1 generated
+files with the v2 generator. Old metadata is rejected with `FLEXR-E020` when
+loading an artifact into the new runtime.
+
+## Ractor sharing
+
+Load a generated class in the main Ractor, then explicitly prepare its data:
+
+```ruby
+load "lexer.generated.rb"
+Flexr::Generated.shareable!(Lexer)
+worker = Ractor.new(Lexer) { |klass| klass.new("input").tokens }
+tokens = worker.respond_to?(:value) ? worker.value : worker.take
+```
+
+This eagerly materializes transition rows and calls `Ractor.make_shareable` on
+the compiled data and configuration. Each Ractor creates its own lexer and
+input. Simple `emit` blocks, `emit:` rules, and `skip:` rules use generated
+methods. Captured closures, runtime specifications, and EOF blocks are rejected
+by `shareable!`; arbitrary user methods must also obey Ruby's Ractor rules.
+`firstmatch` patterns that need the Unicode reference matcher are also rejected
+before preparation, because its shared caches are not Ractor-safe. Use `table`,
+`direct`, or `auto` for those patterns. Local variables that shadow action
+methods such as `text`, `line`, or `lineno` keep their closure bindings and are
+not converted to shareable method actions.
+Preparation may use more memory than lazy packed tables. Call it before
+starting workers; it does not make an existing lexer instance shareable.
 
 ## Static evaluation boundary
 

@@ -102,8 +102,8 @@ module FlexrDocumentation
     end
   end
 
-  def command(*arguments)
-    Open3.capture3(RbConfig.ruby, "-Ilib", "exe/flexr", *arguments, chdir: ROOT)
+  def command(*)
+    Open3.capture3(RbConfig.ruby, "-Ilib", "exe/flexr", *, chdir: ROOT)
   end
 
   def ruby_json(script, path, input)

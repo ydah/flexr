@@ -3,43 +3,38 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
-## Unreleased
+## 2.0.0.pre.1 (unreleased)
 
-- Missing Prism dependency errors include the specification location and an
-  installation command.
-- Incompatible generated artifacts identify their installing file when available.
 ### Added
 
-- Optional phase profiling and isolated interpreter, YJIT, and ZJIT benchmark
-  runs, with explicit reports when an engine is unavailable.
-- Added optional RSpec and Minitest helpers for token assertions and explicit
-  token snapshot creation and comparison.
-- Compare `emits` with named grammar tokens using `check --grammar PATH`, and
-  export declarations using `tokens --format lrama`.
-- The explicit `firstmatch` backend is stable and no longer requires
-  `option :experimental`. The default still uses longest-match selection.
-### Added
+- Input tracing with candidate lengths, rule priority, actions, state changes,
+  and human or JSON output for runtime and generated scanners.
+- Optional phase profiling and isolated interpreter, YJIT, and ZJIT comparisons.
+- RSpec and Minitest token assertions with explicit-update token snapshots.
+- Grammar token validation with `check --grammar` and Lrama declaration export.
+- Ruby LSP diagnostics and rule hovers for unsaved lexer specifications.
+- Public API RBS signatures and typed consumer checks.
+- TOML, GraphQL, and SQL subset examples with benchmarks and parity checks.
+- A migration guide and static `check --target 2.0` impact reporting.
+- Explicit `accel :strscan` whole-token acceleration for proven ASCII paths.
+- Opt-in Ractor sharing of generated method-action tables; unsupported closures,
+  EOF blocks, and firstmatch reference caches are rejected explicitly.
 
-- `trace --input` and `trace --input-file` show candidate lengths, rule
-  selection, and actions in human or JSON output for runtime and generated scanners.
-### Added
+### Changed
 
-- An optional Ruby LSP add-on for diagnostics from unsaved `.flexr.rb` files
-  and rule hovers with counterexamples and overlap information.
-- Add documented TOML, GraphQL, and SQL subset lexers, with runtime/generated
-  parity checks and built-in benchmark inputs.
-- Added RBS signatures for the stable public API and CI checks for a typed
-  consumer example.
-### Added
+- Require Ruby 3.4+ for runtime, generation, and standalone artifacts.
+- Make structured tokens and locations immutable `Data` records while retaining
+  attribute readers and read-only indexing. Replace field mutation with `with`.
+- Reject unknown `error_mode` values during initialization.
+- Use artifact schema 2 and runtime ABI 2; regenerate v1 lexers after upgrading.
+- Stabilize explicit firstmatch selection while retaining longest-match defaults.
+- Reduce temporary Range allocations and use direct emit declarations in the
+  JSON example without changing its tokens.
 
-- A v2 migration guide, `check --target 2.0`, and opt-in deprecated-category
-  warnings for record mutation, unknown error modes, older Rubies, and ABI 1
-  generated artifacts.
-- Added conservative whole-token acceleration for explicit `accel :strscan`
-  with frozen String input and reduced temporary allocations when extracting
-  matched text and location spans.
-- Changed the JSON example's punctuation rules to `emit:` shorthand to reduce
-  action-block overhead without changing token values.
+### Fixed
+
+- Show source context and installation guidance when Prism cannot load.
+- Identify the installing file for incompatible generated artifacts when available.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
