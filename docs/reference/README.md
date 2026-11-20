@@ -17,6 +17,7 @@ consuming tokens, or the [CLI](cli.md) when validating and generating files.
 - [Regexp compatibility](regexp.md) — supported syntax and alternatives.
 - [CLI](cli.md) — commands, options, output, and exit statuses.
 - [Diagnostics](diagnostics.md) — diagnostic code catalog.
+- [Ruby LSP](ruby-lsp.md) — editor diagnostics and rule hovers.
 - [Generated artifacts](generated-artifacts.md) — static evaluation, output
   headers, dependencies, and standalone files.
 - [Public API](public-api.md) — stable, experimental, and internal boundaries.

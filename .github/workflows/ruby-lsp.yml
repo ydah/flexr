@@ -1,0 +1,33 @@
+name: ruby-lsp
+
+on:
+  push:
+    paths-ignore:
+      - "site/**"
+  pull_request:
+    paths-ignore:
+      - "site/**"
+
+permissions:
+  contents: read
+
+jobs:
+  ruby-lsp:
+    name: Ruby LSP / ${{ matrix.os }} / ruby ${{ matrix.ruby }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        ruby: ["3.3", "3.4", "4.0"]
+    env:
+      BUNDLE_GEMFILE: gemfiles/ruby_lsp.gemfile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle exec rspec -Ilib -Ispec test/ruby_lsp_addon_spec.rb
