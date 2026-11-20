@@ -54,6 +54,16 @@ test('console truncation preserves valid UTF-8 and emitted tokens', async () => 
   }
 });
 
+test('literal Unicode actions and surrounding constants survive generation', async () => {
+  const source = 'class Lexer < Flexr::Lexer\n LABEL = "前"\n rule(/a/) { emit :TEXT, LABEL + "あ" }\n TRAILER = "後"\nend';
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ source, input: 'a', mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [['TEXT', '前あ']]);
+    assert.match(result.generated, /TRAILER = "後"/);
+  }
+});
+
 test('share links retain Unicode source and input without running code', () => {
   const state = { source: 'class Lexer; # café\nend', input: '日本語', mode: 'runtime' };
   assert.deepEqual(decodeState(encodeState(state)), state);
