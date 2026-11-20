@@ -1,6 +1,7 @@
 # flexr product site
 
-This directory contains the Astro/Starlight product site for flexr. It is a static GitHub Pages site with a custom landing page, documentation routes, and a fixture-backed playground preview.
+This directory contains the Astro/Starlight product site for flexr. The Playground
+runs real Ruby and flexr locally through a pinned ruby.wasm runtime.
 
 ## Local development
 
@@ -14,9 +15,56 @@ Run the same checks used by the Pages workflow:
 
 ```sh
 pnpm verify
+pnpm test
 pnpm build
+pnpm exec playwright install chromium
+pnpm test:browser
 ```
 
-The current playground does not execute arbitrary Ruby. It demonstrates the matching decision model from fixed fixtures and keeps `--eval` out of the browser. A future Ruby WASM worker must preserve that security boundary and add runtime/generated equivalence tests before the UI claims full execution.
+`pnpm dev`, `pnpm build`, and `pnpm test` package the current repository's Ruby
+files and copy the pinned runtime into ignored `public/playground-runtime` assets.
+The WASM binary and source bundle are not checked into Git. The deployment build
+produces them, including the Ruby distribution's license and notice.
 
-The repository examples, CLI definitions, and Ruby implementation remain the behavioral source of truth. Site copy links to those artifacts where a summary would otherwise drift.
+The first Run lazily creates a worker and downloads the runtime. Every run starts
+a new Ruby VM, loads the specification, compiles with flexr, executes its actions,
+and returns tokens, real diagnostics, DOT, trace steps, and generated Ruby.
+Prism 1.7.0 is available in the pinned Ruby 4.0.0 WASM build, so both runtime and
+generated execution are tested. The static DSL restrictions of `flexr check` and
+the generator apply. Specifications must be self-contained or use the bundled
+Ruby libraries; additional gems and local companion files are unavailable.
+The [ruby.wasm WASI limitations](https://ruby.github.io/ruby.wasm/README_md.html),
+including unsupported thread creation, also apply.
+The original three presets remain editable starting points.
+
+The main page stops execution after five seconds; runtime download/startup has a
+30-second limit. Source and input are limited to 20,000 characters each, DFA
+construction to 1024 states, and output to 4 MB. Graphviz loads in a separate
+worker only when Draw DFA is selected and has its own five-second limit.
+
+Source/input are not uploaded by the application. Share links store them in the
+URL fragment, and opening a link never executes it. Review shared Ruby before
+running it. Workers isolate the UI and have a virtual filesystem; they are not a
+complete hostile-code or memory sandbox. The page applies a CSP, disables common
+network APIs in the Ruby worker after loading assets, and sanitizes rendered SVG.
+Ruby actions can still modify their VM and interact with worker JavaScript.
+
+## Size and startup measurements
+
+Measured on 2026-11-20, macOS arm64, Headless Chrome 157, using the local static
+preview server without network throttling:
+
+| Asset | Uncompressed bytes | gzip bytes |
+|---|---:|---:|
+| Ruby 4.0.0 and standard library | 32,555,374 | 10,114,484 |
+| flexr Ruby files and bridge | 533,400 | 119,930 |
+
+One browser run measured 38 ms for downloading/compiling the runtime and 187 ms
+for starting the VM and loading flexr. These local numbers do not predict a
+remote cold download. The UI reports measured sizes and timings on every run.
+Initial page loading fetches neither Ruby WASM nor Graphviz; the browser test
+checks that no WASM request occurs before Run or when opening a share link.
+
+For local Chrome instead of a Playwright download, set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its executable path. Screenshots from the
+browser tests are written to ignored `test-results/` directories.

@@ -7,6 +7,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- A browser Playground that runs real Ruby WASM in a worker, with editable
+  specifications, diagnostics, DFA diagrams, trace steps, generated code, and share links.
 - `trace --input` and `trace --input-file` show candidate lengths, rule
   selection, and actions in human or JSON output for runtime and generated scanners.
 

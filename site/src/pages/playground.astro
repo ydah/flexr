@@ -3,62 +3,63 @@ import SiteLayout from '../layouts/SiteLayout.astro';
 
 const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
 ---
-<SiteLayout
-  title="Playground"
-  description="Explore flexr's longest-match decision model with an interactive, fixture-backed lexer preview."
->
+<SiteLayout title="Playground" description="Run real flexr Ruby specifications locally, inspect diagnostics and trace decisions, and generate a scanner." playground>
   <main class="playground-shell">
-    <a class="back-link" href={base}>← Back to flexr</a>
+    <a class="back-link" href={base}>Back to flexr</a>
     <header class="playground-header">
-      <div class="eyebrow">Interactive preview · flexr 1.0</div>
-      <h1>See the decision, not just the token.</h1>
-      <p>
-        Choose a fixture, edit its input, and inspect which rule wins at each position. This
-        preview is static and fixture-backed: it does not execute arbitrary Ruby in your browser.
-        Use the repository examples and CLI for full runtime and generation behavior.
-      </p>
+      <h1>Follow every match.</h1>
+      <p>Edit Ruby, run the real lexer, and inspect its decisions. Source and input stay in your browser.</p>
       <div class="playground-notice" role="note">
-        Safe boundary: this page sends no source or input to a server. Arbitrary actions and
-        <code>--eval</code> are intentionally unavailable here.
+        Run executes Ruby and its actions in a separate worker. Review shared source before running it.
+        Runs stop after five seconds; Stop cancels the worker immediately. Ruby loads only on your first run.
       </div>
     </header>
-
     <section class="workbench" aria-label="flexr playground workbench">
       <div class="workbench-panel">
-        <div class="panel-heading"><span>Specification fixture</span><small>read-only model</small></div>
-        <select id="preset" aria-label="Choose a playground fixture">
-          <option value="longest">Longest match</option>
-          <option value="calculator">Calculator</option>
-          <option value="json">JSON tokens</option>
+        <div class="panel-heading"><label for="spec">Ruby specification</label><small>editable</small></div>
+        <select id="preset" aria-label="Choose a playground preset">
+          <option value="longest">Longest match</option><option value="calculator">Calculator</option><option value="json">JSON tokens</option>
         </select>
-        <textarea id="spec" aria-label="Lexer specification" readonly></textarea>
-        <div class="workbench-actions">
-          <button class="button button-secondary" type="button" data-action="check">Check</button>
-          <button class="button button-secondary" type="button" data-action="generate">Show generated shape</button>
-        </div>
+        <textarea id="spec" aria-label="Lexer specification" spellcheck="false" maxlength="20000"></textarea>
       </div>
-
       <div class="workbench-panel">
-        <div class="panel-heading"><span>Input</span><small>edit, then run</small></div>
-        <textarea id="input" class="input-area" aria-label="Input to tokenize"></textarea>
+        <div class="panel-heading"><label for="input">Input</label><small>up to 20,000 characters</small></div>
+        <textarea id="input" class="input-area" aria-label="Input to tokenize" spellcheck="false" maxlength="20000"></textarea>
+        <select id="mode" aria-label="Execution mode"><option value="runtime">Runtime mode</option><option value="generated">Generated mode</option></select>
         <div class="workbench-actions">
-          <button class="button button-primary" type="button" data-action="run">Run preview</button>
-          <button class="button button-secondary" type="button" data-action="compare">Compare modes</button>
+          <button class="button button-primary" type="button" data-action="run">Run</button>
+          <button class="button button-secondary" type="button" data-action="stop" disabled>Stop</button>
           <button class="button button-secondary" type="button" data-action="share">Copy share link</button>
         </div>
-        <p id="status" class="workbench-status" role="status" aria-live="polite"></p>
+        <input id="share-link" class="share-link" aria-label="Share link" readonly hidden />
+        <p id="status" class="workbench-status" role="status" aria-live="polite">Choose a preset or write a specification, then select Run.</p>
+        <p id="metrics" class="workbench-status"></p>
       </div>
-
       <div class="workbench-panel full">
-        <div class="panel-heading"><span>Tokens</span><small>output</small></div>
-        <div id="tokens" class="workbench-output"><p class="output-empty">Run a fixture to see its token stream.</p></div>
+        <div class="panel-heading"><span>Tokens</span></div>
+        <pre id="tokens" class="workbench-output">Run a specification to see its token stream.</pre>
       </div>
-
       <div class="workbench-panel full">
-        <div class="panel-heading"><span>Match decisions</span><small>why the winner won</small></div>
-        <div id="decisions" class="workbench-output"><p class="output-empty">Each input position will show its accepted candidates and the winning rule.</p></div>
+        <div class="panel-heading"><span>Diagnostics</span></div>
+        <pre id="diagnostics" class="workbench-output">Compiler warnings and source locations appear here.</pre>
       </div>
+      <div class="workbench-panel full">
+        <div class="panel-heading"><span>Match decisions</span><span id="step-position">No scan steps.</span></div>
+        <div class="workbench-actions">
+          <button class="button button-secondary" type="button" data-action="previous">Previous step</button>
+          <input id="step" type="range" min="0" max="0" value="0" aria-label="Trace step" disabled />
+          <button class="button button-secondary" type="button" data-action="next">Next step</button>
+        </div>
+        <pre id="decisions" class="workbench-output">Run a specification to inspect its decisions.</pre>
+      </div>
+      <div class="workbench-panel full">
+        <div class="panel-heading"><span>DFA</span><button type="button" data-action="draw">Draw DFA</button></div>
+        <div id="graph" class="workbench-output graph-output">Run a specification to inspect its DFA.</div>
+        <details><summary>DOT output</summary><pre id="dot" class="workbench-output"></pre></details>
+      </div>
+      <details class="workbench-panel full"><summary>Generated Ruby</summary><pre id="generated" class="workbench-output">The real generated scanner appears after a run.</pre></details>
+      <details class="workbench-panel full"><summary>Console output</summary><pre id="console" class="workbench-output"></pre></details>
     </section>
   </main>
-  <script is:inline src={`${base}playground.js`} defer></script>
+  <script>import '../playground/client.js';</script>
 </SiteLayout>
