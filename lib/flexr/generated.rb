@@ -50,7 +50,9 @@ module Flexr
       install!(klass, payload)
       machines = payload.fetch(:compiled).fetch(:machines).transform_values do |machine|
         dfa = load_dfa(machine.fetch(:dfa))
-        Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym)
+        plans = Automaton::Accel.whole_token_plans(dfa, klass.__flexr_rules) if
+          klass.__flexr_config.backend != :firstmatch && klass.__flexr_config.options[:accel] == :strscan
+        Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym, whole_tokens: plans)
       end
       compiled = Automaton::CompiledSpec.new(
         machines: machines,

@@ -3,6 +3,12 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## Unreleased
+
+- Added conservative whole-token acceleration for explicit `accel :strscan`
+  with frozen String input and reduced temporary allocations when extracting
+  matched text and location spans.
+
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
 ### Added

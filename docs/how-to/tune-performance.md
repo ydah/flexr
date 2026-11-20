@@ -18,6 +18,13 @@ Acceleration is an optimization over the DFA, not a second matcher. `accel
 make the choice explicit. Trailing context disables region acceleration for the
 affected rule and emits `FLEXR-W012` unless acceleration is disabled.
 
+Explicit `accel :strscan` can also scan a complete token in one native call
+when a conservative DFA check proves it safe. This path needs frozen String
+input with retained bytes and no active scanning or token-size guard. Streaming
+and mutable input, anchors, trailing context, and unproven patterns keep the DFA
+path. Measure with your actual token lengths and Ruby/JIT configuration before
+choosing `:strscan`; `:auto` keeps its region-selection policy.
+
 The [performance log](../perf-log.md) records reproducible local observations,
 and the [backend explanation](../explanation/backends.md) describes the memory
 and compatibility trade-offs.
