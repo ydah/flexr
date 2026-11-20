@@ -30,6 +30,11 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
   parity checks and built-in benchmark inputs.
 - Added RBS signatures for the stable public API and CI checks for a typed
   consumer example.
+### Added
+
+- A v2 migration guide, `check --target 2.0`, and opt-in deprecated-category
+  warnings for record mutation, unknown error modes, older Rubies, and ABI 1
+  generated artifacts.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 

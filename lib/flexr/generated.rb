@@ -85,7 +85,10 @@ module Flexr
       }
       mismatch = expected.find { |name, value| artifact[name] != value }
       compiler_version = artifact[:compiler_version]
-      return if mismatch.nil? && compiler_version.is_a?(String) && !compiler_version.empty?
+      if mismatch.nil? && compiler_version.is_a?(String) && !compiler_version.empty?
+        Deprecations.warn("generated lexer ABI 1 will be incompatible with 2.0; regenerate it after upgrading")
+        return
+      end
 
       detail = if mismatch
         name, value = mismatch

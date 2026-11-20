@@ -325,12 +325,17 @@ expression can change how the surrounding pattern matches.
 | `FLEXR-W016` | DFA construction took more than 0.5 seconds | Use generated mode for startup |
 | `FLEXR-W017` | Grammar token is missing from `emits` | Declare and emit it, or remove it from the grammar |
 | `FLEXR-W018` | Token in `emits` is missing from the grammar | Add a `%token` declaration or remove it from `emits` |
+| `FLEXR-W020` | Structured records become immutable in v2.0 | Review consumer mutations; use `record.with(...)` in v2 |
 
 Warnings are reported by `check` according to `--warn`. The default omits the
 wall-clock `FLEXR-W016`; `--warn all` includes it, and `--warn none` suppresses
 warnings. `--warn-as-error` turns selected warnings into a failed command.
 
 ## Informational diagnostics
+
+`flexr check --target 2.0` includes `FLEXR-I002` with Ruby and artifact
+requirements. See the [v2 migration guide](../migration-v2.md) for the static
+check's limits and opt-in runtime deprecation warnings.
 
 `check --warn all` also reports `FLEXR-I001` when multiple rules match the same
 input at the same length. This can happen even when both rules are reachable.
