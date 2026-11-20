@@ -14,6 +14,9 @@ on:
   schedule:
     - cron: "17 3 * * *"
 
+permissions:
+  contents: read
+
 jobs:
   runtime:
     name: runtime / ${{ matrix.os }} / ruby ${{ matrix.ruby }} / ${{ matrix.jit }}
@@ -31,8 +34,10 @@ jobs:
       RUBYOPT: ${{ matrix.jit == 'on' && '--yjit' || '' }}
     continue-on-error: ${{ matrix.ruby == 'head' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
