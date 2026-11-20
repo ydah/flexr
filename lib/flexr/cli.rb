@@ -290,10 +290,19 @@ module Flexr
       source = trace_args[:generated] ? generate(spec, options) : File.read(spec)
       scope = Module.new
       scope.module_eval(source, spec, 1)
-      klass = parsed.class_name.split("::").reject(&:empty?).inject(scope) { |parent, name| parent.const_get(name, false) }
+      namespace = parsed.class_name.start_with?("::") ? Object : scope
+      klass = parsed.class_name.split("::").reject(&:empty?).inject(namespace) { |parent, name| parent.const_get(name, false) }
       unless trace_args[:generated]
         options.overrides.each do |name, value|
           klass.public_send(name, value) if %i[backend token_kind accel].include?(name)
+        end
+        klass.__flexr_config.options.merge!(options.overrides.slice(:max_dfa_states, :warn_level))
+        compiled = klass.compile!
+        if options.warn_as_error
+          diagnostic = Array(compiled.diagnostics).find do |item|
+            item.warning? && (options.warn_level == :all || item.code != "FLEXR-W016")
+          end
+          raise CompileError.new(diagnostic.message, diagnostic: diagnostic) if diagnostic
         end
       end
       input = trace_args[:input_file] ? File.binread(trace_args[:input_file]) : trace_args.fetch(:input)

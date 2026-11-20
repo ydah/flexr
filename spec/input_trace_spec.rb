@@ -169,4 +169,49 @@ RSpec.describe "input tracing" do
     expect(Flexr::CLI.run(["check", "missing.rb", "--input", "a"], out: output, err: errors)).to eq(2)
     expect(errors.string).to include("only valid for the trace command")
   end
+
+  it "applies DFA limits before compilation in both tracing modes" do
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "limited.flexr.rb")
+      File.write(path, "class LimitedTraceFixture < Flexr::Lexer\n  rule(/abc/, emit: :ABC)\nend\n")
+      [[], ["--generated"]].each do |mode|
+        output = StringIO.new
+        errors = StringIO.new
+        status = Flexr::CLI.run(["trace", path, "--input", "abc", "--max-dfa-states", "1", "--format", "json", *mode], out: output, err: errors)
+        expect(status).to eq(1), "#{mode.inspect}: #{output.string} #{errors.string}"
+        expect(JSON.parse(errors.string).first.fetch("code")).to eq("FLEXR-E006")
+      end
+    end
+  end
+
+  it "applies warning compilation options in both tracing modes" do
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "warnings.flexr.rb")
+      File.write(path, "class WarningTraceFixture < Flexr::Lexer\n  emits :OTHER\n  rule(/a/, emit: :A)\nend\n")
+      [[], ["--generated"]].each do |mode|
+        output = StringIO.new
+        errors = StringIO.new
+        status = Flexr::CLI.run(["trace", path, "--input", "a", "--warn", "all", "--warn-as-error", "--format", "json", *mode], out: output, err: errors)
+        expect(status).to eq(1), "#{mode.inspect}: #{output.string} #{errors.string}"
+        expect(JSON.parse(errors.string).first.fetch("code")).to eq("FLEXR-W014")
+      end
+    end
+  end
+
+  it "resolves absolute lexer class names in both tracing modes" do
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "absolute.flexr.rb")
+      File.write(path, "class ::AbsoluteTraceFixture < Flexr::Lexer\n  rule(/a/, emit: :A)\nend\n")
+      [[], ["--generated"]].each do |mode|
+        Object.send(:remove_const, :AbsoluteTraceFixture) if Object.const_defined?(:AbsoluteTraceFixture, false)
+        output = StringIO.new
+        errors = StringIO.new
+        status = Flexr::CLI.run(["trace", path, "--input", "a", "--format", "json", *mode], out: output, err: errors)
+        expect(status).to eq(0), errors.string
+        expect(JSON.parse(output.string).fetch("steps").first.fetch("text")).to eq("a")
+      end
+    end
+  ensure
+    Object.send(:remove_const, :AbsoluteTraceFixture) if Object.const_defined?(:AbsoluteTraceFixture, false)
+  end
 end
