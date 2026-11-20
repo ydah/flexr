@@ -14,6 +14,11 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 - Add documented TOML, GraphQL, and SQL subset lexers, with runtime/generated
   parity checks and built-in benchmark inputs.
 
+### Fixed
+
+- Preserve UTF-8 source when generating lexers with Unicode action literals
+  and surrounding constants.
+
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
 ### Added
