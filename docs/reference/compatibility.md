@@ -34,5 +34,6 @@ unless a migration is explicitly documented. Generated artifacts include a
 payload digest and Unicode version so stale or cross-version output can be
 detected. Do not assume that internal table layouts are stable.
 
-Stable backends are `table`, `direct`, and `auto`. `firstmatch` is experimental
-and does not share the longest-match promise.
+All four backends are stable. `table`, `direct`, and `auto` use longest-match
+selection; `firstmatch` follows rule and regexp alternative order. It does not
+share the longest-match promise and must be selected explicitly.
