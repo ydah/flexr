@@ -95,7 +95,7 @@ after the action, candidate rule numbers and lengths, the selected rule, and
 the action result (`emit` or `skip`). Human candidate lengths use
 `body/total`, with trailing context included only in the total. `rule_order`
 means several candidates tied at the winning total length; `longest` means a
-longer candidate won. `first_match` reports the experimental backend's rule
+longer candidate won. `first_match` reports the firstmatch backend's rule
 priority and preserves its regexp alternation behavior. `only_match` means
 there was one candidate. EOF actions appear with reason `eof`; recovered
 unmatched bytes appear with reason `unmatched` and no selected rule.

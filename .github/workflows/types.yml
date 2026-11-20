@@ -2,6 +2,7 @@ name: types
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -14,7 +15,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        ruby: ["3.3", "3.4", "4.0"]
+        ruby: ["3.4", "4.0"]
     env:
       BUNDLE_GEMFILE: gemfiles/types.gemfile
     steps:
