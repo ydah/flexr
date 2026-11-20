@@ -125,6 +125,10 @@ If Prism cannot be loaded (`FLEXR-E019`), the diagnostic points to the start of
 the specification and suggests installing the dependency. This is a file-level
 failure; no Ruby syntax has been parsed yet.
 
+Incompatible generated artifacts (`FLEXR-E020`) identify the start of the file
+that installs the artifact, when that file exists. Direct installation calls
+without a readable caller file still report the regeneration guidance.
+
 | Code | Meaning | First fix to try |
 |---|---|---|
 | `FLEXR-E001` | Regexp syntax is malformed | Correct the regexp syntax |

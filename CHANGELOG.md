@@ -7,6 +7,7 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 - Missing Prism dependency errors include the specification location and an
   installation command.
+- Incompatible generated artifacts identify their installing file when available.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
