@@ -3,6 +3,11 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## Unreleased
+
+- Added optional RSpec and Minitest helpers for token assertions and explicit
+  token snapshot creation and comparison.
+
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
 ### Added
