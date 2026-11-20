@@ -48,3 +48,16 @@ test('share links retain Unicode source and input without running code', () => {
   assert.throws(() => decodeState('x'.repeat(300_000)), /too large/);
   assert.throws(() => decodeState(btoa(JSON.stringify({ source: 5, input: '' }))), /Invalid/);
 });
+
+test('language presets use the repository examples and run in both modes', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  for (const name of ['toml', 'graphql', 'sql']) {
+    const preset = presets[name];
+    assert.equal(preset.source, await readFile(new URL(`../../examples/${name}/lexer.flexr.rb`, import.meta.url), 'utf8'));
+    const result = await runtime.run({ ...preset, mode: 'runtime' });
+    assert.equal(result.error, undefined, result.error);
+    assert.ok(result.tokens.length > 0);
+    const generated = await runtime.run({ ...preset, mode: 'generated' });
+    assert.deepEqual(generated.tokens, result.tokens);
+  }
+});

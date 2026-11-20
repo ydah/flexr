@@ -3,9 +3,9 @@ name: Playground
 on:
   push:
     branches: [main]
-    paths: ['site/**', 'lib/**', '.github/workflows/playground.yml']
+    paths: ['site/**', 'lib/**', 'examples/**', '.github/workflows/playground.yml']
   pull_request:
-    paths: ['site/**', 'lib/**', '.github/workflows/playground.yml']
+    paths: ['site/**', 'lib/**', 'examples/**', '.github/workflows/playground.yml']
 
 permissions:
   contents: read

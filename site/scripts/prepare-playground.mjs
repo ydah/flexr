@@ -18,6 +18,16 @@ files['/app/playground.rb'] = await readFile(path.join(site, 'ruby/playground.rb
 await mkdir(output, { recursive: true });
 const payload = JSON.stringify({ files });
 await writeFile(path.join(output, 'flexr.json'), payload);
+const inputs = {
+  toml: 'title = "flexr"',
+  graphql: 'query { user(id: 12) { name } }',
+  sql: 'select name from users where id >= 12;',
+};
+const presets = {};
+for (const [name, input] of Object.entries(inputs)) {
+  presets[name] = { source: await readFile(path.join(root, `examples/${name}/lexer.flexr.rb`), 'utf8'), input };
+}
+await writeFile(path.join(output, 'presets.json'), JSON.stringify(presets));
 const wasm = path.join(site, 'node_modules/@ruby/4.0-wasm-wasi/dist');
 await cp(path.join(wasm, 'ruby+stdlib.wasm'), path.join(output, 'ruby.wasm'));
 await cp(path.join(wasm, 'LICENSE'), path.join(output, 'LICENSE'));

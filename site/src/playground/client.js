@@ -154,12 +154,27 @@ function drawGraph() {
   graphWorker.postMessage(dot);
 }
 
-document.querySelector('#preset').addEventListener('change', event => {
+let languagePresets;
+document.querySelector('#preset').addEventListener('change', async event => {
   stop();
-  const preset = PRESETS[event.target.value];
-  source.value = preset.source;
-  input.value = preset.input;
-  status.textContent = 'Preset loaded. Edit it or run it as written.';
+  const name = event.target.value;
+  try {
+    let preset = PRESETS[name];
+    if (!preset) {
+      status.textContent = 'Loading the repository example…';
+      languagePresets ||= fetch(`${import.meta.env.BASE_URL}/playground-runtime/presets.json`.replaceAll('//', '/'))
+        .then(response => {
+          if (!response.ok) throw new Error('The example presets could not be downloaded.');
+          return response.json();
+        });
+      preset = (await languagePresets)[name];
+    }
+    const state = validateState({ ...preset, mode: mode.value });
+    if (event.target.value !== name) return;
+    source.value = state.source;
+    input.value = state.input;
+    status.textContent = 'Preset loaded. Edit it or run it as written.';
+  } catch (error) { status.textContent = error.message; }
 });
 document.querySelector('[data-action="run"]').addEventListener('click', run);
 document.querySelector('[data-action="stop"]').addEventListener('click', () => stop());

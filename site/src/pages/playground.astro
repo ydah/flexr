@@ -19,6 +19,7 @@ const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL :
         <div class="panel-heading"><label for="spec">Ruby specification</label><small>editable</small></div>
         <select id="preset" aria-label="Choose a playground preset">
           <option value="longest">Longest match</option><option value="calculator">Calculator</option><option value="json">JSON tokens</option>
+          <option value="toml">TOML subset</option><option value="graphql">GraphQL subset</option><option value="sql">SQL subset</option>
         </select>
         <textarea id="spec" aria-label="Lexer specification" spellcheck="false" maxlength="20000"></textarea>
       </div>

@@ -19,7 +19,7 @@ export async function run({ state, base }) {
     }
     const result = await runtime.run(state, startupMs => postMessage({ phase: 'ready', startupMs }));
     const payload = JSON.stringify({ ...result, wasm_bytes: binary.byteLength, download_ms: downloadMs });
-    if (payload.length > 4_000_000) throw new Error('Output exceeds 4 MB. Reduce the input or number of states.');
+    if (new TextEncoder().encode(payload).byteLength > 4_000_000) throw new Error('Output exceeds 4 MB. Reduce the input or number of states.');
     postMessage({ phase: 'result', result: JSON.parse(payload) });
   } catch (error) {
     postMessage({ phase: 'error', error: error instanceof Error ? error.message : String(error) });

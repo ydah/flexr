@@ -74,3 +74,14 @@ test('treats tokens and console text as text and disables worker network access'
   await expect(page.locator('#tokens img')).toHaveCount(0);
   await expect(page.locator('#console script')).toHaveCount(0);
 });
+
+test('loads the actual TOML, GraphQL, and SQL example presets', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  for (const [name, namespace] of [['toml', 'TomlExample'], ['graphql', 'GraphqlExample'], ['sql', 'SqlExample']]) {
+    await page.locator('#preset').selectOption(name);
+    await expect(page.locator('#spec')).toHaveValue(new RegExp(`module ${namespace}`));
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    await expect(page.locator('#status')).toContainText('steps. Ruby', { timeout: 30_000 });
+    expect(JSON.parse(await page.locator('#tokens').textContent()).length).toBeGreaterThan(0);
+  }
+});

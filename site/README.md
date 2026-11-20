@@ -35,7 +35,9 @@ the generator apply. Specifications must be self-contained or use the bundled
 Ruby libraries; additional gems and local companion files are unavailable.
 The [ruby.wasm WASI limitations](https://ruby.github.io/ruby.wasm/README_md.html),
 including unsupported thread creation, also apply.
-The original three presets remain editable starting points.
+The original three presets remain editable starting points. TOML, GraphQL, and
+SQL subset presets load the actual repository example sources, packaged at build
+time, so their lexer rules are maintained in one place.
 
 The main page stops execution after five seconds; runtime download/startup has a
 30-second limit. Source and input are limited to 20,000 characters each, DFA
