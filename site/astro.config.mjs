@@ -1,9 +1,11 @@
-import { defineConfig } from 'astro/config';
+import { defineConfig, passthroughImageService } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   site: 'https://ydah.github.io',
   base: '/flexr',
+  image: { service: passthroughImageService() },
+  vite: { worker: { format: 'es' } },
   integrations: [
     starlight({
       title: 'flexr',

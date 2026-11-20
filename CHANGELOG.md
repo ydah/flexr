@@ -7,6 +7,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- A real Ruby WASM Playground with editable specifications, diagnostics, DFA
+  diagrams, trace steps, generated code, presets, and share links.
 - Input tracing with candidate lengths, rule priority, actions, state changes,
   and human or JSON output for runtime and generated scanners.
 - Optional phase profiling and isolated interpreter, YJIT, and ZJIT comparisons.

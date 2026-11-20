@@ -10,7 +10,9 @@ const required = [
   'src/content/docs/learn/generation.md',
   'src/content/docs/reference/dsl.md',
   'src/content/docs/reference/diagnostics.md',
-  'public/playground.js'
+  'src/playground/client.js',
+  'src/playground/worker.mjs',
+  'ruby/playground.rb'
 ];
 
 const missing = required.filter((file) => !existsSync(resolve(root, file)));
@@ -30,8 +32,8 @@ const requiredPhrases = [
   'longest match',
   'Runtime mode',
   'Generated mode',
-  'fixture-backed',
-  'does not execute arbitrary Ruby'
+  'separate worker',
+  'source and input stay in your browser'
 ];
 const missingPhrases = requiredPhrases.filter((phrase) => !source.toLowerCase().includes(phrase.toLowerCase()));
 if (missingPhrases.length) {
