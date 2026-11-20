@@ -33,6 +33,9 @@ remain `untyped`; the signatures do not make internal tables stable APIs.
 Token and location fields are nullable because their public constructors allow
 omitted keywords. The token representation remains a union of arrays and
 structured tokens because `token_kind` is selected dynamically.
+Cancellation signatures accept Procs, Methods, and callable objects taking zero
+arguments or the lexer. `on_error=` accepts a callable returning `:skip`,
+`:raise`, `:token`, or `:halt`; assigning nil clears the handler.
 
 Validate the signatures and type-check the consumer example with:
 

@@ -4,7 +4,21 @@ module Flexr
   type pattern = String | ::Regexp
   type token = [untyped, untyped] | Runtime::Token
   type source_location = [Integer, Integer]
-  type cancellation = (^() -> untyped) | (^(Lexer) -> untyped)
+  type cancellation = (^() -> untyped) | (^(Lexer) -> untyped) | _Cancellation | _ContextCancellation
+  type recovery_action = :skip | :raise | :token | :halt
+  type error_handler = (^(LexError) -> recovery_action) | _ErrorHandler
+
+  interface _Cancellation
+    def call: () -> untyped
+  end
+
+  interface _ContextCancellation
+    def call: (Lexer) -> untyped
+  end
+
+  interface _ErrorHandler
+    def call: (LexError) -> recovery_action
+  end
 
   interface _Input
     def read: (Integer) -> String?
@@ -45,6 +59,7 @@ module Flexr
     attr_reader max_token_size: Integer
     attr_reader max_lookahead_size: Integer
     attr_reader steps: Integer
+    attr_writer on_error: error_handler?
     def input: () -> String
     def text: () -> String
     def text_bytesize: () -> Integer

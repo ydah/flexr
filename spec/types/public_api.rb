@@ -2,6 +2,26 @@
 
 require "flexr"
 
+module PublicApiTypecheck
+  class Cancellation
+    def call
+      false
+    end
+  end
+
+  class ContextCancellation
+    def call(lexer)
+      lexer.byte_pos > 100
+    end
+  end
+
+  class ErrorHandler
+    def call(error)
+      error.message.empty? ? :skip : :token
+    end
+  end
+end
+
 Flexr::Lexer.rule(/[0-9]+/) { emit :INTEGER, text.to_i }
 Flexr::Lexer.state(:quoted) { rule(/x/, emit: :X) }
 Flexr::Lexer.all_states { rule(/ /, skip: true) }
@@ -16,6 +36,13 @@ Flexr::Lexer.accel(:none)
 lexer = Flexr::Lexer.new("12", filename: "input.txt", max_steps: 1000)
 Flexr::Lexer.new("12", cancellation: -> { false })
 Flexr::Lexer.new("12", cancellation: ->(current) { current.byte_pos > 100 })
+Flexr::Lexer.new("12", cancellation: false.method(:!))
+Flexr::Lexer.new("12", cancellation: PublicApiTypecheck::Cancellation.new)
+Flexr::Lexer.new("12", cancellation: PublicApiTypecheck::ContextCancellation.new)
+lexer.on_error = ->(_error) { :skip }
+lexer.on_error = PublicApiTypecheck::ErrorHandler.new
+lexer.on_error = PublicApiTypecheck::ErrorHandler.new.method(:call)
+lexer.on_error = nil
 # @type var tokens: Array[Flexr::token]
 tokens = lexer.tokens
 # @type var byte_position: Integer
