@@ -1,0 +1,41 @@
+# frozen_string_literal: true
+
+require "flexr"
+
+Flexr::Lexer.rule(/[0-9]+/) { emit :INTEGER, text.to_i }
+Flexr::Lexer.state(:quoted) { rule(/x/, emit: :X) }
+Flexr::Lexer.all_states { rule(/ /, skip: true) }
+Flexr::Lexer.on_eof { skip }
+Flexr::Lexer.emits(:INTEGER, :X)
+Flexr::Lexer.backend(:table)
+Flexr::Lexer.token_kind(:array)
+Flexr::Lexer.encoding(Encoding::UTF_8)
+Flexr::Lexer.option(:unicode)
+Flexr::Lexer.accel(:none)
+
+lexer = Flexr::Lexer.new("12", filename: "input.txt", max_steps: 1000)
+Flexr::Lexer.new("12", cancellation: -> { false })
+Flexr::Lexer.new("12", cancellation: ->(current) { current.byte_pos > 100 })
+# @type var tokens: Array[Flexr::token]
+tokens = lexer.tokens
+# @type var byte_position: Integer
+byte_position = lexer.byte_pos
+# @type var location: Flexr::Runtime::Location
+location = lexer.last_location
+# @type var column: Integer?
+column = location.column_begin
+# @type var next_token: Flexr::token?
+next_token = lexer.next_token
+lexer.each_token { |_token| nil }
+
+diagnostic = Flexr::Diagnostics.error("FLEXR-E001", "invalid pattern", location: [0, 1])
+set = Flexr::DiagnosticSet.new << diagnostic
+# @type var rendered: String
+rendered = set.render(format: :json)
+# @type var generation: String
+generation = Flexr::Generator.new("lexer.flexr.rb").generate
+# @type var status: Integer
+status = Flexr::CLI.run(["check", "lexer.flexr.rb"])
+# @type var accepted: bool
+accepted = Flexr.compile_pattern(/a/).accept?("a")
+puts tokens, byte_position, column, next_token, rendered, generation, status, accepted

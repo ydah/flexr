@@ -1,0 +1,170 @@
+module Flexr
+  VERSION: String
+
+  type pattern = String | ::Regexp
+  type token = [untyped, untyped] | Runtime::Token
+  type source_location = [Integer, Integer]
+  type cancellation = (^() -> untyped) | (^(Lexer) -> untyped)
+
+  interface _Input
+    def read: (Integer) -> String?
+  end
+
+  interface _CompiledPattern
+    def accept?: (String) -> bool
+  end
+
+  def self.compile_pattern: (pattern, ?options: Hash[Symbol, untyped], ?encoding: Encoding?) -> _CompiledPattern
+  def self.parse_pattern: (pattern, ?options: Hash[Symbol, untyped]) -> untyped
+
+  module DSL
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?) ?{ () [self: Lexer] -> untyped } -> nil
+    def state: (*(Symbol | String), ?inclusive: bool) { () [self: singleton(Lexer)] -> untyped } -> void
+    def all_states: () { () [self: singleton(Lexer)] -> untyped } -> void
+    def on_eof: () { () [self: Lexer] -> untyped } -> void
+    def emits: (*untyped) -> void
+    def backend: (:table | :direct | :auto | :firstmatch | String) -> void
+    def token_kind: (:array | :struct | :yield | String) -> void
+    def encoding: (Encoding | String) -> void
+    def option: (*(Symbol | String)) -> void
+    def accel: (:auto | :strscan | :regexp | :none | String) -> void
+  end
+
+  class Lexer
+    extend DSL
+
+    def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?chunk_size: Integer) -> void
+    def next_token: () -> token?
+    def tokens: () -> Array[token]
+    def each_token: () -> Enumerator[token, self]
+                  | () { (untyped, ?untyped) -> untyped } -> self
+    def racc_next_token: () -> [untyped, untyped]
+
+    attr_reader filename: String?
+    attr_reader error_mode: Symbol
+    attr_reader max_token_size: Integer
+    attr_reader max_lookahead_size: Integer
+    attr_reader steps: Integer
+    def input: () -> String
+    def text: () -> String
+    def text_bytesize: () -> Integer
+    def last_location: () -> Runtime::Location
+    def byte_pos: () -> Integer
+    def lineno: () -> Integer
+    alias line lineno
+    def beginning_of_line?: () -> bool
+    def state: () -> Symbol
+    def binary_input: () -> String
+    def emit: (untyped, ?untyped) -> token
+    def skip: () -> nil
+    def echo: () -> token
+    def error!: (String) -> token?
+    def push: (Symbol | String) -> Symbol
+    alias push_state push
+    def pop: () -> Symbol
+    alias pop_state pop
+    def begin_state: (Symbol | String) -> Symbol
+    alias state= begin_state
+    def less: (Integer) -> nil
+    def more: () -> true
+  end
+
+  module Runtime
+    class Token < ::Struct[untyped]
+      def self.new: (?type: untyped, ?value: untyped, ?location: Location?) -> instance
+      attr_accessor type: untyped
+      attr_accessor value: untyped
+      attr_accessor location: Location?
+    end
+
+    class Location < ::Struct[untyped]
+      def self.new: (?filename: String?, ?byte_begin: Integer?, ?byte_end: Integer?, ?line_begin: Integer?, ?column_begin: Integer?, ?line_end: Integer?, ?column_end: Integer?) -> instance
+      attr_accessor filename: String?
+      attr_accessor byte_begin: Integer?
+      attr_accessor byte_end: Integer?
+      attr_accessor line_begin: Integer?
+      attr_accessor line_end: Integer?
+      attr_accessor column_begin: Integer?
+      attr_accessor column_end: Integer?
+    end
+
+    class TokenTooLargeError < LexError
+      def initialize: (?String, ?filename: String?, ?byte_pos: Integer?, ?line: Integer?, ?text: String?, ?rule: Integer?) -> void
+      attr_reader code: String
+      attr_reader rule: Integer?
+    end
+  end
+
+  class Error < StandardError
+    def initialize: (?String?, ?diagnostic: Diagnostic?, ?filename: String?, ?byte_pos: Integer?) -> void
+    attr_reader diagnostic: Diagnostic?
+    attr_reader filename: String?
+    attr_reader byte_pos: Integer?
+  end
+
+  class LexError < Error
+    def initialize: (String, ?filename: String?, ?byte_pos: Integer?, ?line: Integer?, ?text: String?, ?diagnostic: Diagnostic?) -> void
+    attr_reader line: Integer?
+    attr_reader text: String?
+  end
+
+  class CompileError < Error
+  end
+
+  class UnsupportedRegexpError < CompileError
+  end
+
+  class Diagnostic < ::Struct[untyped]
+    def self.new: (?code: String?, ?severity: Symbol?, ?message: String?, ?location: source_location?, ?help: String?, ?note: String?) -> instance
+    attr_accessor code: String?
+    attr_accessor severity: Symbol?
+    attr_accessor message: String?
+    attr_accessor location: source_location?
+    attr_accessor help: String?
+    attr_accessor note: String?
+    def error?: () -> bool
+    def warning?: () -> bool
+    def to_h: () -> Hash[Symbol, untyped]
+  end
+
+  class DiagnosticSet
+    include Enumerable[Diagnostic]
+    def initialize: () -> void
+    def each: () -> Enumerator[Diagnostic, Array[Diagnostic]]
+            | () { (Diagnostic) -> untyped } -> Array[Diagnostic]
+    def <<: (Diagnostic) -> self
+    def any_error?: () -> bool
+    def empty?: () -> bool
+    def to_a: () -> Array[Diagnostic]
+    def render: (?format: Symbol, ?color: Symbol | bool, ?source: String?, ?path: String?) -> String
+  end
+
+  module Diagnostics
+    def self.error: (String, String, ?location: source_location?, ?help: String?, ?note: String?) -> Diagnostic
+    def self.warning: (String, String, ?location: source_location?, ?help: String?, ?note: String?) -> Diagnostic
+    def self.info: (String, String, ?location: source_location?, ?help: String?, ?note: String?) -> Diagnostic
+    def self.raise!: (Diagnostic) -> bot
+  end
+
+  class Generator
+    def initialize: (String, ?output: String?, ?eval_mode: bool, ?options: Hash[Symbol, untyped]) -> void
+    def generate: () -> String
+    attr_reader diagnostics: Array[Diagnostic]
+  end
+
+  class RakeTask
+    def initialize: (?Symbol | String) ?{ (RakeTask) -> untyped } -> void
+    attr_accessor spec: String?
+    attr_accessor output: String?
+    attr_accessor warn_as_error: bool
+  end
+
+  module CLI
+    def self.run: (Array[String], ?out: IO | _Output, ?err: IO | _Output) -> Integer
+  end
+
+  interface _Output
+    def puts: (*untyped) -> nil
+    def write: (String) -> Integer
+  end
+end

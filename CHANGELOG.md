@@ -3,6 +3,11 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## Unreleased
+
+- Added RBS signatures for the stable public API and CI checks for a typed
+  consumer example.
+
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
 ### Added
