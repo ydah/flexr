@@ -19,6 +19,9 @@ RSpec.describe "v2 runtime contracts" do
     expect(location.with).to eq(location)
     expect(location.with(byte_begin: 9).column_end).to eq(2)
     expect(location.with(column_begin: nil).column_begin).to be_nil
+    other_columns = Flexr::Runtime::Location.new(byte_begin: 0, byte_end: 1, column_values: [3, 4])
+    expect(other_columns).not_to eq(location)
+    expect(location.with.hash).to eq(location.hash)
     expect(Ractor.shareable?(location)).to be(true)
   end
 

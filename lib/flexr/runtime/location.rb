@@ -34,6 +34,16 @@ module Flexr
         columns[1] = changes[:column_end] if changes.key?(:column_end)
         self.class.new(**deconstruct_keys(nil), **changes, column_values: columns)
       end
+
+      def ==(other)
+        other.instance_of?(self.class) && to_h == other.to_h
+      end
+
+      alias_method :eql?, :==
+
+      def hash
+        [self.class, to_h].hash
+      end
     end
   end
 end

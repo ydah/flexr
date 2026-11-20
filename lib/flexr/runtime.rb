@@ -42,6 +42,7 @@ require_relative "dsl"
 require_relative "lexer"
 require_relative "generated"
 
+
 module Flexr
   class << self
     def compile_pattern(pattern, options: {}, encoding: nil)
