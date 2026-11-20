@@ -389,6 +389,16 @@ task "bench:regression" do
   puts stdout
 end
 
+desc "Profile runtime and generated scanning phases with TracePoint"
+task "bench:profile" do
+  ruby "benchmark/profile.rb", "--iterations", ENV.fetch("FLEXR_BENCHMARK_ITERATIONS", "1")
+end
+
+desc "Measure interpreter, YJIT, and ZJIT where supported by this Ruby"
+task "bench:matrix" do
+  ruby "benchmark/matrix.rb", "--iterations", ENV.fetch("FLEXR_BENCHMARK_ITERATIONS", "3")
+end
+
 namespace :test do
   task :differential do
     patterns = [/[a-z]+/, /a(?:b|c)?/, /[0-9]{1,3}/, /[^\n]+/, /foo/,
