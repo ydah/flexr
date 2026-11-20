@@ -9,7 +9,7 @@ module Flexr
     class RubyMatrix
       ROOT = File.expand_path("..", __dir__)
       FLAGS = { "interpreter" => ["--disable=yjit,zjit"], "yjit" => ["--yjit"], "zjit" => ["--zjit"] }.freeze
-      PROBE = <<~RUBY
+      PROBE = <<~RUBY.lines.map(&:strip).join(";").freeze
         require "json"
         engine = ARGV.fetch(0)
         enabled = case engine

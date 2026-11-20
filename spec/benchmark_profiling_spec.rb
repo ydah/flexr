@@ -76,12 +76,13 @@ RSpec.describe "benchmark profiling" do
     Dir.mktmpdir do |directory|
       input = File.join(directory, "input.json")
       File.write(input, '{"answer":42}')
-      script = <<~RUBY
-        require_relative "benchmark/matrix"
+      script = File.join(directory, "matrix_check.rb")
+      File.write(script, <<~RUBY)
+        require #{File.expand_path('../benchmark/matrix', __dir__).inspect}
         result = Flexr::Benchmarking::RubyMatrix.new(arguments: ARGV).run(engines: ["interpreter"])
         puts JSON.generate(result)
       RUBY
-      output, errors, status = Open3.capture3(RbConfig.ruby, "-e", script, "--", "--input-file", input,
+      output, errors, status = Open3.capture3(RbConfig.ruby, script, "--input-file", input,
                                              "--iterations", "1", chdir: File.expand_path("..", __dir__))
       expect(status).to be_success, errors
       result = JSON.parse(output).fetch("engines").fetch("interpreter")
