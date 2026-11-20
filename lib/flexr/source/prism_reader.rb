@@ -35,7 +35,9 @@ module Flexr
           require "prism"
           Prism.parse(@source)
         rescue LoadError => e
-          diagnostic = Diagnostics.error("FLEXR-E019", "Prism is required for source generation", note: e.message)
+          diagnostic = Diagnostics.error("FLEXR-E019", "Prism is required for source generation",
+                                         location: [0, 0], help: "install the generator dependency with gem install prism",
+                                         note: e.message)
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
         unless prism.errors.empty?

@@ -29,7 +29,11 @@ RSpec.describe "diagnostic contracts" do
     allow(reader).to receive(:require).with("prism").and_raise(LoadError, "missing prism")
 
     expect { reader.read }
-      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E019") }
+      .to raise_error(Flexr::CompileError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E019")
+        expect(error.diagnostic.location).to eq([0, 0])
+        expect(error.diagnostic.help).to include("gem install prism")
+      end
   end
 
   it "emits exact warning codes for semantic and performance boundaries" do

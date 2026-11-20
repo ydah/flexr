@@ -121,6 +121,10 @@ or unreadable input file also produces the diagnostic without an excerpt.
 
 ## Errors
 
+If Prism cannot be loaded (`FLEXR-E019`), the diagnostic points to the start of
+the specification and suggests installing the dependency. This is a file-level
+failure; no Ruby syntax has been parsed yet.
+
 | Code | Meaning | First fix to try |
 |---|---|---|
 | `FLEXR-E001` | Regexp syntax is malformed | Correct the regexp syntax |
