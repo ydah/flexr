@@ -43,6 +43,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `--warn-as-error` | Flag | Check and generation |
 | `--color WHEN` | `auto`, `always`, `never` | Human diagnostics |
 | `--format FMT` | `human`, `json` | Check and stats |
+| `--target 2.0` | none | Static check migration requirements and structured-token declarations |
 | `--rule N` | Non-negative integer | Explain |
 
 The complete help output is kept as a checked snapshot:
@@ -65,6 +66,7 @@ Options:
       --warn-as-error
       --color WHEN            auto | always | never
       --format FMT            human | json
+      --target 2.0            report migration requirements (static check only)
 <!-- flexr-help:end -->
 
 ## Exit statuses

@@ -14,7 +14,7 @@ module Flexr
     INLINE_EMIT_ARGUMENTS = /\A(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line)(?:\s*,\s*(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line))*\z/
 
     RUNTIME_SOURCES = %w[
-      version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
+      version.rb errors.rb diagnostics.rb deprecations.rb action_resolver.rb configuration.rb ir.rb
       unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/accel.rb
       runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
       runtime/interpreter.rb runtime/core.rb dsl.rb lexer.rb generated.rb

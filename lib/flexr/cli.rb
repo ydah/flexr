@@ -5,6 +5,7 @@ require_relative "artifact_writer"
 require_relative "generator"
 require_relative "importer"
 require_relative "options"
+require_relative "migration"
 
 module Flexr
   module CLI
@@ -85,6 +86,9 @@ module Flexr
           options.color = required_argument!(args, argument).to_sym
         when "--format"
           options.format = required_argument!(args, argument).to_sym
+        when "--target"
+          raise ArgumentError, "--target is only valid for the check command" unless command == :check
+          options.target = required_argument!(args, argument)
         when "--rule"
           rule_number = Integer(required_argument!(args, argument), 10)
           raise ArgumentError, "--rule must be non-negative" if rule_number.negative?
@@ -147,13 +151,15 @@ module Flexr
                    generator.generate
                    generator.diagnostics
                  else
-                   compile(read_spec(spec), overrides: options.overrides)
+                   parsed = read_spec(spec)
+                   compile(parsed, overrides: options.overrides)
                  end
       diagnostics = (compiled.is_a?(Array) ? compiled : Array(compiled&.diagnostics)).dup
       diagnostics.select! do |diagnostic|
         options.warn_level == :all ||
           (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
       end
+      diagnostics.concat(Migration.diagnostics(parsed)) if options.target
       set = DiagnosticSet.new
       diagnostics.each { |diagnostic| set << diagnostic }
       if options.format == :json
@@ -364,6 +370,7 @@ module Flexr
               --warn-as-error
               --color WHEN            auto | always | never
               --format FMT            human | json
+              --target 2.0            report migration requirements (static check only)
       USAGE
       status
     end
