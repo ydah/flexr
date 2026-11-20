@@ -34,3 +34,20 @@ compression and packed Base64 output trade source size against loading cost;
 packed transitions are queried without creating a second dense table, and a
 dense row is materialized lazily only for inspection. These choices do not
 change token streams.
+
+Explicit `accel :strscan` also derives complete-token expressions from the DFA.
+For each starting-byte branch, all accepting states must select the same rule.
+The reachable graph may have self-loops but no other cycles, and every edge
+must consume ASCII bytes. Outgoing byte sets are disjoint because they come
+from deterministic transitions. A greedy self-loop cannot consume an exit
+byte; greedy optional exits therefore find the longest accepted prefix without
+adopting the original Ruby regexp's alternation priority. Unproven branches
+fall back to DFA traversal.
+
+Expression expansion is capped at 32 states per path and 4 KiB per expression.
+Plans are shared by lexer instances through their compiled machine. Native
+scans use `StringScanner#skip`, retaining byte lengths without materializing
+matched text. The fast path is disabled for mutable or streaming input,
+non-retained buffers, token/step/cancellation guards, anchors, trailing context,
+and `firstmatch`. These restrictions preserve the DFA's boundary and resource
+checks.

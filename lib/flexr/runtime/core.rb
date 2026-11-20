@@ -178,7 +178,7 @@ module Flexr
     def text
       return @matched if @matched
 
-      @matched = @buffer.byteslice(@text_start...@match_end)
+      @matched = @buffer.byteslice(@text_start, @match_end - @text_start)
     end
 
     def text_bytesize
@@ -233,6 +233,31 @@ module Flexr
 
     def token_limit_required?
       @token_limit_required
+    end
+
+    def __flexr_whole_token_match(plans, position)
+      return unless plans && defined?(::StringScanner) && !scan_steps_guarded? && !token_limit_required?
+
+      source = @buffer.stable_source
+      return unless source&.frozen?
+
+      byte = source.getbyte(position)
+      plan = plans[byte] if byte
+      return unless plan
+
+      scanner = @__flexr_whole_scanner ||= ::StringScanner.new(source)
+      scanner.pos = position
+      length = scanner.skip(plan.regexp)
+      return unless length
+
+      match = @__flexr_whole_match ||= Runtime::Match.new
+      match.rule = self.class.__flexr_rules.fetch(plan.rule_index)
+      match.start_pos = position
+      match.end_pos = position + length
+      match.total_end_pos = match.end_pos
+      match
+    rescue ArgumentError
+      nil
     end
 
     def utf8_input?
@@ -539,7 +564,7 @@ module Flexr
     def location_value(starting, ending)
       return @matched if @matched && starting == @text_start && ending == @match_end
 
-      @buffer.byteslice(starting...ending).to_s
+      @buffer.byteslice(starting, ending - starting).to_s
     end
 
     def discard_consumed_input!
