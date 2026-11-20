@@ -15,6 +15,10 @@ one rule and share its action.
 text as its value. Without either option, the block runs in the lexer instance;
 if no block is given, the default action emits `[nil, text]`.
 
+Prefer `emit:` when the value is the unchanged matched text, such as
+`rule(/\+/, emit: :PLUS)`. This avoids executing a Ruby action block for each
+token. Use a block when converting a value or changing lexer state.
+
 `followed_by:` accepts a `Regexp` or `String`. It participates in rule
 selection but is not consumed. The method returns `nil`. Rules are numbered in
 source order starting at zero.
