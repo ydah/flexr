@@ -76,6 +76,32 @@ RSpec.describe "v2 runtime contracts" do
     end
   end
 
+  it "preserves whole-token acceleration plans when sharing generated tables" do
+    Dir.mktmpdir do |directory|
+      source = File.join(directory, "accelerated.flexr.rb")
+      output = File.join(directory, "accelerated.rb")
+      File.write(source, <<~RUBY)
+        class AcceleratedRactorFixture < Flexr::Lexer
+          accel :strscan
+          rule(/x[0-9]+;/, emit: :NUMBER)
+        end
+      RUBY
+      Flexr::Generator.new(source, output: output).generate
+      load output
+      original = AcceleratedRactorFixture.__flexr_compiled.machines.fetch(:initial).whole_tokens
+      expect(original.fetch("x".ord)).not_to be_nil
+      Flexr::Generated.shareable!(AcceleratedRactorFixture)
+      shared = AcceleratedRactorFixture.__flexr_compiled.machines.fetch(:initial).whole_tokens
+      expect(shared).to eq(original)
+      expect(Ractor.shareable?(shared)).to be(true)
+      worker = Ractor.new { AcceleratedRactorFixture.new("x123;").tokens }
+      result = worker.respond_to?(:value) ? worker.value : worker.take
+      expect(result).to eq([[:NUMBER, "x123;"]])
+    ensure
+      Object.send(:remove_const, :AcceleratedRactorFixture) if Object.const_defined?(:AcceleratedRactorFixture, false)
+    end
+  end
+
   it "rejects closure-based runtime specifications when requesting Ractor sharing" do
     lexer = Class.new(Flexr::Lexer) { rule(/a/) { emit :A } }
     expect { Flexr::Generated.shareable!(lexer) }.to raise_error(ArgumentError, /generated.*method actions/)

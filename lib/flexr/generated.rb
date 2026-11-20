@@ -118,7 +118,8 @@ module Flexr
         IR::Rule.new(**rule.to_h, trailing_dfa: rule.trailing_dfa && shareable_dfa(rule.trailing_dfa))
       end
       machines = original.machines.transform_values do |machine|
-        Automaton::Machine.new(dfa: shareable_dfa(machine.dfa), state_name: machine.state_name)
+        Automaton::Machine.new(dfa: shareable_dfa(machine.dfa), state_name: machine.state_name,
+                                whole_tokens: machine.whole_tokens)
       end
       compiled = Automaton::CompiledSpec.new(**original.to_h, machines: machines, rules: rules)
       Ractor.make_shareable([compiled, klass.__flexr_config, klass.__flexr_states, klass.__flexr_spec.eof_rules,

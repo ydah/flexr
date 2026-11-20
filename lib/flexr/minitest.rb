@@ -6,12 +6,12 @@ require_relative "testing"
 module Flexr
   module Minitest
     module Assertions
-      def assert_tokenize(lexer, input, expected, **options)
-        assert_equal expected, lexer.new(input, **options).tokens
+      def assert_tokenize(lexer, input, expected, **)
+        assert_equal expected, lexer.new(input, **).tokens
       end
 
-      def assert_token_snapshot(lexer, input, path, update: false, **options)
-        actual = Testing::Snapshot.render(lexer.new(input, **options).tokens)
+      def assert_token_snapshot(lexer, input, path, update: false, **)
+        actual = Testing::Snapshot.render(lexer.new(input, **).tokens)
         begin
           expected = Testing::Snapshot.expected(path, actual, update: update)
         rescue Errno::ENOENT

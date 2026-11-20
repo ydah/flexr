@@ -364,8 +364,7 @@ module Flexr
       loader = Object.new
       loader.define_singleton_method(:load_spec) do
         # --eval is opt-in and intentionally executes trusted specification code.
-        # rubocop:disable-next Security/Eval
-        eval(source, TOPLEVEL_BINDING, @path, 1)
+        eval(source, TOPLEVEL_BINDING, @path, 1) # rubocop:disable Security/Eval
       end
       loader.instance_variable_set(:@path, @path)
       loader.load_spec
