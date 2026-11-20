@@ -27,6 +27,31 @@ interpreter or YJIT samples, and ZJIT needs longer warm-up investigation.
 Keep the existing direct backend and `auto` selection until repeatable gains
 justify adding and maintaining another backend. No regression baseline changes
 are warranted by this experiment.
+## Lrama standalone recognizer experiment (2026-11-20)
+
+`benchmark/lrama_lexer.rb` builds a standalone grammar-token recognizer and
+adapts Lrama's lexer to use it for normal grammar tokens. Existing trivia,
+C-code scanning, identifier lookahead, token classes, locations, and parser
+are retained. The adapter deliberately uses private scanner positions; this
+is an experiment, not a supported Lrama integration or a production replacement.
+
+```sh
+git clone https://github.com/ruby/lrama.git /tmp/lrama
+git -C /tmp/lrama checkout 22de9d99f6402290a637627f3516a1a2db6c9aab
+bundle exec ruby benchmark/lrama_lexer.rb /tmp/lrama
+```
+
+The pinned upstream revision's 78 grammar fixtures produced identical token
+kinds, values, locations, and parser errors: 77 parsed successfully, and 3,767
+tokens were compared. Both paths include the same parser and event collection.
+On Ruby 4.0.9, arm64-darwin25, three corpus passes took 0.0434 seconds with
+Lrama's scanner and 11.9124 seconds with the standalone recognizer adapter.
+These short local timings are illustrative, not a statistical benchmark.
+
+This approach is substantially slower and adds adapter maintenance, so do not
+propose it upstream. It adds no Lrama runtime dependency to flexr. The tool
+checks the upstream scan layout and fails explicitly if it changes; a future
+attempt should first remove per-token adapter and firstmatch overhead.
 
 The benchmark harness reports bytes/s, tokens/s, and allocations per token.
 Numbers are intentionally recorded only after running the harness on the
