@@ -28,6 +28,31 @@ Runtime and generated `firstmatch` modes are stable and use the same rule-order
 semantics. The former `option :experimental` opt-in remains accepted but is
 unnecessary. Differences from longest-match behavior are reported as
 `FLEXR-W010` rather than making generation fail.
+## Type signatures
+
+The gem includes RBS signatures in `sig/flexr.rbs` for the stable API above.
+Steep can discover them through an application's RBS collection or an explicit
+`library "flexr"` entry. User-defined token values and internal regexp ASTs
+remain `untyped`; the signatures do not make internal tables stable APIs.
+Token and location fields are nullable because their public constructors allow
+omitted keywords. The token representation remains a union of arrays and
+structured tokens because `token_kind` is selected dynamically.
+Cancellation signatures accept Procs, Methods, and callable objects taking zero
+arguments or the lexer. `on_error=` accepts a callable returning `:skip`,
+`:raise`, `:token`, or `:halt`; assigning nil clears the handler.
+
+Validate the signatures and type-check the consumer example with:
+
+```sh
+BUNDLE_GEMFILE=gemfiles/types.gemfile bundle install
+BUNDLE_GEMFILE=gemfiles/types.gemfile bundle exec rbs -I sig validate
+BUNDLE_GEMFILE=gemfiles/types.gemfile bundle exec steep check
+```
+
+The type-checking tools require Ruby 3.3 or newer and run in a separate CI
+matrix for Ruby 3.3, 3.4, and 4.0. They add no runtime dependency to flexr.
+This checks the public signatures and a typed consumer, not the entire internal
+implementation.
 
 ## Experimental
 

@@ -1,0 +1,13 @@
+module PublicApiTypecheck
+  class Cancellation
+    def call: () -> bool
+  end
+
+  class ContextCancellation
+    def call: (Flexr::Lexer) -> bool
+  end
+
+  class ErrorHandler
+    def call: (Flexr::LexError) -> (:skip | :token)
+  end
+end
