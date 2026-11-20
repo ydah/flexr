@@ -22,6 +22,7 @@ module Flexr
 
       command = COMMANDS.include?(args.first) ? args.shift.to_sym : :generate
       options, output, rule_number, benchmark_args, positionals = parse(args, command)
+      raise ArgumentError, "lrama format is only valid for tokens" if options.format == :lrama && command != :tokens
       spec = positionals.shift
       raise ArgumentError, "a SPEC.rb path is required" unless spec
       raise ArgumentError, "unexpected argument: #{positionals.first}" unless positionals.empty?
@@ -88,6 +89,9 @@ module Flexr
         when "--rule"
           rule_number = Integer(required_argument!(args, argument), 10)
           raise ArgumentError, "--rule must be non-negative" if rule_number.negative?
+        when "--grammar"
+          raise ArgumentError, "--grammar is only valid for check" unless command == :check
+          options.grammar = required_argument!(args, argument)
         when "--input-file", "--baseline", "--iterations"
           raise ArgumentError, "#{argument} is only valid for the bench command" unless command == :bench
           benchmark_args.push(argument, required_argument!(args, argument))
@@ -112,7 +116,13 @@ module Flexr
         print_stats(spec, options, out)
       when :tokens
         parsed = read_spec(spec)
-        out.puts Array(parsed.config[:declared_tokens]).join(" ")
+        tokens = Array(parsed.config[:declared_tokens])
+        if options.format == :lrama
+          require_relative "grammar"
+          out.puts Grammar.declarations(tokens)
+        else
+          out.puts tokens.join(" ")
+        end
         EXIT_OK
       when :dot
         print_dot(spec, options, out)
@@ -150,6 +160,10 @@ module Flexr
                    compile(read_spec(spec), overrides: options.overrides)
                  end
       diagnostics = (compiled.is_a?(Array) ? compiled : Array(compiled&.diagnostics)).dup
+      if options.grammar
+        require_relative "grammar"
+        diagnostics.concat(Grammar.diagnostics(read_spec(spec), options.grammar))
+      end
       diagnostics.select! do |diagnostic|
         options.warn_level == :all ||
           (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
@@ -363,7 +377,8 @@ module Flexr
           -W, --warn LEVEL           all | default | none
               --warn-as-error
               --color WHEN            auto | always | never
-              --format FMT            human | json
+              --format FMT            human | json | lrama (tokens only)
+              --grammar PATH          compare emits with grammar %token declarations (check only)
       USAGE
       status
     end
