@@ -21,13 +21,13 @@ module Flexr
       return version(out) if args.delete("--version")
 
       command = COMMANDS.include?(args.first) ? args.shift.to_sym : :generate
-      options, output, rule_number, benchmark_args, positionals = parse(args, command)
+      options, output, rule_number, benchmark_args, positionals, trace_args = parse(args, command)
       raise ArgumentError, "lrama format is only valid for tokens" if options.format == :lrama && command != :tokens
       spec = positionals.shift
       raise ArgumentError, "a SPEC.rb path is required" unless spec
       raise ArgumentError, "unexpected argument: #{positionals.first}" unless positionals.empty?
 
-      execute(command, spec, options, output, rule_number, benchmark_args, out, err)
+      execute(command, spec, options, output, rule_number, benchmark_args, out, err, trace_args: trace_args)
     rescue ArgumentError => e
       err.puts "error: #{e.message}"
       usage(err, status: EXIT_USAGE)
@@ -46,6 +46,7 @@ module Flexr
       rule_number = nil
       benchmark_args = []
       positionals = []
+      trace_args = {}
       parsing_options = true
 
       until args.empty?
@@ -92,7 +93,23 @@ module Flexr
         when "--grammar"
           raise ArgumentError, "--grammar is only valid for check" unless command == :check
           options.grammar = required_argument!(args, argument)
-        when "--input-file", "--baseline", "--iterations"
+        when "--input", "--generated"
+          raise ArgumentError, "#{argument} is only valid for the trace command" unless command == :trace
+          if argument == "--generated"
+            trace_args[:generated] = true
+          else
+            trace_args[:input] = args.shift || raise(ArgumentError, "--input requires a value")
+          end
+        when "--input-file"
+          value = required_argument!(args, argument)
+          if command == :trace
+            trace_args[:input_file] = value
+          elsif command == :bench
+            benchmark_args.push(argument, value)
+          else
+            raise ArgumentError, "#{argument} is only valid for the trace or bench command"
+          end
+        when "--baseline", "--iterations"
           raise ArgumentError, "#{argument} is only valid for the bench command" unless command == :bench
           benchmark_args.push(argument, required_argument!(args, argument))
         else
@@ -101,14 +118,17 @@ module Flexr
       end
 
       options.validate!
-      [options, output, rule_number, benchmark_args, positionals]
+      raise ArgumentError, "choose --input or --input-file" if trace_args.key?(:input) && trace_args[:input_file]
+      raise ArgumentError, "--generated requires --input or --input-file" if
+        trace_args[:generated] && !trace_args.key?(:input) && !trace_args[:input_file]
+      [options, output, rule_number, benchmark_args, positionals, trace_args]
     rescue ArgumentError => e
       raise e if e.message.start_with?("unsupported ", "--rule")
 
       raise ArgumentError, "invalid option value: #{e.message}"
     end
 
-    def execute(command, spec, options, output, rule_number, benchmark_args, out, err)
+    def execute(command, spec, options, output, rule_number, benchmark_args, out, err, trace_args: {})
       case command
       when :check
         check(spec, options, out)
@@ -129,7 +149,11 @@ module Flexr
       when :explain
         print_explanation(spec, rule_number, out)
       when :trace
-        print_trace(spec, options, out)
+        if trace_args.key?(:input) || trace_args[:input_file]
+          print_input_trace(spec, options, trace_args, out)
+        else
+          print_trace(spec, options, out)
+        end
       when :bench
         run_benchmark(spec, options, benchmark_args, out)
       when :import
@@ -274,6 +298,34 @@ module Flexr
       EXIT_OK
     end
 
+    def print_input_trace(spec, options, trace_args, out)
+      require_relative "trace"
+      parsed = read_spec(spec)
+      source = trace_args[:generated] ? generate(spec, options) : File.read(spec)
+      scope = Module.new
+      scope.module_eval(source, spec, 1)
+      namespace = parsed.class_name.start_with?("::") ? Object : scope
+      klass = parsed.class_name.split("::").reject(&:empty?).inject(namespace) { |parent, name| parent.const_get(name, false) }
+      unless trace_args[:generated]
+        options.overrides.each do |name, value|
+          klass.public_send(name, value) if %i[backend token_kind accel].include?(name)
+        end
+        klass.__flexr_config.options.merge!(options.overrides.slice(:max_dfa_states, :warn_level))
+        compiled = klass.compile!
+        if options.warn_as_error
+          diagnostic = Array(compiled.diagnostics).find do |item|
+            item.warning? && (options.warn_level == :all || item.code != "FLEXR-W016")
+          end
+          raise CompileError.new(diagnostic.message, diagnostic: diagnostic) if diagnostic
+        end
+      end
+      input = trace_args[:input_file] ? File.binread(trace_args[:input_file]) : trace_args.fetch(:input)
+      trace = Trace.new(klass.new(input, filename: trace_args[:input_file]))
+      trace.run
+      out.puts(options.format == :json ? JSON.pretty_generate(steps: trace.steps) : trace.render)
+      EXIT_OK
+    end
+
     def run_benchmark(spec, options, benchmark_args, out)
       require_relative "../../benchmark/run"
       args = ["--spec", spec, *benchmark_args]
@@ -379,6 +431,9 @@ module Flexr
               --color WHEN            auto | always | never
               --format FMT            human | json | lrama (tokens only)
               --grammar PATH          compare emits with grammar %token declarations (check only)
+              --input STRING          trace input (executes SPEC actions)
+              --input-file PATH       trace or benchmark input
+              --generated             trace generated scanner
       USAGE
       status
     end

@@ -18,6 +18,10 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
   export declarations using `tokens --format lrama`.
 - The explicit `firstmatch` backend is stable and no longer requires
   `option :experimental`. The default still uses longest-match selection.
+### Added
+
+- `trace --input` and `trace --input-file` show candidate lengths, rule
+  selection, and actions in human or JSON output for runtime and generated scanners.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
