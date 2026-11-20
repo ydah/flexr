@@ -2,6 +2,7 @@ name: docs
 
 on:
   push:
+    branches: [main]
     paths-ignore:
       - "site/**"
       - ".github/workflows/pages.yml"
