@@ -3,6 +3,22 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## 2.0.0.pre.1 (unreleased)
+
+### Changed
+
+- Require Ruby 3.4+ for runtime, generation, and standalone artifacts.
+- Make structured tokens and locations immutable `Data` records while retaining
+  attribute readers and read-only indexing. Replace field mutation with `with`.
+- Reject unknown `error_mode` values during initialization.
+- Use artifact schema 2 and runtime ABI 2; regenerate v1 lexers after upgrading.
+
+### Added
+
+- Opt-in sharing of generated method-action tables across Ractors, with one
+  lexer instance per worker. Captured closures and EOF blocks require separate
+  handling and are rejected by this preparation step.
+
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
 ### Added

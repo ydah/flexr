@@ -14,9 +14,10 @@ RSpec.describe Flexr::Runtime::Location do
   it "defers column computation by default" do
     location = lexer_class.new("あ").next_token.location
 
-    expect(location[:column_begin]).to be_nil
+    expect(location.deconstruct_keys(nil)[:column_begin]).to be_nil
     expect(location.column_begin).to eq(1)
     expect(location.column_end).to eq(2)
+    expect(location.deconstruct_keys(nil)[:column_begin]).to be_nil
   end
 
   it "computes columns eagerly when requested" do

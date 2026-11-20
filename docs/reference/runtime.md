@@ -21,8 +21,8 @@ Lexer.new(input,
 
 `input` must be a `String` or an object responding to `read`. `filename` is
 copied into locations and lexical errors. `error_mode` is `:raise`, `:token`,
-or `:panic`; unknown values fall back to raising when an unmatched byte is
-handled. `max_lookahead_size` defaults to `max_token_size`. `max_steps: nil`
+or `:panic`; unknown values raise `ArgumentError` at initialization.
+`max_lookahead_size` defaults to `max_token_size`. `max_steps: nil`
 leaves the step count unbounded; `cancellation` may be a callable accepting
 zero arguments or the lexer. Size limits are non-negative, and `chunk_size`
 must be positive.

@@ -96,8 +96,8 @@ module FlexrVerification
     end
   end
 
-  def lexer_outcome(lexer_class, input, **options)
-    { kind: :tokens, tokens: lexer_class.new(input.dup, **options).tokens }
+  def lexer_outcome(lexer_class, input, **)
+    { kind: :tokens, tokens: lexer_class.new(input.dup, **).tokens }
   rescue StandardError => e
     {
       kind: :error,

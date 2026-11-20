@@ -60,8 +60,8 @@ backreferences, or other non-regular constructs.
 | Mode | Build requirement | Runtime requirement | Best for |
 |---|---|---|---|
 | Runtime | `flexr` gem | `flexr` gem | Development, tests, and dynamic Ruby specs |
-| Generated | `flexr` plus Prism on Ruby 3.3+ | `flexr` gem | Reproducible deployment artifacts |
-| Standalone generated | `flexr` plus Prism on Ruby 3.3+ | Generated file and Ruby standard library | Distribution without the gem |
+| Generated | `flexr` plus Prism on Ruby 3.4+ | `flexr` gem and Ruby 3.4+ | Reproducible deployment artifacts |
+| Standalone generated | `flexr` plus Prism on Ruby 3.4+ | Generated file and Ruby 3.4+ standard library | Distribution without the gem |
 
 Static generation is the default. Use `--eval` only for trusted specifications;
 it executes the specification during the build. See the
@@ -93,7 +93,7 @@ matches your task:
 
 ## Compatibility and stability
 
-Runtime Ruby support starts at 3.1. The generator requires Ruby 3.3 or newer
+Runtime Ruby support starts at 3.4. The generator requires Ruby 3.4 or newer
 because it uses Prism. Stable and experimental APIs are listed in the
 [public API contract](docs/reference/public-api.md). The vendored Unicode
 snapshot and generated-artifact policy are described in the

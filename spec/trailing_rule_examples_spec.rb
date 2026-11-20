@@ -5,11 +5,11 @@ require "rbconfig"
 require "stringio"
 
 RSpec.describe "trailing context rule examples" do
-  def lexer_class(backend = :table, &rules)
+  def lexer_class(backend = :table, &)
     Class.new(Flexr::Lexer) do
       backend backend
       option :experimental if backend == :firstmatch
-      class_eval(&rules)
+      class_eval(&)
     end
   end
 

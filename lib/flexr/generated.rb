@@ -2,8 +2,8 @@
 
 module Flexr
   module Generated
-    ARTIFACT_SCHEMA_VERSION = 1
-    RUNTIME_ABI_VERSION = 1
+    ARTIFACT_SCHEMA_VERSION = 2
+    RUNTIME_ABI_VERSION = 2
 
     module_function
 
@@ -85,6 +85,33 @@ module Flexr
         "compiler_version=#{compiler_version.inspect}"
       end
       incompatible_artifact!(detail)
+    end
+
+    def shareable!(klass)
+      unless klass.__flexr_generated? && klass.__flexr_rules.none? { |rule| rule.action.is_a?(Proc) } &&
+          klass.__flexr_generated_actions.empty? && klass.__flexr_spec.eof_rules.empty?
+        raise ArgumentError, "Ractor sharing requires generated method actions without captured closures or EOF blocks"
+      end
+
+      original = klass.__flexr_compiled
+      rules = original.rules.map do |rule|
+        IR::Rule.new(**rule.to_h, trailing_dfa: rule.trailing_dfa && shareable_dfa(rule.trailing_dfa))
+      end
+      machines = original.machines.transform_values do |machine|
+        Automaton::Machine.new(dfa: shareable_dfa(machine.dfa), state_name: machine.state_name)
+      end
+      compiled = Automaton::CompiledSpec.new(**original.to_h, machines: machines, rules: rules)
+      Ractor.make_shareable([compiled, klass.__flexr_config, klass.__flexr_states, klass.__flexr_spec.eof_rules,
+                             klass.__flexr_generated_actions, klass.__flexr_generated_eof_actions])
+      klass.instance_variable_set(:@__flexr_rules, rules)
+      klass.__flexr_set_compiled!(compiled)
+      klass
+    end
+
+    def shareable_dfa(dfa)
+      Automaton::DFA.new(transitions: dfa.transitions.map(&:dup), accepts: dfa.accepts, ec: dfa.ec,
+                         class_count: dfa.class_count, start: dfa.start, rule_ids: dfa.rule_ids,
+                         direct: dfa.direct)
     end
 
     def incompatible_artifact!(detail)

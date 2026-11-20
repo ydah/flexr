@@ -4,13 +4,16 @@
 
 | Surface | Requirement |
 |---|---|
-| Runtime gem | Ruby 3.1+ |
-| Generator | Ruby 3.3+ with Prism available |
+| Runtime gem | Ruby 3.4+ |
+| Generator | Ruby 3.4+ with Prism available |
 | Standalone runtime | Compatible Ruby plus the generated file |
 | Optional acceleration | Ruby `strscan` when available; regexp fallback remains valid |
 
 Runtime mode does not require Prism. Generated mode uses Prism only while
 reading the source; normal generated output does not need the generator.
+Alternate Ruby implementations must implement Ruby 3.4 before using this
+major version. The former JRuby and TruffleRuby jobs targeting older language
+versions are removed; this does not claim those engines have been verified.
 
 ## Matching and encoding
 
@@ -33,6 +36,8 @@ Runtime and generated-file compatibility is preserved within a major version
 unless a migration is explicitly documented. Generated artifacts include a
 payload digest and Unicode version so stale or cross-version output can be
 detected. Do not assume that internal table layouts are stable.
+Version 2 uses artifact schema 2 and runtime ABI 2. Regenerate v1 artifacts
+after upgrading; incompatible metadata produces `FLEXR-E020`.
 
 Stable backends are `table`, `direct`, and `auto`. `firstmatch` is experimental
 and does not share the longest-match promise.

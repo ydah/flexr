@@ -12,9 +12,9 @@ Gem::Specification.new do |spec|
   spec.description = "A Ruby DSL and source generator for deterministic byte-oriented lexers."
   spec.homepage = "https://github.com/ydah/flexr"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.1.0"
+  spec.required_ruby_version = ">= 3.4.0"
   spec.metadata["rubygems_mfa_required"] = "true"
-  spec.metadata["generator_ruby_version"] = ">= 3.3 (Prism)"
+  spec.metadata["generator_ruby_version"] = ">= 3.4 (Prism)"
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/ydah/flexr/tree/main"
   spec.metadata["bug_tracker_uri"] = "https://github.com/ydah/flexr/issues"
