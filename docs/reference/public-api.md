@@ -24,16 +24,15 @@ in the reference pages and are covered by the test suite.
 constants through autoload. Applications that want an explicit load boundary
 can require `flexr/runtime`, `flexr/generator`, or `flexr/cli` directly.
 
+Runtime and generated `firstmatch` modes are stable and use the same rule-order
+semantics. The former `option :experimental` opt-in remains accepted but is
+unnecessary. Differences from longest-match behavior are reported as
+`FLEXR-W010` rather than making generation fail.
+
 ## Experimental
 
-- `backend :firstmatch` and `--backend firstmatch`.
-- `option :experimental` as the opt-in for experimental behavior.
-- Any future backend or option explicitly marked experimental in its reference.
-
-Experimental behavior may change semantics or output between minor releases.
-`firstmatch` requires the opt-in. Runtime and generated `firstmatch` modes use
-the same rule-order semantics; overlap with longest-match behavior is reported
-as `FLEXR-W010` rather than making generation fail.
+Future backends or options explicitly marked experimental in their reference
+may change semantics or output between minor releases.
 
 ## Internal; compatibility is not guaranteed
 

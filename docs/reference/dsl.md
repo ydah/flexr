@@ -49,10 +49,13 @@ does not restrict `emit` at runtime.
 
 ## `backend(name)`
 
-Selects `:table`, `:direct`, `:auto`, or the experimental `:firstmatch`
+Selects `:table`, `:direct`, `:auto`, or `:firstmatch`
 backend. `:table`, `:direct`, and `:auto` preserve the stable longest-match
-contract. `:firstmatch` requires `option :experimental` and can change the
-meaning of overlapping rules.
+contract. `:firstmatch` selects the first matching rule in source order,
+even when a later rule could consume more text. Within a rule, alternation
+also follows Ruby regexp order. Choose it when rule priority is intentional;
+the compiler reports possible differences from longest-match as `FLEXR-W010`.
+The default remains `:table`.
 
 ## `token_kind(name)`
 
@@ -69,8 +72,8 @@ model is valid.
 ## `option(*values)`
 
 Adds boolean options to the specification. Stable options include
-`:unicode`, `:eager_columns`, and `:allow_empty_match`. `:experimental` is a
-capability opt-in for experimental behavior such as `:firstmatch`.
+`:unicode`, `:eager_columns`, and `:allow_empty_match`. `:experimental` remains
+accepted for compatibility; it is no longer required by `:firstmatch`.
 `:standalone` is build metadata used by standalone generation. Unknown option
 names raise immediately so misspellings cannot silently change behavior.
 
