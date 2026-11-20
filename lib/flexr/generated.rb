@@ -96,7 +96,7 @@ module Flexr
       config = klass.__flexr_config
       if config.backend == :firstmatch && klass.__flexr_rules.any? do |rule|
           rule.patterns.any? do |pattern|
-            pattern.is_a?(::Regexp) && Flexr.reference_pattern?(pattern, unicode: config.options[:unicode])
+            Regexp::Matcher.reference?(pattern, encoding: config.encoding, unicode: config.options[:unicode] == true)
           end
         end
         raise ArgumentError, "Ractor sharing does not support firstmatch reference patterns; use table, direct, or auto"

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "stringio"
+require "open3"
 
 RSpec.describe "v2 runtime contracts" do
   it "uses immutable Data records with read-only indexing and replacement" do
@@ -142,6 +143,31 @@ RSpec.describe "v2 runtime contracts" do
       expect(ReferenceRactorFixture.new("a").tokens).to eq([[:WORD, "a"]])
     ensure
       Object.send(:remove_const, :ReferenceRactorFixture) if Object.const_defined?(:ReferenceRactorFixture, false)
+    end
+  end
+
+  it "shares standalone firstmatch data in a fresh Ruby process without the gem" do
+    Dir.mktmpdir do |directory|
+      source = File.join(directory, "standalone.flexr.rb")
+      output = File.join(directory, "standalone.rb")
+      script = File.join(directory, "run.rb")
+      File.write(source, <<~RUBY)
+        class StandaloneRactorFixture < Flexr::Lexer
+          backend :firstmatch
+          option :experimental
+          rule(/a/, emit: :A)
+        end
+      RUBY
+      Flexr::Generator.new(source, output: output, options: { standalone: true }).generate
+      File.write(script, <<~RUBY)
+        load ARGV.fetch(0)
+        Flexr::Generated.shareable!(StandaloneRactorFixture)
+        worker = Ractor.new { StandaloneRactorFixture.new("a").tokens }
+        result = worker.respond_to?(:value) ? worker.value : worker.take
+        abort "standalone Ractor token mismatch" unless result == [[:A, "a"]]
+      RUBY
+      _output, errors, status = Open3.capture3({ "RUBYOPT" => nil }, RbConfig.ruby, "--disable-gems", script, output)
+      expect(status).to be_success, errors
     end
   end
 end
