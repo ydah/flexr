@@ -13,7 +13,10 @@ module Flexr
     DEFAULT_SPEC = File.expand_path("../examples/json/lexer.flexr.rb", __dir__)
     DEFAULT_INPUTS = {
       %r{/examples/json/} => ('{"answer": 42}' * 10_000).freeze,
-      %r{/examples/toy_lang/} => ("answer + 12" * 10_000).freeze
+      %r{/examples/toy_lang/} => ("answer + 12" * 10_000).freeze,
+      %r{/examples/toml/} => ('title = "flexr" ' * 10_000).freeze,
+      %r{/examples/graphql/} => ('query { user(id: 12) { name } } ' * 10_000).freeze,
+      %r{/examples/sql/} => ('select name from users where id >= 12; ' * 10_000).freeze
     }.freeze
 
     module_function
