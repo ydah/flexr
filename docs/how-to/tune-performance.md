@@ -13,6 +13,11 @@ application startup. `backend :auto` compares dense memory, packed memory, and
 lookup costs rather than using a fixed table-size threshold; `:table` and
 `:direct` preserve the same longest-match semantics.
 
+Use `emit:` for tokens whose value is the unchanged matched text. For example,
+`rule(/:/, emit: :COLON)` avoids invoking an action block for every separator.
+Keep blocks for value conversions and state transitions. The JSON example
+uses this form for punctuation.
+
 Acceleration is an optimization over the DFA, not a second matcher. `accel
 :auto` selects an available safe path, while `:strscan`, `:regexp`, and `:none`
 make the choice explicit. Trailing context disables region acceleration for the

@@ -218,3 +218,26 @@ ruby -Ilib benchmark/run.rb --spec tmp/whole-token/examples/json/lexer.flexr.rb 
 ```
 
 Repeat the last command with `--yjit` or `--zjit` immediately after `ruby`.
+
+### JSON punctuation with `emit:`
+
+Replacing the JSON example's six punctuation action blocks with the existing
+`emit:` option preserved token types and values across runtime, generated,
+standalone, String, and one-byte IO input, including Unicode and escaped quotes.
+The same Ruby 4.0.9 host, default corpus, and five warmup plus five measured
+iterations produced this interpreter sample after the range-allocation change:
+
+| mode | MB/s before → after | allocations/token before → after | handwritten ratio before → after |
+|---|---:|---:|---:|
+| runtime | 1.863 → 1.928 | 4.200 → 3.600 | 0.221x → 0.249x |
+| generated | 1.794 → 1.963 | 4.210 → 3.610 | 0.213x → 0.254x |
+
+The 4.0 allocations/token target is met for this JSON example; 3.4 and the 0.35x
+throughput target remain unmet. This sample does not establish results for
+other lexers or JIT engines. Conversion actions for strings, numbers, booleans,
+and null remain blocks.
+
+The JSON golden digest and regression baseline's source fingerprint were
+updated for the equivalent shorthand specification. Input identity, captured
+baseline metrics, ratio thresholds, and the 0.18x performance floor were kept.
+Use the default benchmark commands above to reproduce the new example.

@@ -9,12 +9,12 @@ module JsonExample
       :STRING, :NUMBER, :TRUE, :FALSE, :NULL
 
     rule(/[ \t\r\n]+/, skip: true)
-    rule(/\{/) { emit :LBRACE }
-    rule(/\}/) { emit :RBRACE }
-    rule(/\[/) { emit :LBRACKET }
-    rule(/\]/) { emit :RBRACKET }
-    rule(/:/) { emit :COLON }
-    rule(/,/) { emit :COMMA }
+    rule(/\{/, emit: :LBRACE)
+    rule(/\}/, emit: :RBRACE)
+    rule(/\[/, emit: :LBRACKET)
+    rule(/\]/, emit: :RBRACKET)
+    rule(/:/, emit: :COLON)
+    rule(/,/, emit: :COMMA)
     rule(/true/) { emit :TRUE, true }
     rule(/false/) { emit :FALSE, false }
     rule(/null/) { emit :NULL, nil }
