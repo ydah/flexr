@@ -35,6 +35,7 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Fixed
 
+- Preserve UTF-8 source when generating lexers with Unicode action literals and surrounding constants.
 - Show source context and installation guidance when Prism cannot load.
 - Identify the installing file for incompatible generated artifacts when available.
 
