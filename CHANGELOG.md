@@ -22,6 +22,10 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 - `trace --input` and `trace --input-file` show candidate lengths, rule
   selection, and actions in human or JSON output for runtime and generated scanners.
+### Added
+
+- An optional Ruby LSP add-on for diagnostics from unsaved `.flexr.rb` files
+  and rule hovers with counterexamples and overlap information.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
