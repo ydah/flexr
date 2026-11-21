@@ -178,6 +178,12 @@ module FlexrVerification
     reference = inputs.map { |input| reference_lexer.new(input, error_mode: :panic).tokens }
     raise "acceleration token mismatch in #{spec}" unless accelerated == reference
 
+    remove_constant(runtime_class_name(spec))
+    whole_token_lexer = load_runtime(spec)
+    whole_token_lexer.accel(:strscan)
+    whole_tokens = inputs.map { |input| whole_token_lexer.new(input.dup.freeze, error_mode: :panic).tokens }
+    raise "whole-token acceleration mismatch in #{spec}" unless whole_tokens == reference
+
     lexer.compile!.machines.each_value do |machine|
       Flexr::Automaton::Accel.extract(machine.dfa).each do |region|
         256.times do |byte|

@@ -178,3 +178,43 @@ following instrumented times:
 Scanning is the largest category in this instrumented sample, followed by token
 handling. These categories identify work to investigate; they do not establish
 uninstrumented phase percentages or prove a particular optimization will help.
+## 2026-11-20: whole-token acceleration
+
+Ruby 4.0.9 on arm64-darwin-25, the default 140,000-byte JSON corpus, 50,000
+emitted tokens, and five warmup plus five measured iterations produced these
+sequential local samples. The control checkout was `0391a6e`. The explicit
+StringScanner variant adds only `accel :strscan` to the JSON specification.
+
+| accelerator | engine | runtime MB/s before → after | generated MB/s before → after | allocations/token after, runtime / generated |
+|---|---|---:|---:|---:|
+| auto | interpreter | 1.739 → 1.856 | 1.645 → 1.815 | 4.200 / 4.210 |
+| auto | YJIT | 4.967 → 5.210 | 2.977 → 3.184 | 4.200 / 4.210 |
+| auto | ZJIT | 1.301 → 2.119 | 0.373 → 0.441 | 4.200 / 4.210 |
+| strscan | interpreter | 1.767 → 1.973 | 0.785 → 1.090 | 4.200 / 4.610 |
+| strscan | YJIT | 4.983 → 5.182 | 1.224 → 1.633 | 4.200 / 4.610 |
+| strscan | ZJIT | 2.029 → 1.838 | 0.875 → 0.791 | 4.200 / 4.610 |
+
+The default mode's change removes temporary ranges when extracting text and
+location spans. Its allocations fell from 5.200 / 5.210. Explicit StringScanner
+mode also uses proven whole-token scans; its generated allocations fell from
+6.210 to 4.610. This does not meet the 4.0 or 3.4 allocation targets. Whole-token
+scanning remains explicit because the ZJIT sample regressed; these samples do
+not establish a universal speedup or a release performance qualification.
+
+Reproduce the default sample with:
+
+```sh
+ruby -Ilib benchmark/run.rb --iterations 5 --json
+ruby --yjit -Ilib benchmark/run.rb --iterations 5 --json
+ruby --zjit -Ilib benchmark/run.rb --iterations 5 --json
+```
+
+To measure explicit StringScanner mode without changing the maintained example:
+
+```sh
+mkdir -p tmp/whole-token/examples/json
+ruby -e 'source = File.read("examples/json/lexer.flexr.rb"); File.write("tmp/whole-token/examples/json/lexer.flexr.rb", source.sub("backend :direct", "backend :direct\n    accel :strscan"))'
+ruby -Ilib benchmark/run.rb --spec tmp/whole-token/examples/json/lexer.flexr.rb --iterations 5 --json
+```
+
+Repeat the last command with `--yjit` or `--zjit` immediately after `ruby`.

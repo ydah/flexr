@@ -24,7 +24,14 @@ module Flexr
         position = @lexer.byte_pos
         return nil unless @lexer.valid_utf8_at?(position)
         return scan_firstmatch(position) if @config.backend == :firstmatch
-        return scan_fast(machine, position) if fast_path?(machine)
+        if fast_path?(machine)
+          if machine.whole_tokens
+            match = @lexer.__flexr_whole_token_match(machine.whole_tokens, position)
+            return match if match
+          end
+
+          return scan_fast(machine, position)
+        end
 
         buffer = @lexer.buffer
         state = machine.dfa.start

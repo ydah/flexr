@@ -27,11 +27,13 @@ module Flexr
 
       def source(indent: "  ")
         lines = []
+        whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         lines << "#{indent}def scan_one"
         lines << "#{indent}  if @__flexr_generated_scan_state != @state"
         lines << "#{indent}    machine = self.class.__flexr_compiled.machines.fetch(@state)"
         lines << "#{indent}    @__flexr_generated_scan_state = @state"
         lines << "#{indent}    @__flexr_generated_scan_dfa = machine.dfa"
+        lines << "#{indent}    @__flexr_generated_whole_tokens = machine.respond_to?(:whole_tokens) ? machine.whole_tokens : nil" if whole_tokens
         lines << "#{indent}    @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)"
         lines << "#{indent}    @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)"
         lines << "#{indent}  end"
@@ -39,6 +41,10 @@ module Flexr
         lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast"
         lines << "#{indent}  position = byte_pos"
         lines << "#{indent}  return nil unless valid_utf8_at?(position)"
+        if whole_tokens
+          lines << "#{indent}  match = __flexr_whole_token_match(@__flexr_generated_whole_tokens, position) if @__flexr_generated_whole_tokens"
+          lines << "#{indent}  return match if match"
+        end
         lines << "#{indent}  return __flexr_generated_scan_simple(dfa, position) if @__flexr_generated_scan_simple"
         lines << "#{indent}  cursor = position"
         lines << "#{indent}  current = dfa.start"

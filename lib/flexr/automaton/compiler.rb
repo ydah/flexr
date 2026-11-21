@@ -13,7 +13,10 @@ module Flexr
         state_names = effective_states
         machines = state_names.to_h do |state_name|
           rules = rules_for(state_name)
-          [state_name, Machine.new(dfa: compile_machine(rules), state_name: state_name)]
+          dfa = compile_machine(rules)
+          plans = Accel.whole_token_plans(dfa, rules) if
+            @spec.backend != :firstmatch && @spec.options[:accel] == :strscan
+          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans)]
         rescue CompileError => e
           e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
           raise

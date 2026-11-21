@@ -35,6 +35,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 - A v2 migration guide, `check --target 2.0`, and opt-in deprecated-category
   warnings for record mutation, unknown error modes, older Rubies, and ABI 1
   generated artifacts.
+- Added conservative whole-token acceleration for explicit `accel :strscan`
+  with frozen String input and reduced temporary allocations when extracting
+  matched text and location spans.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
