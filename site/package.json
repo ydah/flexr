@@ -9,7 +9,7 @@
     "verify": "node scripts/verify-site.mjs"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.4",
+    "@astrojs/check": "^0.9.12",
     "typescript": "^5.7.3"
   },
   "dependencies": {
