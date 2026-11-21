@@ -10,6 +10,7 @@ require "rspec/core/rake_task"
 require "tmpdir"
 require "flexr"
 require_relative "tools/regexp_tokenizer_reference"
+require_relative "tools/verification_failure"
 
 RSpec::Core::RakeTask.new(:spec)
 task test: :spec
@@ -20,6 +21,7 @@ module FlexrVerification
   TOKENIZER_SPEC = File.join(ROOT, "lib/flexr/regexp/tokenizer.flexr.rb").freeze
   TOKENIZER_GENERATED = File.join(ROOT, "lib/flexr/regexp/tokenizer.rb").freeze
   VERIFICATION_SPECS = (EXAMPLES + [TOKENIZER_SPEC]).freeze
+  FUZZ_OPTIONS = { error_mode: :panic }.freeze
   EXPECTED_INPUTS = {
     %r{/examples/calculator/} => "if ifx == = 12 + 3",
     %r{/examples/json/} => '{"answer": 42}',
@@ -120,6 +122,91 @@ module FlexrVerification
       rule: e.respond_to?(:rule) ? e.rule : nil,
       text: e.respond_to?(:text) ? e.text : nil
     }
+  end
+
+  def differential_outcomes(pattern, input, compiled, host_patterns)
+    key = [pattern.source, pattern.options]
+    host_expected = begin
+      (host_patterns[key] ||= Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options)).match?(input)
+    rescue RegexpError, ArgumentError, EncodingError
+      false
+    end
+    if Flexr.reference_pattern?(pattern)
+      reference = Flexr::Unicode::ReferenceRegexp.compiled(
+        pattern, encoding: pattern.encoding, options: pattern.options, unicode: false
+      )
+      match = reference.match(input, 0)
+      vendored_expected = !match.nil? && match.begin(0).zero? && match[0].bytesize == input.bytesize
+      return unless vendored_expected == host_expected
+    end
+
+    [host_expected, (compiled[key] ||= Flexr.compile_pattern(pattern)).accept?(input)]
+  end
+
+  def differential_mismatch(pattern, input, expected, actual)
+    "differential mismatch: #{pattern.inspect} #{input.inspect} expected=#{expected} actual=#{actual}"
+  end
+
+  def with_fuzz_lexers(spec)
+    runtime_lexer = load_runtime(spec)
+    class_name = runtime_lexer.name
+    remove_constant(class_name)
+    Dir.mktmpdir("flexr-fuzz-") do |directory|
+      generated_path = File.join(directory, File.basename(spec))
+      File.binwrite(generated_path, generated_source(spec))
+      load generated_path
+      generated_lexer = constantize(class_name)
+      raise "no generated lexer found for #{spec}" unless generated_lexer&.__flexr_generated?
+
+      yield runtime_lexer, generated_lexer
+    end
+  ensure
+    if class_name
+      remove_constant(class_name)
+      parent, _, name = class_name.rpartition("::")
+      constantize(parent).const_set(name, runtime_lexer)
+    end
+  end
+
+  def fuzz_mismatch(spec, input, expected, actual)
+    "fuzz mode mismatch: #{relative_spec(spec)} input=#{input.inspect} " \
+      "runtime=#{expected.inspect} generated=#{actual.inspect}"
+  end
+
+  def replay_failure(record)
+    input = FailureCase.decode_bytes(FailureCase.section(record, "input"))
+    task = record.fetch("task")
+    case task
+    when "test:differential"
+      source = FailureCase.section(record, "pattern")
+      options = source.fetch("options")
+      raise ArgumentError, "invalid regexp options" unless options.is_a?(Integer)
+
+      pattern = Regexp.new(FailureCase.decode_bytes(FailureCase.section(source, "source")), options)
+      raise ArgumentError, "regexp encoding differs from the recorded encoding" unless pattern.encoding.name == source.fetch("encoding")
+
+      outcomes = differential_outcomes(pattern, input, {}, {})
+      abort "differential replay skipped: host and vendored Unicode results differ" unless outcomes
+      expected, actual = outcomes
+      abort differential_mismatch(pattern, input, expected, actual) unless expected == actual
+    when "fuzz"
+      recorded_spec = FailureCase.section(record, "spec")
+      path = recorded_spec.fetch("path")
+      spec = VERIFICATION_SPECS.find { |candidate| relative_spec(candidate) == path }
+      raise ArgumentError, "unknown fuzz lexer specification: #{path.inspect}" unless spec
+      options = FUZZ_OPTIONS.transform_keys(&:to_s).transform_values(&:to_s)
+      raise ArgumentError, "unsupported fuzz options" unless record.fetch("options") == options
+
+      warn "Fuzz lexer specification has changed: #{path}" unless Digest::SHA256.file(spec).hexdigest == recorded_spec.fetch("sha256")
+      with_fuzz_lexers(spec) do |runtime_lexer, generated_lexer|
+        expected = lexer_outcome(runtime_lexer, input, **FUZZ_OPTIONS)
+        actual = lexer_outcome(generated_lexer, input, **FUZZ_OPTIONS)
+        abort fuzz_mismatch(spec, input, expected, actual) unless expected == actual
+      end
+    else
+      raise ArgumentError, "unknown verification task: #{task.inspect}"
+    end
+    puts "verification: #{task} case #{record.fetch('case')} passed"
   end
 
   def load_runtime(spec)
@@ -412,50 +499,41 @@ task "bench:matrix" do
 end
 
 namespace :test do
+  desc "Compare Flexr pattern acceptance with Ruby's regexp engine"
   task :differential do
     patterns = [/[a-z]+/, /a(?:b|c)?/, /[0-9]{1,3}/, /[^\n]+/, /foo/,
                 /[[:alpha:]]+/, /[[:alnum:]]+/, /\p{L}+/, /\p{Nd}+/]
     cases = Integer(ENV.fetch("FLEXR_DIFFERENTIAL_CASES", "1000000"), 10)
-    random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
+    seed = Integer(ENV.fetch("FLEXR_SEED", "17"), 10)
+    random = Random.new(seed)
     unicode_inputs = ["", "a", "あ", "é", "ß", "Ω", "١", "　", "aあ", "éΩ", [0x18db8].pack("U")].freeze
     compiled = {}
     host_patterns = {}
     independent_cases = 0
     version_mismatches = 0
-    cases.times do
+    cases.times do |index|
       pattern = patterns[random.rand(patterns.length)]
       input = if random.rand(3).zero?
         random.rand(2).zero? ? unicode_inputs.sample(random: random) : FlexrVerification.random_unicode_string(random)
       else
         Array.new(random.rand(10)) { random.rand(32..126) }.pack("C*")
       end
-      key = [pattern.source, pattern.options]
-      host_expected = begin
-        (host_patterns[key] ||= Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options)).match?(input)
-      rescue RegexpError, ArgumentError, EncodingError
-        false
-      end
-      if Flexr.reference_pattern?(pattern)
-        reference = Flexr::Unicode::ReferenceRegexp.compiled(
-          pattern, encoding: pattern.encoding, options: pattern.options, unicode: false
-        )
-        match = reference.match(input, 0)
-        vendored_expected = if match
-          match.begin(0).zero? && match[0].bytesize == input.bytesize
-        else
-          false
-        end
-        unless vendored_expected == host_expected
-          version_mismatches += 1
-          next
-        end
+      outcomes = FlexrVerification.differential_outcomes(pattern, input, compiled, host_patterns)
+      unless outcomes
+        version_mismatches += 1
+        next
       end
       independent_cases += 1
-      actual = (compiled[key] ||= Flexr.compile_pattern(pattern)).accept?(input)
-      next if host_expected == actual
+      expected, actual = outcomes
+      next if expected == actual
 
-      abort "differential mismatch: #{pattern.inspect} #{input.inspect} " \
-            "expected=#{host_expected} actual=#{actual}"
+      FlexrVerification::FailureCase.abort_with_record(
+        FlexrVerification.differential_mismatch(pattern, input, expected, actual),
+        root: FlexrVerification::ROOT, task: "test:differential", seed: seed, case: index + 1, input: input,
+        pattern: { source: FlexrVerification::FailureCase.encode_bytes(pattern.source), options: pattern.options,
+                   encoding: pattern.encoding.name },
+        backends: { expected: "ruby_regexp", actual: "table" }, expected: expected, actual: actual
+      )
     end
     abort "differential did not exercise an independent host oracle" if independent_cases.zero?
 
@@ -464,47 +542,50 @@ namespace :test do
   end
 end
 
+desc "Compare runtime and generated lexers on randomized inputs"
 task :fuzz do
   cases = Integer(ENV.fetch("FLEXR_FUZZ_CASES", "10000"), 10)
-  random = Random.new(Integer(ENV.fetch("FLEXR_SEED", "17"), 10))
+  seed = Integer(ENV.fetch("FLEXR_SEED", "17"), 10)
+  random = Random.new(seed)
   FlexrVerification::VERIFICATION_SPECS.each do |spec|
-    runtime_lexer = FlexrVerification.load_runtime(spec)
-    parts = runtime_lexer.name.split("::")
-    parent = Object
-    parts[0...-1].each { |part| parent = parent.const_get(part) }
-    parent.send(:remove_const, parts.last) if parent.const_defined?(parts.last, false)
-    generated_path = File.join(Dir.tmpdir, "flexr-fuzz-#{Process.pid}-#{File.basename(spec)}")
-    before = ObjectSpace.each_object(Class).to_a
-    File.binwrite(generated_path, FlexrVerification.generated_source(spec))
-    load generated_path
-    generated_lexer = (ObjectSpace.each_object(Class).to_a - before).find do |klass|
-      klass.respond_to?(:__flexr_spec)
-    end
-    raise "no generated lexer found for #{spec}" unless generated_lexer
+    FlexrVerification.with_fuzz_lexers(spec) do |runtime_lexer, generated_lexer|
+      cases.times do |index|
+        input = case random.rand(4)
+        when 0
+          Array.new(random.rand(128)) { random.rand(0..127) }.pack("C*").force_encoding(Encoding::UTF_8)
+        when 1
+          FlexrVerification.random_unicode_string(random, max_codepoints: 32)
+        when 2
+          Array.new(random.rand(128)) { random.rand(0..255) }.pack("C*").force_encoding(Encoding::UTF_8)
+        else
+          (FlexrVerification.random_unicode_string(random, max_codepoints: 16) +
+            Array.new(random.rand(64)) { random.rand(32..126) }.pack("C*")).force_encoding(Encoding::UTF_8)
+        end
+        expected = FlexrVerification.lexer_outcome(runtime_lexer, input, **FlexrVerification::FUZZ_OPTIONS)
+        actual = FlexrVerification.lexer_outcome(generated_lexer, input, **FlexrVerification::FUZZ_OPTIONS)
+        next if expected == actual
 
-    cases.times do
-      input = case random.rand(4)
-      when 0
-        Array.new(random.rand(128)) { random.rand(0..127) }.pack("C*").force_encoding(Encoding::UTF_8)
-      when 1
-        FlexrVerification.random_unicode_string(random, max_codepoints: 32)
-      when 2
-        Array.new(random.rand(128)) { random.rand(0..255) }.pack("C*").force_encoding(Encoding::UTF_8)
-      else
-        (FlexrVerification.random_unicode_string(random, max_codepoints: 16) +
-          Array.new(random.rand(64)) { random.rand(32..126) }.pack("C*")).force_encoding(Encoding::UTF_8)
+        FlexrVerification::FailureCase.abort_with_record(
+          FlexrVerification.fuzz_mismatch(spec, input, expected, actual),
+          root: FlexrVerification::ROOT, task: "fuzz", seed: seed, case: index + 1, input: input,
+          spec: { path: FlexrVerification.relative_spec(spec), sha256: Digest::SHA256.file(spec).hexdigest },
+          backends: { runtime: runtime_lexer.__flexr_config.backend, generated: generated_lexer.__flexr_config.backend },
+          options: FlexrVerification::FUZZ_OPTIONS, expected: expected, actual: actual
+        )
       end
-      runtime_outcome = FlexrVerification.lexer_outcome(runtime_lexer, input, error_mode: :panic)
-      generated_outcome = FlexrVerification.lexer_outcome(generated_lexer, input, error_mode: :panic)
-      next if runtime_outcome == generated_outcome
-
-      abort "fuzz mode mismatch: #{spec} input=#{input.inspect} " \
-            "runtime=#{runtime_outcome.inspect} generated=#{generated_outcome.inspect}"
     end
-  ensure
-    FileUtils.rm_f(generated_path) if generated_path
   end
   puts "fuzz: #{cases} inputs per example passed"
+end
+
+namespace :verification do
+  desc "Replay one saved mismatch (FLEXR_FAILURE_CASE=path/to/case.json)"
+  task :replay do
+    path = ENV.fetch("FLEXR_FAILURE_CASE")
+    FlexrVerification.replay_failure(FlexrVerification::FailureCase.read(path))
+  rescue ArgumentError, KeyError, JSON::ParserError, SystemCallError, EncodingError, RegexpError, TypeError => e
+    abort "Cannot replay verification failure: #{e.message}"
+  end
 end
 
 namespace :examples do
