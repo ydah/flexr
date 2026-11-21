@@ -15,4 +15,7 @@ gemfiles/*.lock
 site/node_modules
 site/dist
 site/.astro
+site/public/playground-runtime/
+site/test-results/
+site/playwright-report/
 .pnpm-store

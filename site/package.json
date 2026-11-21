@@ -3,17 +3,24 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro check && astro build",
+    "prepare:playground": "node scripts/prepare-playground.mjs",
+    "dev": "pnpm prepare:playground && astro dev",
+    "build": "pnpm prepare:playground && astro check && astro build",
     "preview": "astro preview",
-    "verify": "node scripts/verify-site.mjs"
+    "verify": "node scripts/verify-site.mjs",
+    "test": "pnpm prepare:playground && node --test tests/*.test.mjs",
+    "test:browser": "playwright test"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
+    "@playwright/test": "1.56.1",
     "typescript": "^5.7.3"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.36.0",
+    "@ruby/4.0-wasm-wasi": "2.10.1",
+    "@ruby/wasm-wasi": "2.10.1",
+    "@viz-js/viz": "3.25.0",
     "astro": "^5.14.1"
   }
 }

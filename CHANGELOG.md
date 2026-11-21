@@ -7,6 +7,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- A real Ruby WASM Playground with editable specifications, diagnostics, DFA
+  diagrams, trace steps, generated code, presets, and share links.
 - Input tracing with candidate lengths, rule priority, actions, state changes,
   and human or JSON output for runtime and generated scanners.
 - Optional phase profiling and isolated interpreter, YJIT, and ZJIT comparisons.
@@ -33,10 +35,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Fixed
 
+- Preserve UTF-8 source when generating lexers with Unicode action literals and surrounding constants.
 - Show source context and installation guidance when Prism cannot load.
 - Identify the installing file for incompatible generated artifacts when available.
-- Preserve UTF-8 source when generating lexers with Unicode action literals
-  and surrounding constants.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
