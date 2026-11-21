@@ -18,10 +18,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
 jobs:
   differential-fuzz:
-    name: verification / differential and fuzz
+    name: verification / fuzz shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,11 +39,14 @@ jobs:
           ruby-version: "3.4"
           bundler-cache: true
       - run: bundle exec rake test:differential
+        if: matrix.shard == 0
       - run: bundle exec rake fuzz
+        env:
+          FLEXR_FUZZ_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload verification failures
         if: ${{ failure() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: verification-failures
+          name: verification-failures-${{ matrix.shard }}
           path: tmp/verification-failures/*.json
           if-no-files-found: ignore

@@ -40,18 +40,21 @@ under `tmp/golden/`. Review that diff before accepting an intentional generator
 change with `bundle exec rake golden:update`, then review the committed snapshot
 diffs. Verification never updates the expected snapshots.
 
-Markdown-only pushes and pull requests run documentation verification without
-the test matrices or other Ruby checks. Changes limited to `site/` or its Pages
-workflow skip Ruby CI and follow the Pages workflow's triggers. Changes that
-also include code or Ruby configuration still run the full Ruby checks. The
-daily scheduled runs retain all validation layers.
+Changes to Ruby code or configuration run runtime and generator checks on
+Ruby 3.4 and 4.0 across Linux, macOS, and Windows. Runtime checks also exercise
+YJIT on Linux. Daily runs add Ruby head and macOS YJIT to the matrix.
+The Ubuntu Ruby 4.0 interpreter job runs the suite with the 95% coverage
+gate. The runtime and generator jobs run the full example verification tasks.
+Those workflows skip changes limited to Markdown and the product site.
 
 ## Replay a verification mismatch
 
 `test:differential` and `fuzz` save the first mismatch in
 `tmp/verification-failures/` and exit with status 1.
-The differential-fuzz workflow attaches these files as the
-`verification-failures` artifact when a job fails.
+The differential-fuzz workflow splits the seeded fuzz cases across three jobs.
+To run one shard locally, set `FLEXR_FUZZ_SHARD` to a zero-based `INDEX/TOTAL`,
+such as `2/3`. Each job attaches any saved failures as a
+`verification-failures-<index>` artifact.
 Replay one case from the repository root.
 
 ```sh
