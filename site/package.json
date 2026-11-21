@@ -12,7 +12,7 @@
     "test:browser": "playwright test"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.4",
+    "@astrojs/check": "^0.9.12",
     "@playwright/test": "1.56.1",
     "typescript": "^5.7.3"
   },
