@@ -42,7 +42,8 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `-W, --warn LEVEL` | `all`, `default`, `none` | Check and generation |
 | `--warn-as-error` | Flag | Check and generation |
 | `--color WHEN` | `auto`, `always`, `never` | Human diagnostics |
-| `--format FMT` | `human`, `json` | Check and stats |
+| `--format FMT` | `human`, `json`, `lrama` | `lrama` is for tokens only |
+| `--grammar PATH` | Grammar path | Compare `%token` names with `emits` during check |
 | `--rule N` | Non-negative integer | Explain |
 
 The complete help output is kept as a checked snapshot:
@@ -64,10 +65,25 @@ Options:
   -W, --warn LEVEL           all | default | none
       --warn-as-error
       --color WHEN            auto | always | never
-      --format FMT            human | json
+      --format FMT            human | json | lrama (tokens only)
+      --grammar PATH          compare emits with grammar %token declarations (check only)
 <!-- flexr-help:end -->
 
 ## Exit statuses
+
+Compare a lexer with Lrama/Bison-style declarations:
+
+```sh
+flexr check lexer.flexr.rb --grammar parse.y --warn-as-error
+flexr tokens lexer.flexr.rb --format lrama
+```
+
+The check compares named `%token` declarations before the grammar's first `%%`
+with `emits`. It handles multiline declarations, numeric token IDs, type tags,
+aliases, and comments. Literal character tokens are excluded. This checks token
+names, not grammar validity or whether every action actually emits its declared
+token. Exported names must be identifiers; numeric IDs and aliases remain the
+grammar author's responsibility.
 
 | Status | Meaning |
 |---:|---|

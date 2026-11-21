@@ -14,6 +14,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
   runs, with explicit reports when an engine is unavailable.
 - Added optional RSpec and Minitest helpers for token assertions and explicit
   token snapshot creation and comparison.
+- Compare `emits` with named grammar tokens using `check --grammar PATH`, and
+  export declarations using `tokens --format lrama`.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 

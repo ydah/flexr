@@ -323,6 +323,8 @@ expression can change how the surrounding pattern matches.
 | `FLEXR-W013` | Capturing group is treated as non-capturing | Use `(?:...)` |
 | `FLEXR-W014` | Emitted token is not declared | Add it to `emits` or accept the warning |
 | `FLEXR-W016` | DFA construction took more than 0.5 seconds | Use generated mode for startup |
+| `FLEXR-W017` | Grammar token is missing from `emits` | Declare and emit it, or remove it from the grammar |
+| `FLEXR-W018` | Token in `emits` is missing from the grammar | Add a `%token` declaration or remove it from `emits` |
 
 Warnings are reported by `check` according to `--warn`. The default omits the
 wall-clock `FLEXR-W016`; `--warn all` includes it, and `--warn none` suppresses
