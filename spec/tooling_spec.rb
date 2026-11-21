@@ -9,6 +9,69 @@ require_relative "../benchmark/run"
 RSpec.describe "verification tooling" do
   let(:root) { File.expand_path("..", __dir__) }
 
+  def verification_script(body)
+    Tempfile.create(["flexr-verification-", ".rb"]) do |file|
+      file.binmode
+      file.write("require 'rake'\nload 'Rakefile'\n#{body}")
+      file.flush
+      Open3.capture3(RbConfig.ruby, "-Ilib", file.path, chdir: root)
+    end
+  end
+
+  it "keeps golden verification independent of the release version" do
+    script = <<~RUBY
+      ["2.0.0.pre.1", "99.0.0"].each do |version|
+        Flexr.send(:remove_const, :VERSION)
+        Flexr.const_set(:VERSION, version)
+        Rake::Task["golden:verify"].reenable
+        Rake::Task["golden:verify"].invoke
+      end
+    RUBY
+    _stdout, stderr, status = verification_script(script)
+
+    expect(status).to be_success, stderr
+  end
+
+  it "preserves readable snapshots and saves a comparable actual file on mismatch" do
+    script = <<~'RUBY'
+      Dir.mktmpdir("flexr-golden-task-") do |directory|
+        Dir.chdir(directory) do
+          FlexrVerification.send(:remove_const, :ROOT)
+          FlexrVerification.const_set(:ROOT, directory)
+          FlexrVerification.send(:remove_const, :VERIFICATION_SPECS)
+          spec = File.join(directory, "lexer.flexr.rb")
+          FlexrVerification.const_set(:VERIFICATION_SPECS, [spec])
+          File.binwrite(spec, "class GoldenTaskFixture < Flexr::Lexer\n  rule(/a/) { emit :A }\nend\n")
+          Rake::Task["golden:update"].invoke
+          expected_path = FlexrVerification.golden_path(spec)
+          expected = File.binread(expected_path)
+          abort "golden is not readable Ruby" unless expected.include?("def scan_one")
+          File.binwrite(expected_path, expected.gsub("\n", "\r\n"))
+          Rake::Task["golden:verify"].invoke
+          saved = File.binread(expected_path)
+          File.binwrite(spec, File.binread(spec).sub("/a/", "/b/"))
+          Rake::Task["golden:verify"].reenable
+          begin
+            Rake::Task["golden:verify"].invoke
+            abort "changed code was accepted"
+          rescue SystemExit => error
+            actual = File.join(directory, "tmp/golden", File.basename(expected_path))
+            abort "expected snapshot was overwritten" unless File.binread(expected_path) == saved
+            abort "actual snapshot was not saved" unless File.file?(actual)
+            abort "actual snapshot did not change" if File.binread(actual) == expected
+            puts "expected snapshot preserved; actual source saved"
+            exit error.status
+          end
+        end
+      end
+    RUBY
+    stdout, stderr, status = verification_script(script)
+
+    expect(status.exitstatus).to eq(1)
+    expect(stdout).to include("expected snapshot preserved; actual source saved")
+    expect(stderr).to include("golden mismatch", "git diff --no-index")
+  end
+
   it "keeps golden, acceleration, and dogfood gates independent" do
     script = <<~RUBY
       require "rake"
