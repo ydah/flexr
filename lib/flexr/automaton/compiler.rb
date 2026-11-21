@@ -211,8 +211,6 @@ module Flexr
       end
 
       def validate_rules
-        raise CompileError, "firstmatch requires option :experimental" if @spec.backend == :firstmatch && !@spec.options[:experimental]
-
         @spec.rules.each do |rule|
           raise CompileError, "rule #{rule.index} has no pattern" if rule.patterns.empty?
           parse_regexp(rule.trailing) if rule.trailing.is_a?(::Regexp)
