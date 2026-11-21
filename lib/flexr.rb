@@ -11,4 +11,5 @@ module Flexr
   autoload :Options, File.expand_path("flexr/options", __dir__)
   autoload :RakeTask, File.expand_path("flexr/rake_task", __dir__)
   autoload :CLI, File.expand_path("flexr/cli", __dir__)
+  autoload :Trace, File.expand_path("flexr/trace", __dir__)
 end
