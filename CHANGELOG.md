@@ -3,7 +3,7 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
-## [2.0.0](https://github.com/ydah/flexr/compare/v1.1.0...v2.0.0) - 2026-11-21
+## [2.0.0](https://github.com/ydah/flexr/compare/v1.1.0...v2.0.0) - 2026-11-22
 
 ### Added
 
