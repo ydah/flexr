@@ -12,6 +12,7 @@ consuming tokens, or the [CLI](cli.md) when validating and generating files.
 - [Actions](actions.md) — methods available inside rule and EOF actions.
 - [Tokens and locations](tokens-and-locations.md) — exact return shapes and
   offsets.
+- [Testing](testing.md) — RSpec and Minitest assertions and token snapshots.
 - [Errors](errors.md) — exception and input-recovery behavior.
 - [Regexp compatibility](regexp.md) — supported syntax and alternatives.
 - [CLI](cli.md) — commands, options, output, and exit statuses.
