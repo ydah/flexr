@@ -13,4 +13,7 @@ description: Return shapes, semantic values, and source positions.
 
 Locations use byte offsets for the input position and track line/column as the lexer consumes text. Keep the location with the token when a parser needs useful syntax errors.
 
+In v2, structured tokens and locations are immutable `Data` records. Read fields
+with attribute readers or `[]`, and use `with` to create a replacement.
+
 For exact defaults and the `Location` data structure, use the repository's [tokens and locations reference](https://github.com/ydah/flexr/blob/main/docs/reference/tokens-and-locations.md).

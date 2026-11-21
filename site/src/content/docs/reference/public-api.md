@@ -5,11 +5,13 @@ description: Separate stable user APIs from experimental and internal implementa
 
 ## Public and stable
 
-`Flexr::Lexer`, the lexer DSL, runtime token/location structures, the documented CLI, and `Flexr::RakeTask` are the supported entry points for normal use.
+`Flexr::Lexer`, the lexer DSL, immutable runtime token/location Data records, the documented CLI, and `Flexr::RakeTask` are the supported entry points for normal use.
+
+The `firstmatch` backend is stable and uses rule-order semantics in runtime and generated modes. Select it explicitly with `backend :firstmatch`; no experimental option is required.
 
 ## Experimental
 
-The `firstmatch` backend and any option explicitly marked experimental may change behavior or API shape between releases. Opt in deliberately and test the resulting token stream.
+Options explicitly marked experimental may change behavior or API shape between releases.
 
 ## Internal
 

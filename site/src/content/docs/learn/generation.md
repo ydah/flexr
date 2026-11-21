@@ -10,7 +10,7 @@ bundle exec flexr check lexer.flexr.rb
 bundle exec flexr generate lexer.flexr.rb -o lexer.rb
 ```
 
-The generator can use `table`, `direct`, or `auto` backends. `firstmatch` is experimental and requires an explicit option because it does not preserve the usual longest-match contract.
+The generator supports the longest-match `table`, `direct`, and `auto` backends. Select `backend :firstmatch` explicitly to use the first matching rule in definition order. This backend is stable and requires no experimental option.
 
 ## Runtime dependencies
 

@@ -241,3 +241,28 @@ The JSON golden digest and regression baseline's source fingerprint were
 updated for the equivalent shorthand specification. Input identity, captured
 baseline metrics, ratio thresholds, and the 0.18x performance floor were kept.
 Use the default benchmark commands above to reproduce the new example.
+
+
+## 2026-11-21: combined v2 readiness sample
+
+The integration checkout at `f9c629c` combines the v2 Data records and generated
+method actions with whole-token scanning support and the JSON `emit:` shorthand.
+Ruby 4.0.9 on arm64-darwin-25, without a JIT, processed the default 140,000-byte
+JSON corpus with 50,000 emitted tokens. Five warmup and five measured iterations
+ran after the test and browser checks finished.
+
+| mode | MB/s | allocations/token | throughput relative to handwritten |
+|---|---:|---:|---:|
+| runtime | 1.906 | 3.600 | 0.235x |
+| generated | 1.933 | 3.210 | 0.238x |
+| handwritten | 8.118 | 3.400 | 1.000x |
+
+Both flexr modes meet the 4.0 allocations/token target for this corpus. The
+3.4 target is met by generated mode; runtime remains above it. Neither mode
+meets the 0.35x handwritten throughput target. This local readiness sample is
+not a release performance qualification and does not establish results for
+other lexers or JIT engines.
+
+`rake bench:regression` also passed with the existing baseline metrics, identity,
+ratio thresholds, and 0.18x floor unchanged. Reproduce the five-iteration sample
+with `ruby -Ilib benchmark/run.rb --iterations 5 --json`.
