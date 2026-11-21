@@ -29,7 +29,11 @@ RSpec.describe "diagnostic contracts" do
     allow(reader).to receive(:require).with("prism").and_raise(LoadError, "missing prism")
 
     expect { reader.read }
-      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E019") }
+      .to raise_error(Flexr::CompileError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E019")
+        expect(error.diagnostic.location).to eq([0, 0])
+        expect(error.diagnostic.help).to include("gem install prism")
+      end
   end
 
   it "emits exact warning codes for semantic and performance boundaries" do
@@ -59,6 +63,22 @@ RSpec.describe "diagnostic contracts" do
     )
     codes = compiler.send(:diagnostics_for, compiled, 0.501).map(&:code)
     expect(codes).to include("FLEXR-W011", "FLEXR-W016")
+  end
+
+  it "identifies the generated file when artifact metadata is incompatible" do
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "stale.rb")
+      File.write(path, "class ArtifactLocationFixture < Flexr::Lexer\n  Flexr::Generated.install_compiled!(self, artifact: nil)\nend\n")
+      expect { load path }.to raise_error(Flexr::CompileError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E020")
+        expect(error.diagnostic.location).to eq([0, 0])
+        expect(error.filename).to eq(File.realpath(path))
+        rendered = Flexr::CLI.render_error(error)
+        expect(rendered).to include("#{File.realpath(path)}:1:1", "1 | class ArtifactLocationFixture", "^")
+      end
+    ensure
+      Object.send(:remove_const, :ArtifactLocationFixture) if Object.const_defined?(:ArtifactLocationFixture, false)
+    end
   end
 
   it "does not mistake parentheses inside character classes for captures" do

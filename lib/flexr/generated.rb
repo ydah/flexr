@@ -46,7 +46,16 @@ module Flexr
     end
 
     def install_compiled!(klass, payload)
-      validate_artifact!(payload[:artifact])
+      begin
+        validate_artifact!(payload[:artifact])
+      rescue CompileError => e
+        caller = caller_locations.find { |frame| frame.base_label != "install_compiled!" }
+        path = caller&.absolute_path || caller&.path
+        raise unless path && File.file?(path)
+
+        e.diagnostic.location ||= [0, 0]
+        raise CompileError.new(e.message, diagnostic: e.diagnostic, filename: path, byte_pos: 0)
+      end
       install!(klass, payload)
       machines = payload.fetch(:compiled).fetch(:machines).transform_values do |machine|
         dfa = load_dfa(machine.fetch(:dfa))

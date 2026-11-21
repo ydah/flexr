@@ -105,4 +105,14 @@ RSpec.describe "source diagnostic locations" do
 
     expect(parsed.rules.first.patterns).to eq([nil])
   end
+
+  it "renders the specification location when Prism cannot load" do
+    write_spec("  rule(/a/, skip: true)")
+    allow_any_instance_of(Flexr::Source::PrismReader).to receive(:require).with("prism")
+      .and_raise(LoadError, "missing prism")
+    output = StringIO.new
+    errors = StringIO.new
+    expect(Flexr::CLI.run(["check", @path], out: output, err: errors)).to eq(1)
+    expect(errors.string).to include("FLEXR-E019", "#{@path}:1:1", "1 | # UTF-8: é", "^")
+  end
 end
