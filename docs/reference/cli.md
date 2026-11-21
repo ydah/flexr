@@ -45,6 +45,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--color WHEN` | `auto`, `always`, `never` | Human diagnostics |
 | `--format FMT` | `human`, `json`, `lrama` | `lrama` is for tokens only |
 | `--grammar PATH` | Grammar path | Compare `%token` names with `emits` during check |
+| `--target 2.0` | none | Static check migration requirements and structured-token declarations |
 | `--rule N` | Non-negative integer | Explain |
 | `--input STRING` | Literal input, including an empty string | Trace |
 | `--input-file PATH` | Input file | Trace and bench |
@@ -74,6 +75,7 @@ Options:
       --input STRING          trace input (executes SPEC actions)
       --input-file PATH       trace or benchmark input
       --generated             trace generated scanner
+      --target 2.0            report migration requirements (static check only)
 <!-- flexr-help:end -->
 
 ## Input trace

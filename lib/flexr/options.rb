@@ -5,7 +5,7 @@ require_relative "runtime" unless defined?(Flexr::Lexer)
 module Flexr
   Options = Struct.new(
     :backend, :token_kind, :accel, :standalone, :eval_mode, :table_compression,
-    :table_format, :max_dfa_states, :warn_level, :warn_as_error, :color, :format, :overrides, :grammar,
+    :table_format, :max_dfa_states, :warn_level, :warn_as_error, :color, :format, :overrides, :grammar, :target,
     keyword_init: true
   ) do
     def self.default
@@ -30,6 +30,8 @@ module Flexr
       validate_value!(warn_level, %i[all default none], :warn_level)
       validate_value!(color, %i[auto always never], :color)
       validate_value!(format, %i[human json lrama], :format)
+      raise ArgumentError, "unsupported target: #{target.inspect}" unless target.nil? || target == "2.0"
+      raise ArgumentError, "--target requires static check; remove --eval" if target && eval_mode
       raise ArgumentError, "unsupported max_dfa_states: #{max_dfa_states.inspect}" unless max_dfa_states.is_a?(Integer) && max_dfa_states.positive?
       self
     end
