@@ -17,7 +17,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.36.0",
+    "@astrojs/starlight": "^0.37.7",
     "@ruby/4.0-wasm-wasi": "2.10.1",
     "@ruby/wasm-wasi": "2.10.1",
     "@viz-js/viz": "3.25.0",
