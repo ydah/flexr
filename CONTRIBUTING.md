@@ -8,8 +8,8 @@ bundle exec rake test
 bundle exec rubocop
 ```
 
-The runtime supports Ruby 3.1 and newer. Generator changes need Ruby 3.3 or
-newer because Prism is used for source analysis.
+The runtime and generator require Ruby 3.4 or newer.
+The generator uses Prism for source analysis.
 
 ## Validation layers
 
@@ -33,6 +33,31 @@ the test matrices or other Ruby checks. Changes limited to `site/` or its Pages
 workflow skip Ruby CI and follow the Pages workflow's triggers. Changes that
 also include code or Ruby configuration still run the full Ruby checks. The
 daily scheduled runs retain all validation layers.
+
+## Replay a verification mismatch
+
+`test:differential` and `fuzz` save the first mismatch in
+`tmp/verification-failures/` and exit with status 1.
+The differential-fuzz workflow attaches these files as the
+`verification-failures` artifact when a job fails.
+Replay one case from the repository root.
+
+```sh
+FLEXR_FAILURE_CASE=path/to/failure.json bundle exec rake verification:replay
+```
+
+The JSON records the commit, a fingerprint of the tracked diff and non-ignored
+untracked files, Ruby and gem versions, seed, case number, comparison settings,
+and both outcomes. For fuzz cases it also records the lexer path and its SHA-256.
+The input is stored as hex with its original encoding, including invalid UTF-8.
+
+Replay uses that exact input and runs the same comparison on the current
+checkout. It reports drift in the fuzz lexer specification and exits with
+status 1 if a mismatch persists or the comparison cannot run.
+Before fixing a mismatch, record the base commit, expected behavior, and
+validation commands in the task notes. Turn the mismatch into a focused
+regression test that fails before the fix. Run it again after the fix with
+the relevant validation layers and record the results.
 
 ## Documentation changes
 
