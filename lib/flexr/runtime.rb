@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
+raise LoadError, "flexr 2.0 requires Ruby 3.4 or newer" if RUBY_VERSION < "3.4"
+
 require "json"
 require "monitor"
 require_relative "version"
 require_relative "errors"
 require_relative "diagnostics"
-require_relative "deprecations"
 require_relative "action_resolver"
 require_relative "configuration"
 require_relative "ir"
@@ -30,6 +31,7 @@ require_relative "automaton/analysis"
 require_relative "automaton/minimizer"
 require_relative "automaton/backend_cost_model"
 require_relative "automaton/accel"
+require_relative "runtime/record"
 require_relative "runtime/location"
 require_relative "runtime/token"
 require_relative "runtime/buffer"
@@ -40,7 +42,6 @@ require_relative "dsl"
 require_relative "lexer"
 require_relative "generated"
 
-Flexr::Deprecations.warn("Ruby versions below 3.4 will not be supported in 2.0") if RUBY_VERSION < "3.4"
 
 module Flexr
   class << self

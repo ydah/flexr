@@ -55,6 +55,18 @@ column = location.column_begin
 next_token = lexer.next_token
 lexer.each_token { |_token| nil }
 
+# @type var structured_token: Flexr::Runtime::Token
+structured_token = Flexr::Runtime::Token.new(type: :INTEGER, value: 12, location: location)
+# @type var immutable_record: Data
+immutable_record = structured_token
+# @type var replacement: Flexr::Runtime::Token
+replacement = structured_token.with(value: 13)
+# @type var token_location: Flexr::Runtime::Location?
+token_location = structured_token[:location]
+# @type var relocated: Flexr::Runtime::Location
+relocated = location.with(byte_begin: 1)
+puts immutable_record, replacement, token_location, relocated
+
 diagnostic = Flexr::Diagnostics.error("FLEXR-E001", "invalid pattern", location: [0, 1])
 set = Flexr::DiagnosticSet.new << diagnostic
 # @type var rendered: String

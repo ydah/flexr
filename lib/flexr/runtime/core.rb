@@ -6,8 +6,7 @@ module Flexr
                    max_lookahead_size: nil, max_buffer_size: 64 * 1024 * 1024,
                    max_state_stack: 1024, max_steps: nil, cancellation: nil, retain_input: true,
                    chunk_size: Runtime::Buffer::DEFAULT_CHUNK_SIZE)
-      Deprecations.warn("unknown error_mode #{error_mode.inspect} will raise ArgumentError in 2.0") unless
-        %i[raise token panic].include?(error_mode)
+      raise ArgumentError, "unsupported error_mode: #{error_mode.inspect}" unless %i[raise token panic].include?(error_mode)
       raise ArgumentError, "max_token_size must be non-negative" if max_token_size.to_i.negative?
       raise ArgumentError, "max_lookahead_size must be non-negative" if max_lookahead_size&.to_i&.negative?
       raise ArgumentError, "max_buffer_size must be non-negative" if max_buffer_size.to_i.negative?

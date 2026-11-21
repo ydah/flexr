@@ -5,12 +5,12 @@ require "rbconfig"
 require "stringio"
 
 RSpec.describe "trailing context overlap diagnostics" do
-  def lexer_class(backend = :table, &rules)
+  def lexer_class(backend = :table, &)
     Class.new(Flexr::Lexer) do
       backend backend
       option :experimental if backend == :firstmatch
       __flexr_config.options[:warn_level] = :all
-      class_eval(&rules)
+      class_eval(&)
     end
   end
 

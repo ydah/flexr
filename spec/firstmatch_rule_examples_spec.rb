@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 RSpec.describe "firstmatch rule examples" do
-  def lexer_class(&rules)
+  def lexer_class(&)
     Class.new(Flexr::Lexer) do
       backend :firstmatch
       option :experimental
-      class_eval(&rules)
+      class_eval(&)
     end
   end
 

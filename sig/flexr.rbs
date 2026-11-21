@@ -85,22 +85,28 @@ module Flexr
   end
 
   module Runtime
-    class Token < ::Struct[untyped]
+    class Token < ::Data
       def self.new: (?type: untyped, ?value: untyped, ?location: Location?) -> instance
-      attr_accessor type: untyped
-      attr_accessor value: untyped
-      attr_accessor location: Location?
+      attr_reader type: untyped
+      attr_reader value: untyped
+      attr_reader location: Location?
+      def []: (:location | "location") -> Location?
+            | (Integer | Symbol | String) -> untyped
+      def with: (?type: untyped, ?value: untyped, ?location: Location?) -> self
     end
 
-    class Location < ::Struct[untyped]
+    class Location < ::Data
       def self.new: (?filename: String?, ?byte_begin: Integer?, ?byte_end: Integer?, ?line_begin: Integer?, ?column_begin: Integer?, ?line_end: Integer?, ?column_end: Integer?) -> instance
-      attr_accessor filename: String?
-      attr_accessor byte_begin: Integer?
-      attr_accessor byte_end: Integer?
-      attr_accessor line_begin: Integer?
-      attr_accessor line_end: Integer?
-      attr_accessor column_begin: Integer?
-      attr_accessor column_end: Integer?
+      attr_reader filename: String?
+      attr_reader byte_begin: Integer?
+      attr_reader byte_end: Integer?
+      attr_reader line_begin: Integer?
+      attr_reader line_end: Integer?
+      attr_reader column_begin: Integer?
+      attr_reader column_end: Integer?
+      def []: (:filename | "filename") -> String?
+            | (Integer | Symbol | String) -> (Integer | String)?
+      def with: (?filename: String?, ?byte_begin: Integer?, ?byte_end: Integer?, ?line_begin: Integer?, ?column_begin: Integer?, ?line_end: Integer?, ?column_end: Integer?) -> self
     end
 
     class TokenTooLargeError < LexError

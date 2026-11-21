@@ -14,9 +14,9 @@ module Flexr
     INLINE_EMIT_ARGUMENTS = /\A(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line)(?:\s*,\s*(?::[A-Za-z_]\w*|true|false|nil|-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|text(?:\.(?:to_f|to_i|bytesize|byteslice\([^()\n]+\)))?|lineno|line))*\z/
 
     RUNTIME_SOURCES = %w[
-      version.rb errors.rb diagnostics.rb deprecations.rb action_resolver.rb configuration.rb ir.rb
+      version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
       unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/accel.rb
-      runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
+      runtime/record.rb runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
       runtime/interpreter.rb runtime/core.rb dsl.rb lexer.rb generated.rb
     ].freeze
 
@@ -62,6 +62,11 @@ module Flexr
       install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
+      parsed.rules.each do |rule|
+        next unless rule.bind_action && !rule.reads_locals && inline_simple_action(rule.action_source)
+
+        edits.map! { |edit| edit.first(2) == rule.span ? [*rule.span, ""] : edit }
+      end
       edits.concat(parsed.flexr_require_spans.map { |span| [*span, ""] }) if standalone?(parsed)
       result = Source::Passthrough.rewrite(
         parsed.source, edits, insertion: parsed.first_dsl_offset, payload: install
@@ -79,7 +84,7 @@ module Flexr
         "# eval: #{@eval_mode}",
         "# standalone: #{standalone?(parsed)}"
       ].join("\n")
-      prefix = standalone?(parsed) ? "require \"json\"\nrequire \"monitor\"\n#{embedded_runtime(parsed)}\n" : ""
+      prefix = standalone?(parsed) ? "raise LoadError, \"flexr requires Ruby 3.4 or newer\" if RUBY_VERSION < \"3.4\"\nrequire \"json\"\nrequire \"monitor\"\n#{embedded_runtime(parsed)}\n" : ""
       Source::Passthrough.insert_after_preamble(result, "#{header}\n#{prefix}")
     end
 
@@ -90,7 +95,7 @@ module Flexr
         end
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
           "#{trailing_dfa_expression(rule, parsed)}" \
-          "action: #{action_expression(rule.action)}, states: #{rule.states.inspect}, " \
+          "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
           "bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
       "{ artifact: #{ruby_literal(artifact_metadata)}, rules: [#{definitions.join(', ')}], " \
@@ -252,15 +257,23 @@ module Flexr
       "proc { emit(nil, text) }"
     end
 
+    def generated_rule_action(rule)
+      return ruby_literal(:__flexr_generated_method) if rule.action.is_a?(String) &&
+        ((!rule.bind_action && !inline_action_body(rule).nil?) || (!rule.reads_locals && inline_simple_action(rule.action_source)))
+
+      action_expression(rule.action)
+    end
+
     def generated_action_source(parsed, indent)
       lines = ["#{indent}def __flexr_generated_execute(rule)", "#{indent}  case rule.index"]
       parsed.rules.each do |rule|
         lines << "#{indent}  when #{rule.index}"
-        if rule.bind_action
+        body = inline_simple_action(rule.action_source) if rule.bind_action && !rule.reads_locals
+        if rule.bind_action && body.nil?
           lines << "#{indent}    instance_exec(&self.class.__flexr_generated_actions.fetch(rule.index))"
           next
         end
-        body = inline_action_body(rule)
+        body ||= inline_action_body(rule)
         if body.nil?
           lines << "#{indent}    instance_exec(&rule.action)"
         else
@@ -325,6 +338,7 @@ module Flexr
 
     def inline_simple_action(source)
       body = source.to_s.strip
+      return if body.include?('#{') || body.match?(/text\.byteslice\([^)]*[A-Za-z_]/)
       body = body[1...-1].strip if body.start_with?("{") && body.end_with?("}")
       match = INLINE_EMIT.match(body)
       return unless match
@@ -350,8 +364,7 @@ module Flexr
       loader = Object.new
       loader.define_singleton_method(:load_spec) do
         # --eval is opt-in and intentionally executes trusted specification code.
-        # rubocop:disable-next Security/Eval
-        eval(source, TOPLEVEL_BINDING, @path, 1)
+        eval(source, TOPLEVEL_BINDING, @path, 1) # rubocop:disable Security/Eval
       end
       loader.instance_variable_set(:@path, @path)
       loader.load_spec

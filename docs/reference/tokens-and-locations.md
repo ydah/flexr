@@ -12,6 +12,14 @@ For `:struct`, `Token` has `type`, `value`, and `location` members. `emit(nil,
 value)` is valid and produces a token whose type is `nil`. `skip` produces no
 token.
 
+In v2, `Token` and `Location` are immutable `Data` records. The `:struct`
+option name is retained. Attribute readers and read-only indexing by member
+name or index remain available; field writers and `[]=` are removed. Replace
+values with `token.with(value: replacement)` or `location.with(...)`.
+Immutability is shallow: custom token values can still be mutable.
+Lazy columns use a frozen pair without mutating the record or retaining the
+lexer; `to_h` returns the resolved columns.
+
 ## Locations
 
 `Flexr::Runtime::Location` has these public members:

@@ -2,35 +2,7 @@
 
 require "stringio"
 
-RSpec.describe "v2 migration preparation" do
-  around do |example|
-    previous = Warning[:deprecated]
-    Warning[:deprecated] = true
-    example.run
-  ensure
-    Warning[:deprecated] = previous
-  end
-
-  it "warns for public record mutation while preserving v1 behavior" do
-    token = Flexr::Runtime::Token.new(type: :A, value: "a")
-    expect { token.value = "b" }.to output(/deprecated.*Token.*immutable.*2\.0/i).to_stderr
-    expect(token.value).to eq("b")
-    expect { token[:type] = :B }.to output(/deprecated.*Token.*immutable.*2\.0/i).to_stderr
-    expect(token.type).to eq(:B)
-  end
-
-  it "warns for Location mutation but keeps column reads quiet" do
-    location = Flexr::Runtime::Location.new(column_values: [1, 2])
-    expect { location.column_begin }.not_to output.to_stderr
-    expect { location.column_end = 9 }.to output(/deprecated.*Location.*immutable.*2\.0/i).to_stderr
-    expect(location.column_end).to eq(9)
-  end
-
-  it "warns early for unknown error modes without changing v1 initialization" do
-    lexer = Class.new(Flexr::Lexer) { rule(/a/, skip: true) }
-    expect { lexer.new("a", error_mode: :typo) }.to output(/deprecated.*error_mode.*2\.0/i).to_stderr
-  end
-
+RSpec.describe "v2 migration checks" do
   { "LF" => "\n", "CRLF" => "\r\n" }.each do |label, newline|
     it "reports migration requirements and #{label} source locations without executing the spec" do
       Dir.mktmpdir do |directory|
