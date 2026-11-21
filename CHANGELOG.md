@@ -26,6 +26,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 - An optional Ruby LSP add-on for diagnostics from unsaved `.flexr.rb` files
   and rule hovers with counterexamples and overlap information.
+- Add documented TOML, GraphQL, and SQL subset lexers, with runtime/generated
+  parity checks and built-in benchmark inputs.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 
