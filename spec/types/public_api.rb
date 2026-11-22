@@ -89,4 +89,9 @@ generation = Flexr::Generator.new("lexer.flexr.rb").generate
 status = Flexr::CLI.run(["check", "lexer.flexr.rb"])
 # @type var accepted: bool
 accepted = Flexr.compile_pattern(/a/).accept?("a")
-puts tokens, byte_position, column, next_token, rendered, generation, status, accepted
+recognizer = Flexr::Lexer.recognizer
+# @type var match: [Flexr::rule_identity, Integer]?
+match = recognizer.match("12", 0)
+# @type var ending: Integer?
+ending = recognizer.match("12", 0) { |_rule, finish| finish }
+puts tokens, byte_position, column, next_token, rendered, generation, status, accepted, match, ending

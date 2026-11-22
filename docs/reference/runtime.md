@@ -76,6 +76,45 @@ of retained `more` text. Seek raises `RangeError` outside that range and
 `ArgumentError` at an interior UTF-8 byte or a buffered edge with an
 incomplete scalar. A bookmark from another lexer also raises `ArgumentError`.
 
+## Action-free recognition
+
+Use `Lexer.recognizer(state: :initial)` to obtain a reusable, immutable
+`Flexr::Recognizer` for one lexical state. Runtime, generated, and
+standalone lexers expose the same API.
+
+```ruby
+recognizer = GrammarLexer.recognizer
+rule, finish = recognizer.match("word", 0)  # [:IDENTIFIER, 4]
+
+recognizer.match("word", 0) do |identity, ending|
+  consume_match(identity, ending)
+end
+```
+
+The matcher starts at the given byte offset and returns the rule identity
+and exclusive end byte. The identity is the symbol declared with `emit:`
+or the zero-based source-rule index for other rules, including skips.
+Keyword classification and dynamic actions belong to token emission.
+Recognition reads the compiled tables without running actions, updating
+state, or constructing a lexer instance.
+
+Longest match includes trailing context when ranking rules, and `finish`
+excludes the lookahead. Line anchors use the original string. UTF-8
+recognition respects full scalar boundaries. Binary recognition operates on
+bytes. A no-match result or an offset at EOF returns `nil`. A non-EOF
+zero-width match requires `allow_empty_match` and can return the incoming
+offset, so the caller controls progress.
+
+The block form yields both fields and returns the block's result. It avoids
+allocating the result array. A recognizer is shareable across Ractors after
+construction. Build it once and reuse it for matching.
+
+Construction accepts `table`, `direct`, and `auto` lexers and raises
+`ArgumentError` for `firstmatch` or an unknown state. `match` requires a
+`String` and an `Integer` byte offset. An offset outside the input raises
+`RangeError`. Use `Lexer.new` for streaming, recovery, and lexer-instance
+limits.
+
 ## State and action context
 
 The public action methods are collected in the [actions reference](actions.md).
