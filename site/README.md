@@ -3,6 +3,22 @@
 This directory contains the Astro/Starlight product site for flexr. The Playground
 runs real Ruby and flexr locally through a pinned ruby.wasm runtime.
 
+## Documentation versions
+
+The existing documentation URLs describe `main`. The version links on each
+page switch to the same topic under `/flexr/stable/` when that topic exists in
+the release. If a topic is available in only one version, the link opens
+Getting started in the other version.
+
+`pnpm dev` and `pnpm build` copy the pinned release's Markdown from Git into
+the ignored `src/content/docs/stable/` directory. Fetch the release tag with
+`git fetch --tags` if it is missing from your clone. GitHub Pages also uses
+that tag's Ruby library and example presets for the public Playground.
+
+After a new stable gem is public on RubyGems and its Git tag is available,
+update `stableReleaseTag` in `scripts/stable-release.mjs`. Run
+`FLEXR_PLAYGROUND_STABLE=1 pnpm build` to reproduce the deployment build.
+
 ## Local development
 
 ```sh
