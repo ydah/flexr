@@ -39,6 +39,7 @@ test('packages the released lexer and presets when building the public Playgroun
     await write('examples/toml/lexer.flexr.rb', '# Main TOML\n');
     await write('site/ruby/playground.rb', '# Playground bridge\n');
     await write('site/ruby/presets/absence.flexr.rb', '# Main absence preset\n');
+    await write('site/ruby/presets/pattern.flexr.rb', '# Main pattern preset\n');
     await cp(new URL('../scripts/', import.meta.url), path.join(site, 'scripts'), { recursive: true });
     for (const asset of ['ruby+stdlib.wasm', 'LICENSE', 'NOTICE']) {
       await write(`site/node_modules/@ruby/4.0-wasm-wasi/dist/${asset}`, '');
@@ -54,6 +55,7 @@ test('packages the released lexer and presets when building the public Playgroun
     assert.equal(files['/app/lib/main-only.rb'], undefined);
     assert.equal((await readAsset('presets.json')).toml.source, '# Released toml\n');
     assert.equal((await readAsset('presets.json')).absence, undefined);
+    assert.equal((await readAsset('presets.json')).pattern, undefined);
   } finally {
     await rm(repo, { recursive: true, force: true });
   }

@@ -39,6 +39,11 @@ detected. Do not assume that internal table layouts are stable.
 Version 2 uses artifact schema 2 and runtime ABI 2. Regenerate v1 artifacts
 after upgrading; incompatible metadata produces `FLEXR-E020`.
 
+Artifacts built with a new DSL feature require a runtime that provides that
+feature. For example, a non-standalone lexer that defines named patterns with
+`pattern` needs the pattern DSL in its installed runtime. Existing v2
+artifacts continue to load on the newer runtime.
+
 All four backends are stable. `table`, `direct`, and `auto` use longest-match
 selection; `firstmatch` follows rule and regexp alternative order. It does not
 share the longest-match promise and must be selected explicitly.

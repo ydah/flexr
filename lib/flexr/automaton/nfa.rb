@@ -78,6 +78,8 @@ module Flexr
           repeat_fragment(node.child, node.minimum, node.maximum)
         when Regexp::AST::Difference
           dfa_fragment(@compile_difference.call(node))
+        when Regexp::AST::EmbeddedDFA
+          dfa_fragment(node.dfa)
         else
           raise CompileError, "cannot build NFA from #{node.class}"
         end

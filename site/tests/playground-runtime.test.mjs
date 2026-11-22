@@ -97,6 +97,17 @@ test('share links retain Unicode source and input without running code', () => {
   assert.throws(() => decodeState(btoa(JSON.stringify({ source: 5, input: '' }))), /Invalid/);
 });
 
+test('pattern algebra keeps overlapping delimiters and keywords distinct', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ ...presets.pattern, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [
+      ['KEYWORD', 'if'], ['IDENT', 'ifx'], ['BLOCK', '[[aba'], ['IDENT', 'ba'], ['KEYWORD', 'end'],
+    ]);
+  }
+});
+
 test('language presets use the repository examples and run in both modes', async () => {
   const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
   for (const name of ['toml', 'graphql', 'sql']) {

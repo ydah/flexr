@@ -237,7 +237,11 @@ module Flexr
           node_name = "#{state_name}_#{state}"
           node = dot_quote(node_name)
           accepting = !dfa.accepts[state].empty?
-          label = dfa.accepts[state].map(&:rule_index).uniq.join(",")
+          label = dfa.accepts[state].map do |acceptance|
+            rule = compiled.rules.fetch(acceptance.rule_index)
+            pattern = rule.patterns.fetch(acceptance.pattern_index)
+            pattern.is_a?(Pattern) ? "#{rule.index} #{pattern.inspect}" : rule.index
+          end.uniq.join(",")
           label = "#{node_name}\naccept=#{label}" unless label.empty?
           attributes = dot_node_attributes(label, accepting: accepting, accelerated: accelerated_states[state])
           out.puts "  #{node} [#{attributes}];"
