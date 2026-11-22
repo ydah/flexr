@@ -4,85 +4,45 @@ import '../styles/landing.css';
 
 const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
 const repo = 'https://github.com/ydah/flexr';
+const example = String.raw`require "flexr"
+
+class Lexer < Flexr::Lexer
+  emits :INTEGER, :PLUS
+
+  rule(/ +/, skip: true)
+  rule(/[0-9]+/) { emit :INTEGER, text.to_i }
+  rule(/\+/) { emit :PLUS }
+end
+
+Lexer.new("12 + 3").tokens
+# => [[:INTEGER, 12], [:PLUS, "+"], [:INTEGER, 3]]`;
 ---
 <SiteLayout
-  title="A lexer generator that speaks Ruby"
-  description="Define lexer rules in Ruby, understand every match, and generate deterministic Ruby with flexr."
+  title="A lexer generator for Ruby"
+  description="Define lexer rules in Ruby. Run the lexer directly or generate a Ruby scanner."
 >
   <main class="landing">
-    <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-heading">
-        <p>Lexer generation, in Ruby</p>
-        <h1 id="hero-title">Write the rules.<br /><em>Know what wins.</em></h1>
+    <header class="landing-intro">
+      <h1>A lexer generator for Ruby</h1>
+      <p>Write rules that turn text into tokens. Run your lexer directly or generate a Ruby scanner from the same rules.</p>
+      <div class="landing-actions">
+        <code>gem install flexr</code>
+        <a href={`${base}playground/`}>Try the playground</a>
       </div>
-      <div class="hero-intro">
-        <p>
-          flexr keeps lexer specifications in the language they serve. Define readable rules,
-          inspect every decision, then generate deterministic Ruby for deployment.
-        </p>
-        <div class="hero-actions">
-          <a class="action action-primary" href={`${base}learn/getting-started/`}>Build your first lexer</a>
-          <a class="action action-link" href={`${base}playground/`}>Open the playground</a>
-        </div>
-      </div>
-    </section>
+    </header>
 
-    <section class="specimen" aria-labelledby="specimen-title">
-      <header>
-        <p>One input, four decisions</p>
-        <h2 id="specimen-title">A match you can read.</h2>
-      </header>
-      <div class="source-line">
-        <span>source</span>
-        <code>if total == 42</code>
-      </div>
-      <ol class="token-line" aria-label="Generated token stream">
-        <li><span>if</span><strong>IF</strong></li>
-        <li><span>total</span><strong>IDENT</strong></li>
-        <li class="token-accent"><span>==</span><strong>EQ</strong></li>
-        <li><span>42</span><strong>INTEGER</strong></li>
-      </ol>
-      <p class="decision"><code>/==/</code> wins over <code>/=/</code> because the longest match wins.</p>
+    <section class="landing-example" aria-labelledby="example-title">
+      <h2 id="example-title">Example</h2>
+      <pre><code>{example}</code></pre>
     </section>
-
-    <section class="principles" aria-labelledby="principles-title">
-      <header>
-        <p>Why flexr</p>
-        <h2 id="principles-title">One specification, from first test to release.</h2>
-      </header>
-      <div class="principle-list">
-        <article>
-          <h3>Ruby-native</h3>
-          <p>Use familiar classes, constants, and actions. There is no separate lexer language to learn.</p>
-        </article>
-        <article>
-          <h3>Explainable</h3>
-          <p>Longest match wins. Source order resolves ties. Unsupported patterns surface early.</p>
-        </article>
-        <article>
-          <h3>Ready both ways</h3>
-          <p><a href={`${base}learn/runtime-mode/`}>Runtime mode</a> keeps iteration quick. <a href={`${base}learn/generation/`}>Generated mode</a> keeps deployment reproducible.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="start" aria-labelledby="start-title">
-      <div>
-        <p>Ready when you are</p>
-        <h2 id="start-title">Start with one Ruby file.</h2>
-      </div>
-      <code>gem install flexr</code>
-      <a class="action action-primary" href={`${base}learn/getting-started/`}>Read the quick start</a>
-    </section>
-
-    <footer class="landing-footer">
-      <a class="footer-brand" href={base}>flexr/</a>
-      <nav aria-label="Footer navigation">
-        <a href={`${base}reference/dsl/`}>Reference</a>
-        <a href={`${base}examples/`}>Examples</a>
-        <a href={repo}>GitHub</a>
-      </nav>
-      <p>MIT licensed.</p>
-    </footer>
   </main>
+
+  <footer class="landing-footer">
+    <nav aria-label="Footer navigation">
+      <a href={`${base}reference/dsl/`}>Reference</a>
+      <a href={`${base}examples/`}>Examples</a>
+      <a href={repo}>GitHub</a>
+    </nav>
+    <a href={`${repo}/blob/main/LICENSE.txt`}>MIT License</a>
+  </footer>
 </SiteLayout>
