@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "dfa_operations"
+require_relative "keyword_tables"
 
 module Flexr
   module Automaton
@@ -31,6 +32,7 @@ module Flexr
         stats = machines.transform_values { |machine| machine.dfa.stats }
         compiled = CompiledSpec.new(machines: machines, rules: @spec.rules, states: state_names, stats: stats)
         compiled.diagnostics = diagnostics_for(compiled, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at)
+        compiled.diagnostics.concat(KeywordTables.diagnostics(compiled, @spec)) if @spec.options.key?(:keyword_tables)
         compiled
       end
 

@@ -197,6 +197,10 @@ module Flexr
         options.warn_level == :all ||
           (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
       end
+      if parsed && options.overrides.fetch(:backend, parsed.config[:backend]) != :firstmatch && options.warn_level != :none
+        tables = parsed.config.dig(:options, :keyword_tables)
+        diagnostics.concat(Automaton::KeywordTables.grouping_suggestions(compiled, tables))
+      end
       diagnostics.concat(Migration.diagnostics(parsed)) if options.target
       set = DiagnosticSet.new
       diagnostics.each { |diagnostic| set << diagnostic }
@@ -228,8 +232,11 @@ module Flexr
     end
 
     def print_dot(spec, options, out)
-      compiled = compile(read_spec(spec), overrides: options.overrides)
+      parsed = read_spec(spec)
+      compiled = compile(parsed, overrides: options.overrides)
       out.puts "digraph flexr {"
+      labels = keyword_table_labels(parsed.config)
+      out.puts "  graph [label=#{dot_quote(labels.join("\n"))}];" unless labels.empty?
       compiled.machines.each do |state_name, machine|
         dfa = machine.dfa
         accelerated_states = Automaton::Accel.extract(dfa).to_h { |region| [region.state, true] }
@@ -278,7 +285,9 @@ module Flexr
     end
 
     def print_trace(spec, options, out)
-      compiled = compile(read_spec(spec), overrides: options.overrides)
+      parsed = read_spec(spec)
+      compiled = compile(parsed, overrides: options.overrides)
+      out.puts keyword_table_labels(parsed.config)
       compiled.machines.each do |state_name, machine|
         dfa = machine.dfa
         out.puts "state #{state_name} start=#{dfa.start} classes=#{dfa.class_count}"
@@ -296,12 +305,24 @@ module Flexr
     end
 
     def print_explanation(spec, rule_number, out)
-      rules = read_spec(spec).rules
+      parsed = read_spec(spec)
+      rules = parsed.rules
       rules = rules.select { |rule| rule.index == rule_number } if rule_number
       raise ArgumentError, "rule not found: #{rule_number}" if rules.empty? && rule_number
 
       out.puts(rules.map { |rule| "rule #{rule.index}: #{rule.patterns.inspect}" })
+      emitted = rules.filter_map { |rule| rule.action[1] if rule.action.is_a?(Array) && rule.action.first == :emit }
+      out.puts keyword_table_labels(parsed.config, among: emitted)
       EXIT_OK
+    end
+
+    def keyword_table_labels(config, among: nil)
+      config.fetch(:options, {}).fetch(:keyword_tables, {}).filter_map do |type, table|
+        next if among && !among.include?(type)
+
+        entries = table.map { |word, (token, _)| "#{word.inspect} => #{token.inspect}" }
+        "keywords among #{type.inspect} (#{entries.join(', ')})"
+      end
     end
 
     def print_input_trace(spec, options, trace_args, out)
@@ -356,6 +377,9 @@ module Flexr
       klass.encoding(config.fetch(:encoding, Encoding::UTF_8))
       Array(config[:declared_tokens]).each { |token| klass.emits(token) }
       config_options = config.fetch(:options, {}).merge(overrides.slice(:experimental, :allow_empty_match))
+      if (tables = config_options[:keyword_tables])
+        klass.__flexr_config.options[:keyword_tables] = tables
+      end
       config_options.slice(*Configuration::BOOLEAN_OPTIONS).each do |name, value|
         klass.option(name) if value
       end

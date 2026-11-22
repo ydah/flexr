@@ -13,7 +13,7 @@ module Flexr
     )
 
     class PrismReader
-      DSL_NAMES = %i[rule state all_states on_eof emits backend token_kind encoding option accel].freeze
+      DSL_NAMES = %i[rule state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
 
       def initialize(source, path: nil)
         @source = source
@@ -201,6 +201,8 @@ module Flexr
         when :emits
           values = positional(node).map { |item| static(item) }.compact.flatten
           @config[:declared_tokens].concat(values.map(&:to_sym))
+        when :keywords
+          collect_keywords(node)
         when :backend
           @config[:backend] = Configuration.backend!(static(positional(node).first))
         when :token_kind
@@ -217,6 +219,19 @@ module Flexr
       rescue CompileError => e
         e.diagnostic.location ||= [node.location.start_offset, node.location.end_offset] if e.diagnostic
         raise
+      end
+
+      def collect_keywords(node)
+        validate_keywords!(node, %i[among])
+        args = positional(node)
+        among = keyword(node, :among)
+        location = [node.location.start_offset, node.location.end_offset]
+        Keywords.error!("keywords requires words and among:", location: location) unless args.one? && among && !node.block
+        words = static(args.first)
+        type = static(among)
+        return if @allow_dynamic && (words.nil? || type.nil?)
+
+        Keywords.add!(@config[:options] ||= {}, @config[:declared_tokens], words, among: type, location: location)
       end
 
       def collect_state(node, parent_states)

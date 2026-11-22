@@ -153,6 +153,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E025` | The lexical state stack overflowed | Remove recursive pushes or raise the limit |
 | `FLEXR-E026` | A cancellation callback stopped lexing | Resume with a new lexer when ready |
 | `FLEXR-E027` | An error callback returned an unknown action | Return `:skip`, `:raise`, `:token`, or `:halt` |
+| `FLEXR-E028` | A keyword spelling or declaration is invalid, or the base rule cannot consume the full spelling | Correct the spelling or widen a rule declared with the base `emit:` type |
 
 ### Regexp rewrite help
 
@@ -326,12 +327,19 @@ expression can change how the surrounding pattern matches.
 | `FLEXR-W017` | Grammar token is missing from `emits` | Declare and emit it, or remove it from the grammar |
 | `FLEXR-W018` | Token in `emits` is missing from the grammar | Add a `%token` declaration or remove it from `emits` |
 | `FLEXR-W020` | Structured records become immutable in v2.0 | Review consumer mutations; use `record.with(...)` in v2 |
+| `FLEXR-W022` | An earlier rule shadows a spelling in a keyword table | Remove the redundant spelling or change the competing rule |
 
 Warnings are reported by `check` according to `--warn`. The default omits the
 wall-clock `FLEXR-W016`; `--warn all` includes it, and `--warn none` suppresses
 warnings. `--warn-as-error` turns selected warnings into a failed command.
 
 ## Informational diagnostics
+
+`flexr check` reports `FLEXR-I003` when consecutive literal rules can share
+the following identifier rule using `keywords`. The DFA must show that the
+identifier accepts the full spellings without anchors in the same states.
+`--warn none` hides this suggestion. `--warn-as-error` still permits checks
+with informational diagnostics.
 
 `flexr check --target 2.0` includes `FLEXR-I002` with Ruby and artifact
 requirements. See the [v2 migration guide](../migration-v2.md) for the static

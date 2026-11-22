@@ -37,6 +37,7 @@ module Flexr
     def all_states: () { () [self: singleton(Lexer)] -> untyped } -> void
     def on_eof: () { () [self: Lexer] -> untyped } -> void
     def emits: (*untyped) -> void
+    def keywords: (Array[String] | Hash[String, Symbol], among: Symbol) -> nil
     def backend: (:table | :direct | :auto | :firstmatch | String) -> void
     def token_kind: (:array | :struct | :yield | String) -> void
     def encoding: (Encoding | String) -> void

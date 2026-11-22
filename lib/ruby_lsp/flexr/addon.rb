@@ -74,16 +74,18 @@ module RubyLsp
       end
 
       def on_call_node_enter(node)
-        return unless node.name == :rule && node.receiver.nil?
+        return unless %i[rule keywords].include?(node.name) && node.receiver.nil?
 
         source = node.location.source_lines.join
         diagnostics = @analysis.diagnostics(source).select do |diagnostic|
           diagnostic.location &&
             (node.location.start_offset...node.location.end_offset).cover?(diagnostic.location.first)
         end
-        return if diagnostics.empty?
+        messages = diagnostics.map { |diagnostic| "#{diagnostic.code}: #{@analysis.message(diagnostic)}" }
+        messages.unshift("Keyword table. Exact spellings select a token type after a matching emit: rule wins.") if node.name == :keywords
+        return if messages.empty?
 
-        text = diagnostics.map { |diagnostic| "#{diagnostic.code}: #{@analysis.message(diagnostic)}" }.join("\n\n")
+        text = messages.join("\n\n")
         @builder.push("```text\n#{text}\n```", category: :documentation)
       end
     end
