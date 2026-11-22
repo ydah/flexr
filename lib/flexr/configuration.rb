@@ -33,6 +33,13 @@ module Flexr
       validated_symbol!(value, BOOLEAN_OPTIONS, :option)
     end
 
+    def rule_priority!(value)
+      return value if value.is_a?(Integer)
+
+      diagnostic = Diagnostics.error("FLEXR-E018", "rule priority must be an Integer")
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+    end
+
     def rule_channel!(value)
       return value if value.is_a?(Symbol) && value != :all
 

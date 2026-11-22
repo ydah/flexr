@@ -42,6 +42,7 @@ const updatedPresets = {
   pattern: 'if ifx [[ababa end',
   keywords: 'if iffy else end',
   trivia: '# note\nalpha \tbeta',
+  priority: 'if ifx',
 };
 const releasedPresets = useStable ? stableFiles('site/ruby/presets') : null;
 for (const [name, input] of Object.entries(updatedPresets)) {

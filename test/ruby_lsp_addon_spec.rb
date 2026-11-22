@@ -135,6 +135,17 @@ RSpec.describe "Ruby LSP flexr add-on" do
     end
   end
 
+  it "explains priority and a trivia channel on the same rule hover" do
+    source = "class EditorLexer < Flexr::Lexer\n  rule(\"if\", emit: :IF, channel: :comment, priority: 10)\nend\n"
+    open_server(source) do |server, uri|
+      server.process_message(id: 1, method: "textDocument/hover", params: {
+        textDocument: { uri: uri }, position: { line: 1, character: 3 }
+      })
+      value = pop_result(server).response.contents.value
+      expect(value).to include("priority 10", "equal-length matches", ":comment", "trivia")
+    end
+  end
+
   it "explains hidden token channels in rule hover without warnings" do
     source = <<~RUBY
       class EditorLexer < Flexr::Lexer
