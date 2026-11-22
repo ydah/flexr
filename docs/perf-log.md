@@ -266,3 +266,62 @@ other lexers or JIT engines.
 `rake bench:regression` also passed with the existing baseline metrics, identity,
 ratio thresholds, and 0.18x floor unchanged. Reproduce the five-iteration sample
 with `ruby -Ilib benchmark/run.rb --iterations 5 --json`.
+
+## 2026-11-22: generated frozen-input scan
+
+The generated simple scanner now follows the runtime's DFA path for frozen
+strings with the default `accel :auto` and no active scan guards. It reads
+the region cache and token-limit parameters only when it needs the fallback
+path. A warmed diagnostic run on `0d1cc81` reported 8,748,740 megamorphic
+instance-variable reads and 1,699,605 writes across five generated scans of
+the JSON corpus with YJIT statistics enabled. Both counters reached zero
+when the acceleration cache fields were initialized up front in an
+experiment. The DFA path avoids those lazy cache writes on eligible input.
+
+The comparison below uses Ruby 4.0.9 on arm64-darwin25 and the default
+140,000-byte JSON input with 50,000 emitted tokens. Baseline `0d1cc81` and
+the updated scanner were run in alternating order. Each result is the median
+of three runs with ten warmup and ten timed iterations per engine. Ratios
+are calculated per run before taking the median.
+
+| Engine | Generated MB/s before → after | Generated / runtime before → after | Generated / handwritten before → after |
+|---|---:|---:|---:|
+| Interpreter | 1.874 → 1.964 | 0.992x → 1.036x | 0.223x → 0.234x |
+| YJIT | 3.635 → 5.633 | 0.606x → 0.958x | 0.388x → 0.519x |
+| ZJIT | 0.431 → 2.080 | 0.200x → 0.972x | 0.043x → 0.202x |
+
+YJIT generated throughput reaches the 0.50x handwritten target in this sample.
+Both JITs remain below the 1.0x generated/runtime target. Runtime allocations
+stay at 3.600 per token, and generated allocations move from 3.210 to 3.200.
+A separate check compared the full runtime, generated, and standalone token
+sequences for frozen JSON, TOML, GraphQL, SQL, and Ruby subset inputs in all
+three engines.
+
+Run the reference JSON matrix with:
+
+```sh
+ruby -Ilib benchmark/matrix.rb --iterations 10
+```
+
+The other lexer samples use one run with five warmup and five timed
+iterations per engine on the same machine. The values are generated/runtime
+throughput ratios. TOML, GraphQL, and SQL use the frozen built-in inputs.
+Ruby subset uses the mutable string loaded by `--input-file`.
+
+| Lexer | Interpreter before → after | YJIT before → after | ZJIT before → after |
+|---|---:|---:|---:|
+| TOML | 0.631x → 0.647x | 0.291x → 0.424x | 0.188x → 0.626x |
+| GraphQL | 0.725x → 0.722x | 0.319x → 0.496x | 0.388x → 0.683x |
+| SQL | 0.643x → 0.681x | 0.350x → 0.467x | 0.409x → 0.664x |
+| Ruby subset | 0.845x → 0.849x | 0.419x → 0.404x | 0.244x → 0.243x |
+
+Run these workloads with:
+
+```sh
+for lexer in toml graphql sql; do
+  ruby -Ilib benchmark/matrix.rb --spec "examples/$lexer/lexer.flexr.rb" --iterations 5
+done
+ruby -e 'STDOUT.write(%q(class Foo "ok" end ) * 10_000)' > /tmp/flexr-ruby-subset-input.txt
+ruby -Ilib benchmark/matrix.rb --spec examples/ruby_subset/lexer.flexr.rb \
+  --input-file /tmp/flexr-ruby-subset-input.txt --iterations 5
+```
