@@ -63,10 +63,12 @@ module Flexr
       yield
       pending = @lexer.instance_variable_get(:@pending)
       bytes = @lexer.buffer.byteslice(start...ending)
-      @steps << { byte_begin: start, byte_end: ending, next_byte: @lexer.byte_pos, state: state, next_state: @lexer.state,
-                  text: display_text(bytes), bytes: bytes.bytes, candidates: candidates,
-                  rule: rule.index, patterns: rule.patterns.map(&:inspect), reason: reason,
-                  action: pending ? "emit" : "skip", token: pending&.inspect }
+      step = { byte_begin: start, byte_end: ending, next_byte: @lexer.byte_pos, state: state, next_state: @lexer.state,
+               text: display_text(bytes), bytes: bytes.bytes, candidates: candidates,
+               rule: rule.index, patterns: rule.patterns.map(&:inspect), reason: reason,
+               action: pending ? "emit" : "skip", token: pending&.inspect }
+      step[:channel] = rule.channel if rule.channel
+      @steps << step
     end
 
     def record_eof
@@ -97,6 +99,7 @@ module Flexr
           "rule #{candidate[:rule]}(#{candidate[:length]}/#{candidate[:total_length]})"
         end.join(" ")
         target = step[:rule] ? "rule #{step[:rule]}" : step[:reason]
+        target += " channel=#{step[:channel].inspect}" if step[:channel]
         "@#{step[:byte_begin]} #{step[:text].inspect} state=#{step[:state]} " \
           "candidates: #{candidates} -> #{target} #{step[:action]} (#{step[:reason]}) " \
           "state=#{step[:next_state]}#{step[:token] && " #{step[:token]}"}"

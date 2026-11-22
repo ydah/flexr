@@ -197,20 +197,25 @@ RSpec.describe "runtime and generated parity" do
     expect(trace.steps.first.fetch(:reason)).to eq("rule_order")
   end
 
-  it "rejects an explicit-priority artifact on a runtime without its capability" do
+  it "rejects an artifact that requires unavailable priority or channel support" do
     Dir.mktmpdir do |directory|
       source = File.join(directory, "lexer.flexr.rb")
       generated = File.join(directory, "lexer.generated.rb")
       File.write(source, <<~RUBY)
         require "flexr"
         class ABI2PriorityLexer < Flexr::Lexer
-          rule("if", emit: :IF, priority: 10)
+          rule("if", channel: :comment, emit: :IF, priority: 10)
         end
       RUBY
       Flexr::Generator.new(source, output: generated).generate
       script = <<~RUBY
         require "flexr"
-        Flexr::IR::Rule.send(:remove_method, :loses_priority_tie?)
+        case ARGV.fetch(1)
+        when "explicit rule priority"
+          Flexr::IR::Rule.send(:remove_method, :loses_priority_tie?)
+        when "token channels"
+          Flexr::Runtime.send(:remove_const, :Channels)
+        end
         begin
           load ARGV.fetch(0)
         rescue Flexr::CompileError => error
@@ -218,9 +223,11 @@ RSpec.describe "runtime and generated parity" do
           puts error.diagnostic.note
         end
       RUBY
-      output, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script, generated)
-      expect(status).to be_success, stderr
-      expect(output).to include("FLEXR-E020", "runtime does not support explicit rule priority")
+      ["explicit rule priority", "token channels"].each do |capability|
+        output, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script, generated, capability)
+        expect(status).to be_success, stderr
+        expect(output).to include("FLEXR-E020", "runtime does not support #{capability}")
+      end
     end
   end
 
@@ -236,6 +243,26 @@ RSpec.describe "runtime and generated parity" do
     input = "xyab"
     expected = [[%w[X x], %w[OTHER y], %w[OTHER a], %w[OTHER b]]]
     expect(outcomes_for(source, "AbsenceTrailingLexer", [input]).values).to all(eq(expected))
+  end
+
+  it "runs static pattern algebra with identical longest matches in all modes" do
+    source = <<~RUBY
+      require "flexr"
+      class AlgebraParityLexer < Flexr::Lexer
+        IDENT = pattern(/[a-z]+/)
+        KEYWORD = pattern(%w[if else])
+        TERMINATED = upto("aba")
+        rule(KEYWORD, emit: :KEYWORD)
+        rule(IDENT - KEYWORD, emit: :IDENT)
+        rule(pattern("<") + TERMINATED, emit: :SEGMENT)
+        rule("!", followed_by: TERMINATED, emit: :LOOKAHEAD)
+        rule(/ +/, skip: true)
+      end
+    RUBY
+    input = "if ify <éababa !aba"
+    expected = [[%w[KEYWORD if], %w[IDENT ify], %w[SEGMENT <éaba], %w[IDENT ba], %w[LOOKAHEAD !], %w[IDENT aba]]]
+
+    expect(outcomes_for(source, "AlgebraParityLexer", [input]).values).to all(eq(expected))
   end
 
   { "UTF_8" => "OTHER", "BINARY" => "BYTE" }.each do |encoding, byte_token|

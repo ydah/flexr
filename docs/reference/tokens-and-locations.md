@@ -20,6 +20,39 @@ Immutability is shallow: custom token values can still be mutable.
 Lazy columns use a frozen pair without mutating the record or retaining the
 lexer; `to_h` returns the resolved columns.
 
+## Trivia channels
+
+Retain whitespace and comments in named channels when writing a formatter or
+source tool alongside a parser.
+
+```ruby
+class Lexer < Flexr::Lexer
+  token_kind :struct
+  rule(/#[^\n]*/, channel: :comment)
+  rule(/[ \t\n]+/, channel: :whitespace)
+  rule(/[a-z_][a-z0-9_]*/, emit: :IDENT)
+end
+
+input = "# note\nname"
+token = Lexer.new(input).next_token
+token.leading_trivia.map(&:channel) # => [:comment, :whitespace]
+Lexer.new(input).tokens(channels: :all).map(&:value).join == input # => true
+```
+
+Structured tokens expose their `channel` and a frozen `leading_trivia` array
+of structured tokens. The array contains the trivia between this token
+and the previous default-channel token. An emitted EOF token can carry
+any trailing trivia. Use `tokens(channels: :all)` to collect trailing trivia
+when there is no EOF token. Lexical error recovery tokens and EOF emissions
+use the default channel. For `more`, the rule that emits the combined text
+determines its channel. `Token#with` preserves this metadata, and its
+three data members stay the same. Array and yield tokens retain their
+two-element shape.
+
+Joining values reconstructs the original input when rules preserve the
+matched text, retain every byte, and emit it once. Discard rules, actions
+that change values, and synthesized tokens can alter the reconstructed text.
+
 ## Locations
 
 `Flexr::Runtime::Location` has these public members:

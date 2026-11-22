@@ -40,6 +40,13 @@ module Flexr
       raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
     end
 
+    def rule_channel!(value)
+      return value if value.is_a?(Symbol) && value != :all
+
+      diagnostic = Diagnostics.error("FLEXR-E018", "rule channel must be a Symbol other than :all")
+      raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+    end
+
     def validated_symbol!(value, allowed, name)
       symbol = value.to_sym
       return symbol if allowed.include?(symbol)

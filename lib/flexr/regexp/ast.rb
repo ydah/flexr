@@ -13,6 +13,7 @@ module Flexr
       Repeat = Struct.new(:child, :minimum, :maximum, :loc, keyword_init: true)
       Absence = Struct.new(:child, :loc, keyword_init: true)
       Difference = Struct.new(:left, :right, :loc, keyword_init: true)
+      EmbeddedDFA = Struct.new(:dfa)
       Anchor = Struct.new(:kind, :loc, keyword_init: true)
       TrailMark = Struct.new(:rule_id, :loc, keyword_init: true)
       CharClass = Struct.new(:ranges, :negated, :loc, keyword_init: true)

@@ -23,6 +23,7 @@ module Flexr
 
       def whole_token_plans(dfa, rules)
         return if rules.any?(&:trailing) || !dfa.accepts[dfa.start].empty?
+        return if defined?(Pattern) && rules.any? { |rule| rule.patterns.any?(Pattern) }
         return if dfa.accepts.any? { |acceptances| acceptances.any? { |item| item.bol_only || item.end_anchor } }
 
         plans = Array.new(256)

@@ -74,6 +74,34 @@ test('the absence preset ends each comment at its first terminator', async () =>
   }
 });
 
+test('trivia keeps whitespace and comments in structured token output', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  assert.ok(presets.trivia, 'trivia preset is packaged');
+  const { source, input } = presets.trivia;
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ source, input, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens.map(token => [
+      token.type, token.value, token.channel,
+      token.leading_trivia.map(item => [item.channel, item.value]),
+    ]), [
+      ['WORD', 'alpha', 'default', [['comment', '# note'], ['whitespace', '\n']]],
+      ['WORD', 'beta', 'default', [['whitespace', ' \t']]],
+    ]);
+    assert.equal(result.tokens[0].leading_trivia[0].location.byte_end, 6);
+    assert.equal(result.tokens[0].location.line_begin, 2);
+    const withoutTrivia = await runtime.run({ source, input: 'alpha', mode });
+    assert.deepEqual(withoutTrivia.tokens[0].leading_trivia, []);
+  }
+});
+
+test('retains the existing display for ordinary structured tokens', async () => {
+  const source = 'class Lexer < Flexr::Lexer\n token_kind :struct\n rule("x", emit: :WORD)\nend';
+  const result = await runtime.run({ source, input: 'x', mode: 'runtime' });
+  assert.equal(result.error, undefined, result.error);
+  assert.match(result.tokens[0], /^#<data Flexr::Runtime::Token type=:WORD/);
+});
+
 test('share links retain Unicode source and input without running code', () => {
   const state = { source: 'class Lexer; # café\nend', input: '日本語', mode: 'runtime' };
   assert.deepEqual(decodeState(encodeState(state)), state);
@@ -87,6 +115,29 @@ test('priority changes the winner only on equal-length matches', async () => {
     const result = await runtime.run({ ...presets.priority, mode });
     assert.equal(result.error, undefined, result.error);
     assert.deepEqual(result.tokens, [['IF', 'if'], ['IDENT', 'ifx']]);
+  }
+});
+
+test('pattern algebra keeps overlapping delimiters and keywords distinct', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ ...presets.pattern, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [
+      ['KEYWORD', 'if'], ['IDENT', 'ifx'], ['BLOCK', '[[aba'], ['IDENT', 'ba'], ['KEYWORD', 'end'],
+    ]);
+  }
+});
+
+test('the keyword preset classifies exact identifiers in both modes', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  assert.ok(presets.keywords, 'keyword preset is packaged');
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ ...presets.keywords, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [
+      ['IF', 'if'], ['IDENT', 'iffy'], ['ELSE', 'else'], ['END', 'end'],
+    ]);
   }
 });
 
