@@ -193,11 +193,12 @@ RSpec.describe "dynamic delimiters" do
         Flexr::Generator.new(source, output: path, options: { backend: backend, standalone: standalone }).generate
         variants << [path, standalone]
       end
-      script = <<~'RUBY'
+      runner = File.join(directory, "run_fixture.rb")
+      File.write(runner, <<~RUBY)
         require "json"
         require "stringio"
         load ARGV.fetch(0)
-        source = StringIO.new("<<TAG\r\né\r\nTAG\r\nend")
+        source = StringIO.new($stdin.binmode.read)
         tokens = DelimiterFixture.new(source, filename: "heredoc.lex", retain_input: false, chunk_size: 1).tokens
         puts JSON.generate(tokens.map do |token|
           loc = token.location
@@ -206,10 +207,11 @@ RSpec.describe "dynamic delimiters" do
         end)
       RUBY
 
+      input = "<<TAG\r\né\r\nTAG\r\nend"
       variants.each do |path, standalone|
         command = [RbConfig.ruby]
         command.push("-Ilib") unless standalone
-        stdout, stderr, status = Open3.capture3(*command, "-e", script, path)
+        stdout, stderr, status = Open3.capture3(*command, runner, path, stdin_data: input, binmode: true)
         expect(status).to be_success, stderr
         expect(JSON.parse(stdout)).to eq([
           ["HEREDOC", "é\r\n", "heredoc.lex", 0, 16, 1, 4, 1],
@@ -231,11 +233,12 @@ RSpec.describe "dynamic delimiters" do
         end
       RUBY
       Flexr::Generator.new(source, output: standalone, options: { standalone: true }).generate
-      script = <<~RUBY
+      runner = File.join(directory, "run_fixture.rb")
+      File.write(runner, <<~RUBY)
         load ARGV.fetch(0)
         abort "wrong token" unless DelimiterOptionFixture.new("!a!").tokens == [[:BODY, "a"]]
       RUBY
-      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, standalone)
+      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, runner, standalone)
       expect(status).to be_success, stderr
     end
   end
