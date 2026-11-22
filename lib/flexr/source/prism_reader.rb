@@ -4,16 +4,16 @@ module Flexr
   module Source
       RuleDefinition = Struct.new(
       :index, :patterns, :trailing, :action_source, :action, :states, :bol_only, :end_anchor,
-      :pattern_conditions, :bind_action, :reads_locals,
+      :pattern_conditions, :bind_action, :reads_locals, :channel, :dynamic_channel, :priority,
       :span, keyword_init: true
     )
       SpecSource = Struct.new(
         :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
-        :states, :flexr_require_spans, :dsl_edits, keyword_init: true
+      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, keyword_init: true
     )
 
     class PrismReader
-      DSL_NAMES = %i[rule state all_states on_eof emits backend token_kind encoding option accel].freeze
+      DSL_NAMES = %i[rule state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
 
       def initialize(source, path: nil)
         @source = source
@@ -57,10 +57,14 @@ module Flexr
         require_spans = flexr_require_spans(prism.value)
         first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
+        uses_patterns = false
+        each_node(prism.value) do |node|
+          uses_patterns ||= node.is_a?(::Prism::CallNode) && %i[pattern upto].include?(node.name)
+        end
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq(&:first),
                        first_dsl_offset: first_dsl_offset, constants: @constants, states: @states,
-                       flexr_require_spans: require_spans, dsl_edits: @edits)
+                       flexr_require_spans: require_spans, dsl_edits: @edits, uses_patterns: uses_patterns)
       end
 
       private
@@ -201,6 +205,8 @@ module Flexr
         when :emits
           values = positional(node).map { |item| static(item) }.compact.flatten
           @config[:declared_tokens].concat(values.map(&:to_sym))
+        when :keywords
+          collect_keywords(node)
         when :backend
           @config[:backend] = Configuration.backend!(static(positional(node).first))
         when :token_kind
@@ -217,6 +223,19 @@ module Flexr
       rescue CompileError => e
         e.diagnostic.location ||= [node.location.start_offset, node.location.end_offset] if e.diagnostic
         raise
+      end
+
+      def collect_keywords(node)
+        validate_keywords!(node, %i[among])
+        args = positional(node)
+        among = keyword(node, :among)
+        location = [node.location.start_offset, node.location.end_offset]
+        Keywords.error!("keywords requires words and among:", location: location) unless args.one? && among && !node.block
+        words = static(args.first)
+        type = static(among)
+        return if @allow_dynamic && (words.nil? || type.nil?)
+
+        Keywords.add!(@config[:options] ||= {}, @config[:declared_tokens], words, among: type, location: location)
       end
 
       def collect_state(node, parent_states)
@@ -255,12 +274,12 @@ module Flexr
         values = positional(node)
         patterns = static(values.first, scope: @lexer_scope)
         patterns = [patterns] unless patterns.is_a?(Array)
-        unless (@allow_dynamic && patterns.any?(&:nil?)) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) }
-          diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, or Array")
+        unless (@allow_dynamic && patterns.any?(&:nil?)) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) || pattern.is_a?(Pattern) }
+          diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, Pattern, or Array")
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
         options = keywords(node)
-        validate_keywords!(node, %i[skip emit followed_by])
+        validate_keywords!(node, %i[skip emit followed_by channel priority])
         action_source = node.block && source_slice(node.block)
         if action_source && reject_action?(node.block)
           diagnostic = Diagnostics.error(
@@ -274,8 +293,15 @@ module Flexr
         end
         skip = options.key?(:skip) ? static(options[:skip], scope: @lexer_scope) : false
         emit = options.key?(:emit) ? static(options[:emit], scope: @lexer_scope) : nil
+        priority = options.key?(:priority) ? static(options[:priority], scope: @lexer_scope) : 0
+        Configuration.rule_priority!(priority) unless @allow_dynamic && priority.nil?
+        channel = options.key?(:channel) ? static(options[:channel], scope: @lexer_scope) : :default
+        dynamic_channel = @allow_dynamic && channel.nil?
+        channel = dynamic_channel ? :default : Configuration.rule_channel!(channel)
+        skip ||= channel == :skip
+        channel = nil if skip || channel == :default
         action = ActionResolver.resolve(
-          skip: skip, emit: emit, block: block_action, default: "proc { emit(nil, text) }"
+          skip: skip, emit: emit, block: block_action, default: channel ? [:emit, channel] : "proc { emit(nil, text) }"
         )
         bind_action = !block_action.nil? && action.equal?(block_action)
         reads_locals = false
@@ -289,8 +315,8 @@ module Flexr
         @rules << RuleDefinition.new(
           index: rule_index, patterns: patterns,
           trailing: options[:followed_by] && static(options[:followed_by], scope: @lexer_scope),
-          action_source: action_source, action: action, states: states.dup,
-          bol_only: false, end_anchor: nil,
+          action_source: action_source, action: action, states: states.dup, channel: channel, dynamic_channel: dynamic_channel,
+          bol_only: false, end_anchor: nil, priority: priority,
           span: [node.location.start_offset, node.location.end_offset], bind_action: bind_action, reads_locals: reads_locals
         )
       end

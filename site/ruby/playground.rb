@@ -35,6 +35,11 @@ module FlexrPlayground
                       max_lookahead_size: 65_536, max_buffer_size: 1_048_576)
     trace = Flexr::Trace.new(lexer)
     tokens = trace.run
+    if klass.__flexr_config.token_kind == :struct && klass.__flexr_rules.any? { |rule| rule.respond_to?(:channel) && rule.channel }
+      tokens = tokens.map do |token|
+        token_fields(token).merge(leading_trivia: token.leading_trivia.map { |trivia| token_fields(trivia) })
+      end
+    end
     dot = StringIO.new
     Flexr::CLI.print_dot(path, options, dot)
     JSON.generate(tokens: tokens, steps: trace.steps, diagnostics: diagnostics.string,
@@ -53,5 +58,9 @@ module FlexrPlayground
   ensure
     $stdout = stdout
     $stderr = stderr
+  end
+
+  def token_fields(token)
+    token.to_h.merge(channel: token.channel, location: token.location&.to_h)
   end
 end

@@ -10,6 +10,7 @@ require_relative "diagnostics"
 require_relative "action_resolver"
 require_relative "configuration"
 require_relative "ir"
+require_relative "pattern"
 require_relative "unicode/version"
 require_relative "regexp/ast"
 require_relative "regexp/parser"
@@ -38,7 +39,9 @@ require_relative "runtime/buffer"
 require_relative "runtime/errors"
 require_relative "runtime/interpreter"
 require_relative "runtime/core"
+require_relative "runtime/channels"
 require_relative "dsl"
+require_relative "keywords"
 require_relative "lexer"
 require_relative "generated"
 
@@ -46,9 +49,9 @@ require_relative "generated"
 module Flexr
   class << self
     def compile_pattern(pattern, options: {}, encoding: nil)
-      regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(pattern.to_s)
-      encoding ||= regexp.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
-      rule = IR::Rule.new(index: 0, patterns: [regexp], action: :skip, states: [:initial])
+      pattern = ::Regexp.new(pattern.to_s) unless pattern.is_a?(::Regexp) || pattern.is_a?(Pattern)
+      encoding ||= pattern.is_a?(::Regexp) && pattern.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
+      rule = IR::Rule.new(index: 0, patterns: [pattern], action: :skip, states: [:initial])
       state = IR::State.new(name: :initial, inclusive: true, id: 0)
       spec = IR::Spec.new(
         class_name: "Pattern", backend: :table, token_kind: :array,

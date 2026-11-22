@@ -1,7 +1,8 @@
 module Flexr
   VERSION: String
 
-  type pattern = String | ::Regexp
+  type pattern = String | ::Regexp | Pattern
+  type pattern_operand = pattern | Array[pattern_operand]
   type token = [untyped, untyped] | Runtime::Token
   type source_location = [Integer, Integer]
   type cancellation = (^() -> untyped) | (^(Lexer) -> untyped) | _Cancellation | _ContextCancellation
@@ -29,14 +30,25 @@ module Flexr
   end
 
   def self.compile_pattern: (pattern, ?options: Hash[Symbol, untyped], ?encoding: Encoding?) -> _CompiledPattern
-  def self.parse_pattern: (pattern, ?options: Hash[Symbol, untyped]) -> untyped
+  def self.parse_pattern: ((String | ::Regexp), ?options: Hash[Symbol, untyped]) -> untyped
+
+  class Pattern
+    def |: (pattern_operand) -> Pattern
+    def +: (pattern_operand) -> Pattern
+    def &: (pattern_operand) -> Pattern
+    def -: (pattern_operand) -> Pattern
+    def !: () -> Pattern
+  end
 
   module DSL
-    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?) ?{ () [self: Lexer] -> untyped } -> nil
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer) ?{ () [self: Lexer] -> untyped } -> nil
+    def pattern: (*pattern_operand) -> Pattern
+    def upto: (pattern_operand) -> Pattern
     def state: (*(Symbol | String), ?inclusive: bool) { () [self: singleton(Lexer)] -> untyped } -> void
     def all_states: () { () [self: singleton(Lexer)] -> untyped } -> void
     def on_eof: () { () [self: Lexer] -> untyped } -> void
     def emits: (*untyped) -> void
+    def keywords: (Array[String] | Hash[String, Symbol], among: Symbol) -> nil
     def backend: (:table | :direct | :auto | :firstmatch | String) -> void
     def token_kind: (:array | :struct | :yield | String) -> void
     def encoding: (Encoding | String) -> void
@@ -49,7 +61,7 @@ module Flexr
 
     def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?chunk_size: Integer) -> void
     def next_token: () -> token?
-    def tokens: () -> Array[token]
+    def tokens: (?channels: (:default | :all)) -> Array[token]
     def each_token: () -> Enumerator[token, self]
                   | () { (untyped, ?untyped) -> untyped } -> self
     def racc_next_token: () -> [untyped, untyped]
@@ -90,6 +102,8 @@ module Flexr
       attr_reader type: untyped
       attr_reader value: untyped
       attr_reader location: Location?
+      def channel: () -> Symbol
+      def leading_trivia: () -> Array[Token]
       def []: (:location | "location") -> Location?
             | (Integer | Symbol | String) -> untyped
       def with: (?type: untyped, ?value: untyped, ?location: Location?) -> self

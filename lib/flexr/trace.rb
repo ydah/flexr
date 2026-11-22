@@ -50,22 +50,25 @@ module Flexr
       state = @lexer.state
       candidates = candidates_at(start)
       selected = candidates.find { |candidate| candidate[:rule] == rule.index }
+      ties = selected ? candidates.select { |candidate| candidate[:total_length] == selected[:total_length] } : []
       reason = if @config.backend == :firstmatch
         "first_match"
       elsif candidates.length == 1
         "only_match"
-      elsif selected && candidates.count { |candidate| candidate[:total_length] == selected[:total_length] } > 1
-        "rule_order"
+      elsif ties.length > 1
+        ties.count { |candidate| candidate.fetch(:priority, 0) == rule.priority } > 1 ? "rule_order" : "priority"
       else
         "longest"
       end
       yield
       pending = @lexer.instance_variable_get(:@pending)
       bytes = @lexer.buffer.byteslice(start...ending)
-      @steps << { byte_begin: start, byte_end: ending, next_byte: @lexer.byte_pos, state: state, next_state: @lexer.state,
-                  text: display_text(bytes), bytes: bytes.bytes, candidates: candidates,
-                  rule: rule.index, patterns: rule.patterns.map(&:inspect), reason: reason,
-                  action: pending ? "emit" : "skip", token: pending&.inspect }
+      step = { byte_begin: start, byte_end: ending, next_byte: @lexer.byte_pos, state: state, next_state: @lexer.state,
+               text: display_text(bytes), bytes: bytes.bytes, candidates: candidates,
+               rule: rule.index, patterns: rule.patterns.map(&:inspect), reason: reason,
+               action: pending ? "emit" : "skip", token: pending&.inspect }
+      step[:channel] = rule.channel if rule.channel
+      @steps << step
     end
 
     def record_eof
@@ -96,6 +99,7 @@ module Flexr
           "rule #{candidate[:rule]}(#{candidate[:length]}/#{candidate[:total_length]})"
         end.join(" ")
         target = step[:rule] ? "rule #{step[:rule]}" : step[:reason]
+        target += " channel=#{step[:channel].inspect}" if step[:channel]
         "@#{step[:byte_begin]} #{step[:text].inspect} state=#{step[:state]} " \
           "candidates: #{candidates} -> #{target} #{step[:action]} (#{step[:reason]}) " \
           "state=#{step[:next_state]}#{step[:token] && " #{step[:token]}"}"
@@ -112,8 +116,6 @@ module Flexr
       dfa = @compiled.machines.fetch(@lexer.state).dfa
       best = {}
       walk(dfa, start) do |acceptance, ending|
-        next if acceptance.bol_only && !@lexer.beginning_of_line?
-
         rule = @rules.fetch(acceptance.rule_index)
         candidate = candidate_for(rule, start, ending)
         next unless candidate
@@ -159,23 +161,27 @@ module Flexr
           rule.trailing, encoding: @config.encoding, options: { unicode: @config.options[:unicode] == true }
         )
         longest = nil
-        walk(dfa, ending) { |_acceptance, cursor| longest = cursor - ending }
+        walk(dfa, ending, scan_start: start) { |_acceptance, cursor| longest = cursor - ending }
         longest
       else
         0
       end
       return if trailing.nil?
 
-      { rule: rule.index, patterns: rule.patterns.map(&:inspect), length: ending - start,
-        trailing_length: trailing, total_length: ending - start + trailing }
+      candidate = { rule: rule.index, patterns: rule.patterns.map(&:inspect), length: ending - start,
+                    trailing_length: trailing, total_length: ending - start + trailing }
+      candidate[:priority] = rule.priority unless rule.priority.zero?
+      candidate
     end
 
-    def walk(dfa, start)
+    def walk(dfa, start, scan_start: start)
       state = dfa.start
       cursor = start
       loop do
         if @lexer.utf8_boundary?(cursor)
           dfa.accepts[state].each do |acceptance|
+            next if acceptance.bol_only && !@lexer.__flexr_beginning_of_line_at?(start, scan_start)
+
             yield acceptance, cursor unless acceptance.end_anchor && !end_anchor?(cursor)
           end
         end

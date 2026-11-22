@@ -1,7 +1,9 @@
 ---
+import { readFile } from 'node:fs/promises';
 import SiteLayout from '../layouts/SiteLayout.astro';
 
 const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+const presets = JSON.parse(await readFile(new URL('../../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
 ---
 <SiteLayout title="Playground" description="Run real flexr Ruby specifications locally, inspect diagnostics and trace decisions, and generate a scanner." playground>
   <main class="playground-shell">
@@ -20,6 +22,11 @@ const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL :
         <select id="preset" aria-label="Choose a playground preset">
           <option value="longest">Longest match</option><option value="calculator">Calculator</option><option value="json">JSON tokens</option>
           <option value="toml">TOML subset</option><option value="graphql">GraphQL subset</option><option value="sql">SQL subset</option>
+          {Object.hasOwn(presets, 'absence') && <option value="absence">C comments with absence</option>}
+          {Object.hasOwn(presets, 'pattern') && <option value="pattern">Named pattern algebra</option>}
+          {Object.hasOwn(presets, 'keywords') && <option value="keywords">Keywords and identifiers</option>}
+          {Object.hasOwn(presets, 'trivia') && <option value="trivia">Comments and whitespace trivia</option>}
+          {Object.hasOwn(presets, 'priority') && <option value="priority">Equal-length rule priority</option>}
         </select>
         <textarea id="spec" aria-label="Lexer specification" spellcheck="false" maxlength="20000"></textarea>
       </div>

@@ -160,7 +160,9 @@ module Flexr
       self
     end
 
-    def tokens
+    def tokens(channels: :default)
+      raise ArgumentError, "channels must be :default or :all" unless %i[default all].include?(channels)
+
       result = []
       while (token = next_token)
         result << token
@@ -282,6 +284,10 @@ module Flexr
 
     def beginning_of_line?
       @bol
+    end
+
+    def __flexr_beginning_of_line_at?(position, scan_start)
+      position == scan_start ? beginning_of_line? : @buffer.getbyte(position - 1) == 0x0a
     end
 
     def binary_input
@@ -452,6 +458,8 @@ module Flexr
     end
 
     def update_position
+      return if @match_end == @match_start
+
       if @simple_location_input
         @column += @match_end - @match_start
         @bol = @match_end.zero?

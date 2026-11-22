@@ -78,10 +78,10 @@ module Flexr
         while cursor < queue.length
           state = queue.fetch(cursor).first
           accepts = dfa.accepts.fetch(state)
-          winner = accepts.min_by(&:rule_index)&.rule_index
+          winner = accepts.first&.rule_index
           if (include_empty || cursor.positive?) && winner
             shadowed = accepts.map(&:rule_index).uniq.select do |index|
-              (include_unshadowed || index > winner) && remaining.key?(index)
+              (include_unshadowed || index != winner) && remaining.key?(index)
             end
             unless shadowed.empty?
               input = example_input(queue, cursor)
@@ -149,7 +149,7 @@ module Flexr
         matches = {}
         lengths.each do |index, length|
           trailing = trailing_dfas[index]
-          lookahead = trailing ? dfa_match_lengths(trailing, input, offset: length).map(&:last).max : 0
+          lookahead = trailing ? dfa_match_lengths(trailing, input, offset: length, encoding: encoding).map(&:last).max : 0
           next unless lookahead
 
           total = length + lookahead
@@ -159,7 +159,8 @@ module Flexr
         end
         return unless matches.key?(target.index)
 
-        winner, (length, total) = matches.max_by { |index, (_, size)| firstmatch ? -index : [size, -index] }
+        priorities = rules.to_h { |rule| [rule.index, rule.priority] }
+        winner, (length, total) = matches.max_by { |index, (_, size)| firstmatch ? -index : [size, priorities.fetch(index), -index] }
         return if same_length && total != matches.fetch(target.index).last
 
         [winner, length, total - length]
@@ -171,9 +172,11 @@ module Flexr
         state = dfa.start
         cursor = offset
         matches = []
+        at_line_start = offset.zero? || input.getbyte(offset - 1) == 0x0a
         loop do
-          if encoding != Encoding::UTF_8 || input.byteslice(0, cursor).valid_encoding?
+          if encoding != Encoding::UTF_8 || input.byteslice(0, cursor).force_encoding(encoding).valid_encoding?
             dfa.accepts.fetch(state).each do |acceptance|
+              next if acceptance.bol_only && !at_line_start
               next if acceptance.end_anchor && cursor < input.bytesize && input.getbyte(cursor) != 0x0a
 
               matches << [acceptance.rule_index, cursor - offset]

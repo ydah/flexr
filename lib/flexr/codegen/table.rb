@@ -251,7 +251,8 @@ module Flexr
         lines << "#{indent}    rule = self.class.__flexr_rules.fetch(acceptance.rule_index)"
         lines << "#{indent}    next if best && cursor < best.total_end_pos"
         lines << "#{indent}    next if best && cursor == best.total_end_pos &&"
-        lines << "#{indent}      rule.index > best.rule.index"
+        priority_check = compiled.rules.any? { |rule| !rule.priority.zero? }
+        lines << "#{indent}      #{priority_check ? 'rule.loses_priority_tie?(best.rule)' : 'rule.index > best.rule.index'}"
         lines << "#{indent}    best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
         lines << "#{indent}    best.rule = rule"
         lines << "#{indent}    best.start_pos = start_position"
