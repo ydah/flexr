@@ -169,17 +169,19 @@ RSpec.describe "pattern algebra" do
           #{statement}
         end
       RUBY
-      File.write(path, source)
-      output = StringIO.new
-      errors = StringIO.new
-      status = Flexr::CLI.run(["check", path, "--format", "json"], out: output, err: errors)
+      [source, source.gsub("\n", "\r\n")].each do |fixture|
+        File.binwrite(path, fixture)
+        output = StringIO.new
+        errors = StringIO.new
+        status = Flexr::CLI.run(["check", path, "--format", "json"], out: output, err: errors)
 
-      expect(status).to eq(1)
-      start = source.b.index(statement)
-      diagnostic = JSON.parse(errors.string).fetch(0)
-      expect(diagnostic).to include("code" => "FLEXR-E029", "location" => [start, start + statement.bytesize])
-      expect(diagnostic.fetch("message")).to include("LEFT & RIGHT")
-      expect(diagnostic.fetch("note")).to include('left operand accepts "a"', 'right operand accepts "b"')
+        expect(status).to eq(1)
+        start = fixture.b.index(statement)
+        diagnostic = JSON.parse(errors.string).fetch(0)
+        expect(diagnostic).to include("code" => "FLEXR-E029", "location" => [start, start + statement.bytesize])
+        expect(diagnostic.fetch("message")).to include("LEFT & RIGHT")
+        expect(diagnostic.fetch("note")).to include('left operand accepts "a"', 'right operand accepts "b"')
+      end
     end
   end
 end
