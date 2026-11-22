@@ -27,6 +27,9 @@ const presets = JSON.parse(await readFile(new URL('../../public/playground-runti
           {Object.hasOwn(presets, 'keywords') && <option value="keywords">Keywords and identifiers</option>}
           {Object.hasOwn(presets, 'trivia') && <option value="trivia">Comments and whitespace trivia</option>}
           {Object.hasOwn(presets, 'priority') && <option value="priority">Equal-length rule priority</option>}
+          {Object.hasOwn(presets, 'indentation') && <option value="indentation">Python-like indentation</option>}
+          {Object.hasOwn(presets, 'heredoc') && <option value="heredoc">Dynamic heredoc</option>}
+          {Object.hasOwn(presets, 'html-js') && <option value="html-js">HTML with embedded JavaScript</option>}
         </select>
         <textarea id="spec" aria-label="Lexer specification" spellcheck="false" maxlength="20000"></textarea>
       </div>
@@ -41,6 +44,7 @@ const presets = JSON.parse(await readFile(new URL('../../public/playground-runti
         </div>
         <input id="share-link" class="share-link" aria-label="Share link" readonly hidden />
         <p id="status" class="workbench-status" role="status" aria-live="polite">Choose a preset or write a specification, then select Run.</p>
+        <p id="flexr-version" class="workbench-status" hidden></p>
         <p id="metrics" class="workbench-status"></p>
       </div>
       <div class="workbench-panel full">
@@ -48,8 +52,18 @@ const presets = JSON.parse(await readFile(new URL('../../public/playground-runti
         <pre id="tokens" class="workbench-output">Run a specification to see its token stream.</pre>
       </div>
       <div class="workbench-panel full">
-        <div class="panel-heading"><span>Diagnostics</span></div>
+        <div class="panel-heading">
+          <span>Diagnostics</span>
+          <button type="button" data-action="report" aria-expanded="false" aria-controls="issue-preview" disabled>Prepare issue draft</button>
+        </div>
         <pre id="diagnostics" class="workbench-output">Compiler warnings and source locations appear here.</pre>
+        <div id="issue-preview" hidden>
+          <label for="issue-body">Issue draft</label>
+          <textarea id="issue-body" rows="8" readonly></textarea>
+          <p>Review the source and input before opening the GitHub form.</p>
+          <p id="issue-manual-paste" hidden>Copy this draft and paste it into the GitHub form.</p>
+          <a id="issue-link" target="_blank" rel="noreferrer">Open GitHub issue form</a>
+        </div>
       </div>
       <div class="workbench-panel full">
         <div class="panel-heading"><span>Match decisions</span><span id="step-position">No scan steps.</span></div>

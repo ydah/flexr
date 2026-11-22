@@ -21,10 +21,11 @@ backend is recorded in generated headers.
 
 ## `firstmatch`
 
-Experimental compatibility behavior. It requires `option :experimental` and
-can return a shorter match merely because its rule appears earlier. Runtime and
-generated artifacts preserve that same behavior. Potential differences from
-the stable longest-match backends are reported with `FLEXR-W010`.
+Stable compatibility behavior selected explicitly with `backend :firstmatch`.
+Runtime and generated lexers select the first matching rule in source order,
+even when a later rule could consume more text. `FLEXR-W010` reports potential
+differences from longest-match backends. See
+[ADR 0023](../adr/0023-stable-explicit-firstmatch.md) for the decision.
 
 ## Acceleration and packing
 

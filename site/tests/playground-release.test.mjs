@@ -31,7 +31,9 @@ test('packages the released lexer and presets when building the public Playgroun
     for (const name of ['toml', 'graphql', 'sql']) {
       await write(`examples/${name}/lexer.flexr.rb`, `# Released ${name}\n`);
     }
-    git('add', 'lib', 'examples');
+    await write('site/ruby/presets/heredoc.flexr.rb', '# Released heredoc preset\n');
+    await write('site/ruby/presets/html_js.flexr.rb', '# Released HTML and JS preset\n');
+    git('add', 'lib', 'examples', 'site/ruby/presets');
     git('-c', 'user.name=flexr test', '-c', 'user.email=flexr@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Release');
     git('tag', stableTag);
     await write('lib/flexr.rb', '# Main lexer\n');
@@ -43,6 +45,10 @@ test('packages the released lexer and presets when building the public Playgroun
     await write('site/ruby/presets/keywords.flexr.rb', '# Main keyword preset\n');
     await write('site/ruby/presets/trivia.flexr.rb', '# Main trivia preset\n');
     await write('site/ruby/presets/priority.flexr.rb', '# Main priority preset\n');
+    await write('site/ruby/presets/indentation.flexr.rb', '# Main indentation preset\n');
+    await write('site/ruby/presets/heredoc.flexr.rb', '# Main heredoc preset\n');
+    await write('site/ruby/presets/html_js.flexr.rb', '# Main HTML and JS preset\n');
+    await write('site/ruby/presets/html_javascript.rb', '# Main JavaScript lexer\n');
     await cp(new URL('../scripts/', import.meta.url), path.join(site, 'scripts'), { recursive: true });
     for (const asset of ['ruby+stdlib.wasm', 'LICENSE', 'NOTICE']) {
       await write(`site/node_modules/@ruby/4.0-wasm-wasi/dist/${asset}`, '');
@@ -55,6 +61,11 @@ test('packages the released lexer and presets when building the public Playgroun
     assert.equal((await readAsset('presets.json')).keywords.source, '# Main keyword preset\n');
     assert.equal((await readAsset('presets.json')).trivia.source, '# Main trivia preset\n');
     assert.equal((await readAsset('presets.json')).priority.source, '# Main priority preset\n');
+    assert.equal((await readAsset('presets.json')).indentation.source, '# Main indentation preset\n');
+    assert.equal((await readAsset('presets.json')).heredoc.source, '# Main heredoc preset\n');
+    assert.equal((await readAsset('presets.json'))['html-js'].source, '# Main HTML and JS preset\n');
+    const helper = '/app/lib/playground/html_javascript.rb';
+    assert.equal((await readAsset('flexr.json')).files[helper], '# Main JavaScript lexer\n');
     prepare(true);
     const { files } = await readAsset('flexr.json');
     assert.equal(files['/app/lib/flexr.rb'], '# Released lexer\n');
@@ -65,6 +76,19 @@ test('packages the released lexer and presets when building the public Playgroun
     assert.equal((await readAsset('presets.json')).keywords, undefined);
     assert.equal((await readAsset('presets.json')).trivia, undefined);
     assert.equal((await readAsset('presets.json')).priority, undefined);
+    assert.equal((await readAsset('presets.json')).indentation, undefined);
+    assert.equal((await readAsset('presets.json')).heredoc.source, '# Released heredoc preset\n');
+    assert.equal((await readAsset('presets.json'))['html-js'], undefined);
+    assert.equal(files[helper], undefined);
+
+    await write('site/ruby/presets/html_javascript.rb', '# Released JavaScript lexer\n');
+    git('add', 'site/ruby/presets/html_javascript.rb');
+    git('-c', 'user.name=flexr test', '-c', 'user.email=flexr@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Ship the JavaScript helper');
+    git('tag', '-f', stableTag);
+    await write('site/ruby/presets/html_javascript.rb', '# Main JavaScript lexer\n');
+    prepare(true);
+    assert.equal((await readAsset('presets.json'))['html-js'].source, '# Released HTML and JS preset\n');
+    assert.equal((await readAsset('flexr.json')).files[helper], '# Released JavaScript lexer\n');
   } finally {
     await rm(repo, { recursive: true, force: true });
   }

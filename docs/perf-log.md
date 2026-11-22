@@ -103,10 +103,10 @@ justify adding and maintaining another backend. No regression baseline changes
 are warranted by this experiment.
 ## Lrama standalone recognizer experiment (2026-11-20)
 
-`benchmark/lrama_lexer.rb` builds a standalone grammar-token recognizer and
-adapts Lrama's lexer to use it for normal grammar tokens. Existing trivia,
-C-code scanning, identifier lookahead, token classes, locations, and parser
-are retained. The adapter deliberately uses private scanner positions; this
+At flexr revision `80b5d13`, `benchmark/lrama_lexer.rb` built a standalone
+grammar-token recognizer and adapted Lrama's lexer to use it for normal
+grammar tokens. It retained Lrama's trivia, C-code scanning, identifier
+lookahead, token classes, locations, and parser. The adapter deliberately uses private scanner positions; this
 is an experiment, not a supported Lrama integration or a production replacement.
 
 ```sh
@@ -122,10 +122,48 @@ On Ruby 4.0.9, arm64-darwin25, three corpus passes took 0.0434 seconds with
 Lrama's scanner and 11.9124 seconds with the standalone recognizer adapter.
 These short local timings are illustrative, not a statistical benchmark.
 
-This approach is substantially slower and adds adapter maintenance, so do not
-propose it upstream. It adds no Lrama runtime dependency to flexr. The tool
-checks the upstream scan layout and fails explicitly if it changes; a future
-attempt should first remove per-token adapter and firstmatch overhead.
+The standalone experiment stopped at local benchmarking. The embedded
+recognizer experiment below revisits the adapter overhead.
+
+## Lrama embedded recognizer experiment (2026-11-22)
+
+The benchmark uses Flexr's `Recognizer#match` with the original grammar text
+and the current byte offset. The embedded lexer recognizes symbols, integers,
+and identifiers. The pinned Lrama scanner checks `%{`, `%}`, and `%%` before
+directives. Integers and identifiers start with different bytes from the
+other token kinds. Lrama handles quoted tokens, tags, directives, trivia,
+identifier lookahead, and C declarations. The subclass reads Lrama's
+scanner and advances it through `StringScanner#pos=`.
+
+On Lrama revision `22de9d99f6402290a637627f3516a1a2db6c9aab`, the complete
+token classes, kinds, values, source locations, and parser errors matched
+across 78 fixtures. Both lexers successfully parsed 77 fixtures. Flexr
+recognized 2,618 of 3,767 tokens (69.5 percent), including 1,539 symbols,
+1,067 identifiers, and 12 integers.
+
+Each measurement uses Ruby 4.0.9 on arm64-darwin25 and the same 78 inputs.
+The harness checks token parity before timing, then runs three warmup and
+30 measured passes per lexer. It uses the same Lrama parser in both modes
+and swaps the lexer class outside the timed passes. The table reports
+medians from three processes per engine, with the ratio calculated per sample.
+
+| Engine | Native seconds | Embedded seconds | Embedded / native runtime |
+|---|---:|---:|---:|
+| Interpreter | 0.3712 | 0.4425 | 1.195x |
+| YJIT | 0.2872 | 0.2949 | 1.026x |
+| ZJIT | 0.3750 | 0.3870 | 1.047x |
+
+All nine samples met the 2.0x target for complete parser passes.
+Use the same pinned Lrama checkout as in the previous experiment.
+
+```sh
+for engine in --disable=yjit,zjit --yjit --zjit; do
+  bundle exec ruby "$engine" -Ilib -r ./benchmark/lrama_lexer \
+    -e 'Flexr::Benchmarking::LramaLexer.run(ARGV.fetch(0), iterations: 30)' /tmp/lrama
+done
+```
+
+## Lexer throughput benchmarks
 
 The benchmark harness reports bytes/s, tokens/s, and allocations per token.
 Numbers are intentionally recorded only after running the harness on the

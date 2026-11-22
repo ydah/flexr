@@ -1,14 +1,18 @@
 import workerUrl from './worker.mjs?worker&url';
 import graphWorkerUrl from './graph-worker.mjs?worker&url';
 import { PRESETS } from './presets.mjs';
+import { issueDraft } from './issue.mjs';
 import { decodeState, encodeState, validateState } from './share.mjs';
 
 const source = document.querySelector('#spec');
 const input = document.querySelector('#input');
 const mode = document.querySelector('#mode');
 const status = document.querySelector('#status');
+const versionLabel = document.querySelector('#flexr-version');
 const runButton = document.querySelector('[data-action="run"]');
 const stopButton = document.querySelector('[data-action="stop"]');
+const reportButton = document.querySelector('[data-action="report"]');
+const issuePreview = document.querySelector('#issue-preview');
 const steps = document.querySelector('#step');
 let worker;
 let timer;
@@ -16,6 +20,7 @@ let graphWorker;
 let graphTimer;
 let trace = [];
 let dot = '';
+let report;
 
 function show(id, text) { document.querySelector(`#${id}`).textContent = text; }
 
@@ -67,8 +72,12 @@ function display(result) {
 
 function run() {
   stop();
+  versionLabel.hidden = true;
   try {
     const state = validateState({ source: source.value, input: input.value, mode: mode.value });
+    reportButton.disabled = true;
+    reportButton.setAttribute('aria-expanded', 'false');
+    issuePreview.hidden = true;
     show('tokens', 'Running…');
     show('diagnostics', 'Compiling…');
     show('generated', 'Generating…');
@@ -91,18 +100,30 @@ function run() {
     timer = setTimeout(() => stop('Runtime loading exceeded 30 seconds. Check the connection and retry.'), 30_000);
     worker.onerror = () => stop('The worker failed. Retry, or reduce the specification.');
     let started = false;
+    let flexrVersion;
     const currentWorker = worker;
     worker.onmessage = ({ data }) => {
       if (currentWorker !== worker) return;
       if (data?.phase === 'ready' && !started) {
         started = true;
+        flexrVersion = data.flexrVersion;
         clearTimeout(timer);
+        versionLabel.textContent = `flexr ${data.flexrVersion}`;
+        versionLabel.hidden = false;
         status.textContent = 'Running the specification in a worker…';
         timer = setTimeout(() => stop('Execution exceeded 5 seconds and was stopped. Reduce the specification or input.'), 5_000);
       } else if (data?.phase === 'error') {
         stop(String(data.error));
       } else if (data?.phase === 'result') {
-        try { display(data.result); } catch (error) { stop(error.message); }
+        try {
+          display(data.result);
+          if (typeof flexrVersion === 'string') {
+            report = {
+              ...state, version: flexrVersion, diagnostics: data.result.error || data.result.diagnostics || 'No diagnostics.',
+            };
+            reportButton.disabled = false;
+          }
+        } catch (error) { stop(error.message); }
       }
     };
     const base = new URL(`${import.meta.env.BASE_URL}/playground-runtime/`.replaceAll('//', '/'), location.origin).href;
@@ -179,6 +200,14 @@ document.querySelector('#preset').addEventListener('change', async event => {
 document.querySelector('[data-action="run"]').addEventListener('click', run);
 document.querySelector('[data-action="stop"]').addEventListener('click', () => stop());
 document.querySelector('[data-action="draw"]').addEventListener('click', drawGraph);
+reportButton.addEventListener('click', () => {
+  const draft = issueDraft(report);
+  document.querySelector('#issue-body').value = draft.body;
+  document.querySelector('#issue-link').href = draft.url.href;
+  document.querySelector('#issue-manual-paste').hidden = !draft.manualPaste;
+  issuePreview.hidden = !issuePreview.hidden;
+  reportButton.setAttribute('aria-expanded', String(!issuePreview.hidden));
+});
 document.querySelector('[data-action="previous"]').addEventListener('click', () => selectStep(Number(steps.value) - 1));
 document.querySelector('[data-action="next"]').addEventListener('click', () => selectStep(Number(steps.value) + 1));
 steps.addEventListener('input', () => selectStep(Number(steps.value)));
