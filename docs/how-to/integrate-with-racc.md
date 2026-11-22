@@ -23,3 +23,7 @@ The complete executable lexer is in
 [examples/with_racc](../../examples/with_racc/README.md). Generate the lexer
 before running a parser build if the parser should consume a committed Ruby
 artifact.
+
+Generate a complete working example with `flexr new NAME --parser racc`.
+Follow the [calculator tutorial](../tutorial/build-a-calculator-parser.md#racc)
+to build and test it.

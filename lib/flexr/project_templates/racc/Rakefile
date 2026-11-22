@@ -1,0 +1,14 @@
+# frozen_string_literal: true
+
+require "rake/testtask"
+
+file "build/parser.rb" => "parser.y" do
+  mkdir_p "build"
+  sh Gem.bin_path("racc", "racc"), "-o", "build/parser.rb", "parser.y"
+end
+
+task build: "build/parser.rb"
+
+Rake::TestTask.new(:test) { |test| test.pattern = "test_calculator.rb" }
+task test: :build
+task default: :test

@@ -9,6 +9,7 @@ pages explain how to use those specifications.
 | You want to... | Read |
 |---|---|
 | Build your first lexer | [Build a calculator lexer](tutorial/build-a-calculator-lexer.md) |
+| Generate a working parser project | [Build a calculator parser](tutorial/build-a-calculator-parser.md) |
 | Run a specification | [Run at runtime](how-to/run-a-lexer-at-runtime.md) |
 | Generate Ruby | [Generate a lexer](how-to/generate-a-lexer.md) |
 | Ship one file | [Deploy a standalone lexer](how-to/deploy-a-standalone-lexer.md) |
@@ -21,6 +22,7 @@ pages explain how to use those specifications.
 ## Tutorial
 
 - [Build a calculator lexer](tutorial/build-a-calculator-lexer.md)
+- [Build a calculator parser](tutorial/build-a-calculator-parser.md)
 
 ## How-to
 
