@@ -9,7 +9,7 @@ module Flexr
     )
       SpecSource = Struct.new(
         :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
-      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, :uses_input_stack, :uses_delegation, keyword_init: true
+      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, :uses_input_stack, :uses_delegation, :uses_dynamic_delimiters, keyword_init: true
     )
 
     class PrismReader
@@ -60,18 +60,21 @@ module Flexr
         uses_patterns = false
         uses_delegation = false
         uses_input_stack = false
+        uses_dynamic_delimiters = false
         each_node(prism.value) do |node|
           next unless node.is_a?(::Prism::CallNode)
 
           uses_patterns ||= %i[pattern upto].include?(node.name)
           uses_delegation ||= node.name == :delegate
           uses_input_stack ||= node.name == :push_input
+          uses_dynamic_delimiters ||= %i[scan_until scan_until_line].include?(node.name)
         end
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq(&:first),
                        first_dsl_offset: first_dsl_offset, constants: @constants, states: @states,
                        flexr_require_spans: require_spans, dsl_edits: @edits, uses_patterns: uses_patterns,
-                       uses_input_stack: uses_input_stack, uses_delegation: uses_delegation)
+                       uses_input_stack: uses_input_stack, uses_delegation: uses_delegation,
+                       uses_dynamic_delimiters: uses_dynamic_delimiters)
       end
 
       private

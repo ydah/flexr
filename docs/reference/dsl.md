@@ -208,8 +208,10 @@ accepted for compatibility; it is no longer required by `:firstmatch`.
 `:standalone` is build metadata used by standalone generation. `:input_stack`
 includes support for external callers of `push_input` in a standalone lexer.
 `:delegation` adds the [delegation helper](actions.md#delegate-a-capture-to-another-lexer)
-for indirect calls. Unknown option names raise immediately so misspellings cannot silently change
-behavior.
+for indirect calls. `:dynamic_delimiters` includes the
+[delimiter helpers](actions.md#dynamic-delimiters) in a standalone lexer for
+indirect calls. Unknown option names raise immediately so misspellings
+cannot silently change behavior.
 
 ## `accel(value)`
 
