@@ -20,6 +20,10 @@ module PublicApiTypecheck
       error.message.empty? ? :skip : :token
     end
   end
+
+  class EmbeddedLexer < Flexr::Lexer
+    rule(/[a-z]+/, emit: :IDENT)
+  end
 end
 
 Flexr::Lexer.rule(/[0-9]+/, emits: [:INTEGER]) { emit :INTEGER, text.to_i }
@@ -47,6 +51,7 @@ reserved = Flexr::Lexer.pattern(%w[if end])
 named_word = (word - reserved) & Flexr::Lexer.pattern(/.{1,8}/)
 Flexr::Lexer.rule(named_word | ".")
 Flexr::Lexer.rule(Flexr::Lexer.pattern("<") + Flexr::Lexer.upto(">"), skip: true)
+Flexr::Lexer.rule(/<(?<embedded>[a-z]+)>/) { delegate PublicApiTypecheck::EmbeddedLexer, capture: :embedded }
 
 lexer = Flexr::Lexer.new("12", filename: "input.txt", max_steps: 1000)
 Flexr::Lexer.new("12", cancellation: -> { false })

@@ -78,6 +78,11 @@ module Flexr
           ' unless defined?(Flexr::Runtime::Captures)'
         install = "#{guard}\n#{indent}#{install}"
       end
+      if uses_delegation?(parsed)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support lexer delegation")' \
+          ' unless defined?(Flexr::Runtime::DelegatedTokens)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
@@ -262,8 +267,9 @@ module Flexr
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
-      sources << "runtime/channels.rb" if parsed.rules.any?(&:channel)
+      sources << "runtime/channels.rb" if parsed.rules.any?(&:channel) || uses_delegation?(parsed)
       sources << "runtime/captures.rb" if compiled.rules.any?(&:capture_patterns)
+      sources << "runtime/delegation.rb" if uses_delegation?(parsed)
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
@@ -271,6 +277,10 @@ module Flexr
 
     def matcher_runtime?(parsed)
       effective_backend(parsed) == :firstmatch || parsed.rules.any?(&:trailing)
+    end
+
+    def uses_delegation?(parsed)
+      parsed.uses_delegation || parsed.config.dig(:options, :delegation)
     end
 
     def encoding_expression(encoding)

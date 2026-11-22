@@ -18,6 +18,8 @@ module Flexr
     private
 
     def activate_pending_inputs
+      raise ArgumentError, "a delegated lexer scans only the captured input" if @__flexr_delegation_depth
+
       pending = @__flexr_pending_inputs
       @__flexr_pending_inputs = nil
       pending.each do |buffer, input, filename|

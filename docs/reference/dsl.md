@@ -207,7 +207,8 @@ Adds boolean options to the specification. Stable options include
 accepted for compatibility; it is no longer required by `:firstmatch`.
 `:standalone` is build metadata used by standalone generation. `:input_stack`
 includes support for external callers of `push_input` in a standalone lexer.
-Unknown option names raise immediately so misspellings cannot silently change
+`:delegation` adds the [delegation helper](actions.md#delegate-a-capture-to-another-lexer)
+for indirect calls. Unknown option names raise immediately so misspellings cannot silently change
 behavior.
 
 ## `accel(value)`

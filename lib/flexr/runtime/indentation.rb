@@ -42,7 +42,7 @@ module Flexr
         return @__flexr_indent_queue.shift unless @__flexr_indent_queue.empty?
 
         loop do
-          @__flexr_indent_bracket = @__flexr_indent_newline_width = nil
+          @__flexr_indent_bracket = @__flexr_indent_newline_width = @__flexr_delegated_location = nil
           token = expect.nil? ? super() : super(expect: expect)
           unless token
             finish_indentation
@@ -54,7 +54,7 @@ module Flexr
           end
           return token if @__flexr_token_channel
 
-          if token[0] == @__flexr_indentation.fetch(:newline)
+          if !@__flexr_delegated_location && token[0] == @__flexr_indentation.fetch(:newline)
             blank = !@__flexr_indent_candidate.nil?
             @__flexr_indent_candidate = @__flexr_indent_newline_width || 0
             @__flexr_indent_counting = true
@@ -70,7 +70,10 @@ module Flexr
           if @match_start == @position && @match_end == @position && eof?
             finish_indentation
           else
-            adjust_indentation(token) if @__flexr_indent_candidate && @__flexr_indent_brackets.empty?
+            if @__flexr_indent_candidate && @__flexr_indent_brackets.empty?
+              location = @__flexr_delegated_location || (token.location if @token_kind == :struct)
+              adjust_indentation(location)
+            end
             @__flexr_indent_candidate = nil
             track_indentation_bracket
           end
@@ -164,20 +167,20 @@ module Flexr
         indentation_width(starting, @match_end).first if starting > @match_start && @buffer.getbyte(starting - 1) == 0x0a
       end
 
-      def adjust_indentation(token)
+      def adjust_indentation(location)
         width = @__flexr_indent_candidate
         return if width == @__flexr_indent_levels.last
 
         if width > @__flexr_indent_levels.last
           @__flexr_indent_levels << width
-          @__flexr_indent_queue << indentation_token(:indent, token)
+          @__flexr_indent_queue << indentation_token(:indent, location)
         else
           level = @__flexr_indent_levels.rindex(width)
           unless level
             raise LexError.new("indentation width #{width} does not match any earlier indentation level",
                                filename: @filename, byte_pos: @text_start, line: @text_line)
           end
-          emit_indentation_dedents(level, token)
+          emit_indentation_dedents(level, location)
         end
       end
 
@@ -185,18 +188,17 @@ module Flexr
         emit_indentation_dedents(0)
       end
 
-      def emit_indentation_dedents(level, token = nil)
+      def emit_indentation_dedents(level, location = nil)
         while @__flexr_indent_levels.length > level + 1
           @__flexr_indent_levels.pop
-          @__flexr_indent_queue << indentation_token(:dedent, token)
+          @__flexr_indent_queue << indentation_token(:dedent, location)
         end
       end
 
-      def indentation_token(kind, token)
+      def indentation_token(kind, location)
         type = @__flexr_indentation.fetch(kind)
         return [type, nil] unless @token_kind == :struct
 
-        location = token&.location
         filename = location ? location.filename : @filename
         position = location ? location.byte_begin : @position
         line = location ? location.line_begin : @line

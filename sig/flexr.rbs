@@ -87,6 +87,7 @@ module Flexr
     def input: () -> String
     def text: () -> String
     def captures: () -> Hash[Symbol, String?]
+    def delegate: (singleton(Lexer), capture: Symbol) -> nil
     def text_bytesize: () -> Integer
     def last_location: () -> Runtime::Location
     def byte_pos: () -> Integer
