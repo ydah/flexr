@@ -3,6 +3,34 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## [2.1.0](https://github.com/ydah/flexr/compare/v2.0.0...v2.1.0)
+
+### Added
+
+- Use `(?~X)` in DFA rules to match text containing no substring matched
+  by `X`. For example, `%r{/\*(?~\*/)\*/}` matches a C-style comment.
+- Reuse named patterns across rules and combine them with alternatives,
+  concatenation, intersection, difference, and complement. Use `upto` to
+  consume through the first match of a terminator.
+- Use `keywords` to turn exact identifier spellings into keyword tokens after
+  the identifier rule matches. A longer identifier such as `ifx` still emits
+  the identifier token.
+- Retain comments and whitespace in named token channels for source tools.
+  Collect them in input order with `tokens(channels: :all)` or read
+  `leading_trivia` on structured tokens. Default iteration and parser token
+  streams still return only default-channel tokens.
+- Set `priority:` to break ties between equal-length DFA matches. Rules with
+  equal priority continue to use source order.
+- `flexr check` can flag shadowed keyword spellings and suggest replacing
+  consecutive literal rules with a keyword table. With `--warn all`, it can
+  also suggest `emit:` for simple emission blocks.
+
+### Changed
+
+- DFA scanning allocates fewer temporary objects. Regenerate lexer files to include the updated scanner paths.
+- Generated lexers that use token channels or nonzero rule priorities require
+  the Flexr 2.1 runtime. Standalone files include their runtime.
+
 ## [2.0.0](https://github.com/ydah/flexr/compare/v1.1.0...v2.0.0) - 2026-11-22
 
 ### Added
