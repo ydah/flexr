@@ -1,0 +1,30 @@
+---
+import { getCollection } from 'astro:content';
+import PageTitle from '@astrojs/starlight/components/PageTitle.astro';
+import { stableReleaseTag } from '../../scripts/stable-release.mjs';
+
+const { id } = Astro.locals.starlightRoute.entry;
+const isStable = id.startsWith('stable/');
+const otherId = isStable ? id.slice('stable/'.length) : `stable/${id}`;
+const fallback = isStable ? 'learn/getting-started' : 'stable/learn/getting-started';
+const counterpart = (await getCollection('docs')).some(entry => entry.id === otherId) ? otherId : fallback;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<PageTitle />
+<nav class="documentation-version" aria-label="Documentation version">
+  <a href={`${base}/${isStable ? id : counterpart}/`} aria-current={isStable ? 'page' : undefined}>Stable {stableReleaseTag}</a>
+  <a href={`${base}/${isStable ? counterpart : id}/`} aria-current={isStable ? undefined : 'page'}>main</a>
+</nav>
+
+<style>
+  .documentation-version {
+    display: flex;
+    gap: 1rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  [aria-current="page"] {
+    font-weight: 600;
+  }
+</style>

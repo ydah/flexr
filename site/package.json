@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prepare:docs": "node scripts/prepare-docs.mjs",
     "prepare:playground": "node scripts/prepare-playground.mjs",
-    "dev": "pnpm prepare:playground && astro dev",
-    "build": "pnpm prepare:playground && astro check && astro build",
+    "dev": "pnpm prepare:docs && pnpm prepare:playground && astro dev",
+    "build": "pnpm prepare:docs && pnpm prepare:playground && astro check && astro build",
     "preview": "astro preview",
     "verify": "node scripts/verify-site.mjs",
     "test": "pnpm prepare:playground && node --test tests/*.test.mjs",
