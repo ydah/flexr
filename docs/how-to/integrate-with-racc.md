@@ -19,6 +19,11 @@ At EOF the method returns `[false, "$end"]`. Keep the names in `emits` aligned
 with the grammar's `%token` declarations. `flexr tokens SPEC.flexr.rb` prints
 the declared names for a build-time comparison.
 
+A parser adapter that already knows which terminals are valid at its current
+position can pass their Symbols to `lexer.racc_next_token(expect: terminals)`.
+The adapter needs to provide this array for each request. See
+[parser-driven lexing](parser-driven-lexing.md) for examples.
+
 The complete executable lexer is in
 [examples/with_racc](../../examples/with_racc/README.md). Generate the lexer
 before running a parser build if the parser should consume a committed Ruby

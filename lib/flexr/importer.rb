@@ -8,8 +8,13 @@ module Flexr
 
     class UnsupportedFormatError < CompileError; end
 
-    def self.import(path)
-      new(path, File.binread(path)).run
+    def self.import(path, from: nil)
+      return new(path, File.binread(path)).run unless from
+      raise ArgumentError, "unsupported import format: #{from.inspect}" unless from == :oedipus_lex
+      raise UnsupportedFormatError, "oedipus_lex import expects a .rex file" unless File.extname(path).downcase == ".rex"
+
+      require_relative "importer/oedipus_lex"
+      OedipusLex.new(path, File.binread(path)).run
     end
 
     def initialize(path, source)

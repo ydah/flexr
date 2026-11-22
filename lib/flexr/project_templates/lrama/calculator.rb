@@ -10,7 +10,7 @@ module Calculator
     tokens = CalculatorLexer.new(source).each_token.map do |kind, value|
       kind == :INTEGER ? "n#{value}\n" : value
     end.join
-    output, error, status = Open3.capture3([PARSER, PARSER], stdin_data: tokens)
+    output, error, status = Open3.capture3([PARSER, PARSER], stdin_data: tokens, binmode: true)
     raise ArgumentError, error.strip unless status.success?
 
     Integer(output, 10)
