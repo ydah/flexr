@@ -124,7 +124,7 @@ module Flexr
 
       def packed_transition(state, class_id)
         cursor = state
-        loop do
+        while cursor
           index = @packed.fetch(:base).fetch(cursor) + class_id
           return @packed.fetch(:next).fetch(index) if @packed.fetch(:check)[index] == cursor
 

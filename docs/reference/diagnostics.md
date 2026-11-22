@@ -43,7 +43,7 @@ Source ranges are available for:
   constructs (`FLEXR-E014`), including errors in trailing context.
 - Rule warnings: `FLEXR-W001`, `FLEXR-W003`, `FLEXR-W010`, `FLEXR-W012`,
   `FLEXR-W013`, and `FLEXR-W014`.
-- Rule overlap information: `FLEXR-I001`, pointing to the later rule.
+- Rule overlap information: `FLEXR-I001`, pointing to the lower-ranked rule.
 - State and specification diagnostics: DFA state limits (`FLEXR-E006`), empty
   states (`FLEXR-W002`), large transition tables (`FLEXR-W011`), and slow DFA
   construction (`FLEXR-W016`).
@@ -143,7 +143,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E013` | `reject` is not supported | Use states and `less` |
 | `FLEXR-E014` | Regexp construct is not DFA-compatible | Follow the diagnostic alternative |
 | `FLEXR-E017` | Pattern is not statically resolvable | Rewrite as a static expression or use trusted `--eval` |
-| `FLEXR-E018` | Rule pattern or trailing context has an invalid type | Use a regexp, string, pattern value, or valid array |
+| `FLEXR-E018` | Rule pattern, trailing context, channel, or priority is invalid | Use a supported pattern, a valid channel symbol, or an integer priority with a longest-match backend |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
 | `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
 | `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |
@@ -153,7 +153,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E025` | The lexical state stack overflowed | Remove recursive pushes or raise the limit |
 | `FLEXR-E026` | A cancellation callback stopped lexing | Resume with a new lexer when ready |
 | `FLEXR-E027` | An error callback returned an unknown action | Return `:skip`, `:raise`, `:token`, or `:halt` |
-| `FLEXR-E028` | A keyword spelling or declaration is invalid, or the base rule cannot consume the full spelling | Correct the spelling or widen a rule declared with the base `emit:` type |
+| `FLEXR-E028` | A keyword spelling or declaration is invalid, or the default-channel base rule cannot consume the full spelling | Correct the spelling or widen a default-channel rule declared with the base `emit:` type |
 | `FLEXR-E029` | A pattern operation has an empty language | Review the operands or the terminator |
 
 ### Pattern operations
@@ -340,7 +340,7 @@ expression can change how the surrounding pattern matches.
 | `FLEXR-W017` | Grammar token is missing from `emits` | Declare and emit it, or remove it from the grammar |
 | `FLEXR-W018` | Token in `emits` is missing from the grammar | Add a `%token` declaration or remove it from `emits` |
 | `FLEXR-W020` | Structured records become immutable in v2.0 | Review consumer mutations; use `record.with(...)` in v2 |
-| `FLEXR-W022` | An earlier rule shadows a spelling in a keyword table | Remove the redundant spelling or change the competing rule |
+| `FLEXR-W022` | A competing rule shadows a spelling in a keyword table | Remove the redundant spelling or change the competing rule |
 
 Warnings are reported by `check` according to `--warn`. The default omits the
 wall-clock `FLEXR-W016`; `--warn all` includes it, and `--warn none` suppresses
@@ -348,9 +348,10 @@ warnings. `--warn-as-error` turns selected warnings into a failed command.
 
 ## Informational diagnostics
 
-`flexr check` reports `FLEXR-I003` when consecutive literal rules can share
-the following identifier rule using `keywords`. The DFA must show that the
-identifier accepts the full spellings without anchors in the same states.
+`flexr check` reports `FLEXR-I003` when consecutive default-channel literal
+rules can share the following default-channel identifier rule using `keywords`.
+The rules must share a priority. The DFA must show that the identifier
+accepts the full spellings without anchors in the same states.
 `--warn none` hides this suggestion. `--warn-as-error` still permits checks
 with informational diagnostics.
 
@@ -406,3 +407,10 @@ This analysis covers `table`, `direct`, `auto`, and `firstmatch` states.
 `--warn-as-error` does not turn informational diagnostics into failures.
 Generation with `--warn all` also preserves the information in generated and
 standalone artifacts.
+
+### Emit shorthand
+
+`flexr check SPEC --warn all` reports `FLEXR-I004` for action blocks consisting
+solely of `emit :TOKEN` or `emit :TOKEN, text`. Use `emit: :TOKEN` on the rule
+to take the shorthand emission path. Actions that transform the value or perform
+other work stay as blocks.

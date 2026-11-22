@@ -40,7 +40,7 @@ module Flexr
       private
 
       def execute(rule)
-        return super unless rule.emit?
+        return super unless rule.emit? && !rule.channel
 
         type = rule.action[1]
         table = self.class.__flexr_config.options[:keyword_tables]&.[](type)
