@@ -36,7 +36,7 @@ module Flexr
       end
 
       def next_token(expect: nil)
-        return expect.nil? ? super() : super(expect: expect) unless @__flexr_indentation
+        return expect.nil? ? super() : super unless @__flexr_indentation
 
         expect = Configuration.expected_tokens!(expect) + [@__flexr_indentation.fetch(:newline)] unless expect.nil?
         return @__flexr_indent_queue.shift unless @__flexr_indent_queue.empty?
