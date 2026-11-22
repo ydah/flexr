@@ -89,15 +89,9 @@ module JsonExample
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
-        while cursor < source.bytesize
-          byte = source.getbyte(cursor)
-          if direct_nxt
-            current = direct_nxt[(current * direct_classes) + ec[byte]]
-            break if current < 0
-          else
-            current = dfa.transition(current, byte)
-            break unless current
-          end
+        while (byte = source.getbyte(cursor))
+          current = direct_nxt[(current * direct_classes) + ec[byte]]
+          break if current < 0
           cursor += 1
           acceptance = accepts[current].first
           next unless acceptance
