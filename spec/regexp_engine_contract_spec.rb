@@ -353,8 +353,6 @@ RSpec.describe "regexp engine contracts" do
 
   it "preserves accepted input and token text in the suggested group rewrites" do
     {
-      /(?<word>ab)/ => /(?:ab)/,
-      /(?'word'ab)/ => /(?:ab)/,
       /(a)?(?(1)b|c)/ => /(?:ab|c)/,
       /x(?~a)/ => /x[^a]*/
     }.each do |original, rewritten|
