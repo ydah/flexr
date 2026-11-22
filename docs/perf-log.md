@@ -325,3 +325,47 @@ ruby -e 'STDOUT.write(%q(class Foo "ok" end ) * 10_000)' > /tmp/flexr-ruby-subse
 ruby -Ilib benchmark/matrix.rb --spec examples/ruby_subset/lexer.flexr.rb \
   --input-file /tmp/flexr-ruby-subset-input.txt --iterations 5
 ```
+
+## 2026-11-22: packed lookup and token-loop allocations
+
+The packed transition lookup and `next_token` use condition-controlled loops,
+avoiding the block allocation on each packed lookup or token call. The token
+loop still returns the result of an exhausted action enumerator. Packed rows
+remain lazy. A warmed check exercises inherited transitions and confirms that
+reading them leaves the dense rows unmaterialized. The generated direct fast
+path keeps its negative transition sentinel as an integer until the scan
+loop exits.
+
+The JSON comparison uses Ruby 4.0.9 on arm64-darwin25 and the same 140,000-byte,
+50,000-token input as the previous sample. Baseline `73a6587` and the updated
+loops ran in alternating order. Each result is the median of three runs with
+ten warmup and ten timed iterations per engine.
+
+| Engine | Runtime MB/s before → after | Generated MB/s before → after | Generated / runtime before → after | Generated / handwritten before → after |
+|---|---:|---:|---:|---:|
+| Interpreter | 1.897 → 2.022 | 1.978 → 2.199 | 1.043x → 1.088x | 0.237x → 0.282x |
+| YJIT | 6.033 → 6.482 | 5.720 → 6.743 | 0.948x → 1.012x | 0.523x → 0.728x |
+| ZJIT | 2.092 → 2.342 | 2.083 → 2.388 | 0.994x → 1.010x | 0.206x → 0.269x |
+
+Runtime allocations fell from 3.600 to 2.600 per token on all three engines,
+below the 3.4 target. Generated allocations fell from 3.200 to 2.200.
+The YJIT sample reached the 0.70x handwritten stretch target. The three paired
+runs reached the 1.0x generated/runtime target on all three engines, with
+ZJIT ratios from 1.007x to 1.024x. A separate single run through
+`rake bench:matrix` measured 0.980x on YJIT and 0.984x on ZJIT. This
+variation leaves the 1.0x ratio as a measurement target.
+
+The full frozen JSON, TOML, GraphQL, SQL, and Ruby subset token sequences
+matched across runtime, generated, and standalone on all three engines.
+Use the matrix commands in the previous section to repeat the timings.
+
+The non-JSON runs used five warmup and five measured iterations per engine.
+The allocation counts were identical across engines. Ruby subset timing
+uses the mutable input-file control from the previous section.
+
+| Lexer | Generated allocations/token before → after | Interpreter generated/runtime | YJIT generated/runtime | ZJIT generated/runtime |
+|---|---:|---:|---:|---:|
+| TOML | 10.334 → 2.000 | 0.610x → 0.775x | 0.413x → 0.589x | 0.621x → 0.837x |
+| GraphQL | 7.333 → 2.000 | 0.722x → 0.844x | 0.506x → 0.652x | 0.674x → 0.878x |
+| SQL | 9.889 → 2.667 | 0.703x → 0.836x | 0.447x → 0.570x | 0.639x → 0.854x |
+| Ruby subset | 14.778 → 7.009 | 0.824x → 0.952x | 0.416x → 0.414x | 0.243x → 0.250x |

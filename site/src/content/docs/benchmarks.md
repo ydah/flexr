@@ -11,8 +11,8 @@ Measured on 2026-11-22 with Ruby 4.0.9 on arm64 macOS, using 140,000 bytes of in
 
 | Engine | Runtime / handwritten | Generated / handwritten | Generated / runtime |
 |---|---:|---:|---:|
-| Interpreter | 0.223x | 0.234x | 1.036x |
-| YJIT | 0.555x | 0.519x | 0.958x |
-| ZJIT | 0.208x | 0.202x | 0.972x |
+| Interpreter | 0.259x | 0.282x | 1.088x |
+| YJIT | 0.702x | 0.728x | 1.012x |
+| ZJIT | 0.262x | 0.269x | 1.010x |
 
-Start with `auto` and use [the reproduction commands](https://github.com/ydah/flexr/blob/main/docs/perf-log.md#2026-11-22-generated-frozen-input-scan) to measure the workload you plan to deploy.
+Start with `auto` and use [the reproduction commands](https://github.com/ydah/flexr/blob/main/docs/perf-log.md#2026-11-22-packed-lookup-and-token-loop-allocations) to measure the workload you plan to deploy.
