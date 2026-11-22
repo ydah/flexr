@@ -20,6 +20,21 @@ warnings, counterexamples, and overlap information. Diagnostics and hovers
 use the static reader: they do not evaluate specifications or run actions.
 Syntax errors are reported by Ruby LSP's Prism integration.
 
+## Navigation and completion
+
+- Go to Definition jumps from literal state names in `begin_state`, `push`,
+  `push_state`, and `self.state =` inside lexer actions to their `state` blocks.
+- Completion suggests token symbols in `emit :PREFIX` and `emit: :PREFIX`.
+  Suggestions come from literal `emits` declarations, other shorthand
+  rules, and keyword tables in the same lexer. Ruby LSP identifies the call
+  under the cursor, so completion may omit calls with ambiguous literal
+  value arguments.
+- The document outline shows rules and nested lexical state blocks under
+  the lexer class. Select an entry to jump to its pattern or state name.
+
+Navigation uses the unsaved `.flexr.rb` buffer and Prism's recovered syntax
+tree. It is available while an action is unfinished.
+
 The add-on uses the same static specification subset as `flexr check`, so
 dynamic Ruby DSL construction must be checked separately. Compilation is
 cached for the most recent document contents. Timing-dependent `FLEXR-W016`
