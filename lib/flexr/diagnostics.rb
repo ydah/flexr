@@ -107,6 +107,7 @@ module Flexr
 
       pattern = rule.patterns.one? ? rule.patterns.first : rule.patterns
       label = "rule #{pattern.inspect}"
+      label += ", channel: #{rule.channel.inspect}" if rule.channel
       rule.trailing ? "#{label}, followed_by: #{rule.trailing.inspect}" : label
     end
 

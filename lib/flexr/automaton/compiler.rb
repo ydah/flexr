@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "dfa_operations"
+require_relative "keyword_tables"
+
 module Flexr
   module Automaton
     class Compiler
@@ -9,6 +12,17 @@ module Flexr
 
       def compile
         started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        @regexp_asts = {}
+        @differences = {}
+        @empty_absence_rules = {}
+        @priorities = @spec.rules.to_h { |rule| [rule.index, rule.priority] }
+        @pattern_dfas = {}
+        @pattern_stats = {}
+        @pattern_diagnostics = []
+        @pattern_universe = nil
+        @pattern_universe_dfa = nil
+        @state_limit = @spec.options.fetch(:max_dfa_states, 100_000)
+        @state_limit = 100_000 unless @state_limit.is_a?(Integer) && @state_limit.positive?
         validate_rules
         state_names = effective_states
         machines = state_names.to_h do |state_name|
@@ -21,9 +35,16 @@ module Flexr
           e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
           raise
         end
-        stats = machines.transform_values { |machine| machine.dfa.stats }
+        stats = machines.to_h do |name, machine|
+          stat = machine.dfa.stats
+          operations = rules_for(name).flat_map { |rule| @pattern_stats.fetch(rule.index, []) } unless @pattern_stats.empty?
+          stat[:pattern_operations] = operations.freeze if operations&.any?
+          [name, stat]
+        end
         compiled = CompiledSpec.new(machines: machines, rules: @spec.rules, states: state_names, stats: stats)
-        compiled.diagnostics = diagnostics_for(compiled, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at)
+        compiled.diagnostics = diagnostics_for(compiled, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) +
+          @pattern_diagnostics
+        compiled.diagnostics.concat(KeywordTables.diagnostics(compiled, @spec)) if @spec.options.key?(:keyword_tables)
         compiled
       end
 
@@ -51,28 +72,169 @@ module Flexr
         normalized = []
         rules.each do |rule|
           rule.pattern_conditions = []
+          first_pattern = normalized.length
+          contains_absence = false
           rule.patterns.each_with_index do |pattern, pattern_index|
-            regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
-            parser = Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
-                                        unicode: @spec.options[:unicode] == true)
-            ast = parser.parse
-            ast, bol_only, end_anchor = strip_anchors(ast)
+            if pattern.is_a?(Pattern)
+              body = Regexp::AST::EmbeddedDFA.new(@pattern_dfas.fetch([rule.index, pattern_index]))
+              bol_only = end_anchor = false
+            else
+              regexp = pattern_regexp(pattern)
+              ast = parse_regexp(regexp)
+              contains_absence ||= Regexp::AST.absence?(ast)
+              ast, bol_only, end_anchor = strip_anchors(ast)
+              body = normalize_regexp(regexp, ast)
+            end
             condition = Acceptance.new(rule_index: rule.index, pattern_index: pattern_index,
                                        bol_only: bol_only, end_anchor: end_anchor)
             rule.pattern_conditions[pattern_index] = condition
-            normalized_ast = Regexp::Normalizer.new(ast, encoding: encoding, options: regexp.options).normalize
-            normalized << [normalized_ast, condition]
+            normalized << [body, condition]
           end
+          @empty_absence_rules[rule.index] = true if
+            contains_absence && normalized[first_pattern..].all? { |ast, _| ast.is_a?(Regexp::AST::Fail) }
         rescue CompileError => e
           e.diagnostic.location ||= rule.location if e.diagnostic
           raise
         end
         return empty_dfa if normalized.empty?
 
-        nfa = NFABuilder.new.build(normalized)
+        determinize(normalized)
+      end
+
+      def determinize(patterns, operation: nil)
+        nfa = NFABuilder.new(&method(:compile_difference)).build(patterns)
         ec, class_count = nfa.byte_classes.build
-        subset_construction(nfa, ec, class_count)
+        subset_construction(nfa, ec, class_count, operation: operation)
+      end
+
+      def compile_difference(node)
+        @differences[node] ||= begin
+          accept = Acceptance.new(rule_index: 0, pattern_index: 0)
+          left = determinize([[node.left, accept]], operation: "absence group")
+          right = determinize([[node.right, accept]], operation: "absence group")
+          difference = DFAOperations.difference(left, right) { |state| enforce_state_limit!(state, "absence group") }
+          Minimizer.minimize(difference)
+        end
+      end
+
+      def compile_pattern_value(pattern, rule)
+        @active_rules = [rule]
+        value_dfa(normalized_value(pattern, rule), "pattern #{pattern.inspect}")
+      end
+
+      def normalized_value(pattern, rule)
+        case pattern.operation
+        when :literal
+          regexp = pattern_regexp(pattern.operands.first)
+          ast = parse_regexp(regexp)
+          if contains_anchor?(ast)
+            diagnostic = Diagnostics.error("FLEXR-E009", "anchors are not allowed inside pattern values",
+                                           help: "use an anchored regexp directly as a rule pattern")
+            raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+          end
+          normalize_regexp(regexp, ast)
+        when :|, :+
+          children = pattern.operands.map { |operand| normalized_value(operand, rule) }
+          klass = pattern.operation == :| ? Regexp::AST::Alt : Regexp::AST::Seq
+          klass.new(children: children, loc: nil)
+        else
+          Regexp::AST::EmbeddedDFA.new(compile_pattern_operation(pattern, rule))
+        end
+      end
+
+      def compile_pattern_operation(pattern, rule)
+        expression = pattern.inspect
+        operands = pattern.operands.map { |operand| normalized_value(operand, rule) }
+        case pattern.operation
+        when :&, :-
+          operation = pattern.operation == :& ? :intersection : :difference
+          left, right = operands.map { |operand| value_dfa(operand, expression) }
+        when :!
+          operation = :complement
+          left = pattern_universe_dfa(expression)
+          right = value_dfa(operands.first, expression)
+        when :upto
+          operation = :upto
+          left = pattern_universe_dfa(expression)
+          ending = Regexp::AST::Seq.new(children: [pattern_universe, operands.first], loc: nil)
+          right = value_dfa(ending, expression)
+        end
+        product, overlap = DFAOperations.product(left, right, intersection: %i[intersection upto].include?(operation)) do |state|
+          enforce_state_limit!(state, expression)
+        end
+        result = Minimizer.minimize(operation == :upto ? DFAOperations.first_ending(product) : product)
+        record_pattern_operation(rule, operation, expression, left, right, product, result, overlap)
+        result
+      end
+
+      def pattern_universe
+        @pattern_universe ||= Regexp::Normalizer.new(nil, encoding: @spec.encoding).universe
+      end
+
+      def pattern_universe_dfa(expression)
+        @pattern_universe_dfa ||= value_dfa(pattern_universe, expression)
+      end
+
+      def value_dfa(node, expression)
+        return node.dfa if node.is_a?(Regexp::AST::EmbeddedDFA)
+
+        accept = Acceptance.new(rule_index: 0, pattern_index: 0)
+        determinize([[node, accept]], operation: expression)
+      end
+
+      def record_pattern_operation(rule, operation, expression, left, right, product, result, overlap)
+        if %i[intersection difference upto].include?(operation) && result.rule_ids.empty?
+          message = if operation == :difference
+            "pattern difference #{expression} is empty because the right operand covers the left operand"
+          else
+            "pattern #{operation} #{expression} is empty"
+          end
+          label = operation == :upto ? "subject alphabet" : "left operand"
+          note = language_example(left, label)
+          note = [note, language_example(right, "right operand")].compact.join(". ") if operation == :intersection
+          diagnostic = Diagnostics.error("FLEXR-E029", message, location: rule.location, note: note)
+          raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+        end
+        if operation == :difference && !overlap
+          @pattern_diagnostics << Diagnostics.warning(
+            "FLEXR-W021", "pattern subtraction #{expression} removes no input",
+            location: rule.location, note: language_example(right, "right operand")
+          )
+        end
+
+        sizes = [left.states, right.states].freeze
+        (@pattern_stats[rule.index] ||= []) << {
+          operation: operation, expression: expression.freeze, operand_states: sizes,
+          product_states: product.states, result_states: result.states
+        }.freeze
+        return unless product.states >= 16 && product.states > sizes.max * 2
+
+        @pattern_diagnostics << Diagnostics.warning(
+          "FLEXR-W011", "pattern #{operation} #{expression} expands the DFA",
+          location: rule.location,
+          note: "operands have #{sizes.join(' and ')} states. The product visits #{product.states} states and minimizes to #{result.states}"
+        )
+      end
+
+      def language_example(dfa, label)
+        sample = Analysis.shortest_input(dfa)
+        return "#{label} accepts no input" unless sample
+
+        "#{label} accepts #{sample.force_encoding(@spec.encoding).inspect}"
+      end
+
+      def pattern_regexp(pattern)
+        pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
+      end
+
+      def enforce_state_limit!(state, operation)
+        return if state < @state_limit
+
+        labels = @active_rules.map { |rule| Diagnostics.rule_label(rule) }.join(", ")
+        subject = operation ? "#{operation} in #{labels}" : labels
+        diagnostic = Diagnostics.error("FLEXR-E006", "DFA state limit exceeded while compiling #{subject}",
+                                       help: "raise max_dfa_states or split the listed rules")
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
 
       def empty_dfa
@@ -106,13 +268,14 @@ module Flexr
 
       def contains_anchor?(node)
         return true if node.is_a?(Regexp::AST::Anchor)
-        return contains_anchor?(node.child) if node.is_a?(Regexp::AST::Repeat) || node.is_a?(Regexp::AST::Star)
+        return contains_anchor?(node.child) if
+          node.is_a?(Regexp::AST::Repeat) || node.is_a?(Regexp::AST::Star) || node.is_a?(Regexp::AST::Absence)
         return false unless node.respond_to?(:children)
 
         node.children.any? { |child| contains_anchor?(child) }
       end
 
-      def subset_construction(nfa, ec, class_count)
+      def subset_construction(nfa, ec, class_count, operation:)
         closures = {}
         closure_for = lambda do |state|
           closures[state] ||= epsilon_closure_for(nfa, state)
@@ -125,9 +288,6 @@ module Flexr
         accepts = []
         queue = [start_set]
         queue_index = 0
-        limit = @spec.options.fetch(:max_dfa_states, 100_000)
-        limit = 100_000 unless limit.is_a?(Integer) && limit.positive?
-
         while queue_index < queue.length
           set = queue.fetch(queue_index)
           queue_index += 1
@@ -138,12 +298,7 @@ module Flexr
             destination = ids[closure]
             unless destination
               destination = sets.length
-              if destination >= limit
-                message = "DFA state limit exceeded while compiling #{@active_rules.map { |rule| Diagnostics.rule_label(rule) }.join(', ')}"
-                diagnostic = Diagnostics.error("FLEXR-E006", message,
-                                                help: "raise max_dfa_states or split the listed rules")
-                raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
-              end
+              enforce_state_limit!(destination, operation) if destination >= @state_limit
               ids[closure] = destination
               sets << closure
               queue << closure
@@ -199,7 +354,9 @@ module Flexr
         rules = each_state_id(set).with_object([]) do |state, result|
           result.concat(nfa.states[state].accepts)
         end
-        rules.uniq.sort_by { |acceptance| [acceptance.rule_index, acceptance.pattern_index] }
+        rules.uniq.sort_by do |acceptance|
+          [-@priorities.fetch(acceptance.rule_index, 0), acceptance.rule_index, acceptance.pattern_index]
+        end
       end
 
       def each_state_id(set)
@@ -216,16 +373,33 @@ module Flexr
       def validate_rules
         @spec.rules.each do |rule|
           raise CompileError, "rule #{rule.index} has no pattern" if rule.patterns.empty?
-          parse_regexp(rule.trailing) if rule.trailing.is_a?(::Regexp)
-          next if @spec.options[:allow_empty_match]
-
-          rule.patterns.each do |pattern|
-            regexp = pattern.is_a?(String) ? ::Regexp.new(::Regexp.escape(pattern)) : pattern
-            parse_regexp(regexp) if regexp.is_a?(::Regexp)
-            next unless regexp.is_a?(::Regexp) && regexp.match?("")
-
-            diagnostic = Diagnostics.error("FLEXR-E005", "#{Diagnostics.rule_label(rule)} can match an empty string")
+          if @spec.backend == :firstmatch && !rule.priority.zero?
+            diagnostic = Diagnostics.error("FLEXR-E018", "explicit priority requires a longest-match backend",
+                                           help: "use backend :table, :direct, or :auto")
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+          end
+          validate_trailing(rule) if rule.trailing
+
+          rule.patterns.each_with_index do |pattern, index|
+            if pattern.is_a?(Pattern)
+              validate_pattern_body(pattern, rule, index)
+              next
+            end
+
+            regexp = pattern.is_a?(String) ? ::Regexp.new(::Regexp.escape(pattern)) : pattern
+            next unless regexp.is_a?(::Regexp)
+
+            ast = parse_regexp(regexp)
+            has_absence = Regexp::AST.absence?(ast)
+            if has_absence && @spec.backend == :firstmatch
+              diagnostic = Diagnostics.error("FLEXR-E014", "absence groups in rule patterns require a longest-match backend",
+                                             help: "use backend :table, :direct, or :auto")
+              raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
+            end
+            next if @spec.options[:allow_empty_match]
+            next unless has_absence ? Regexp::AST.nullable?(ast) : regexp.match?("")
+
+            reject_empty_match!(Diagnostics.rule_label(rule))
           end
         rescue CompileError => e
           e.diagnostic.location ||= rule.location if e.diagnostic
@@ -233,16 +407,57 @@ module Flexr
         end
       end
 
+      def validate_pattern_body(pattern, rule, index)
+        if @spec.backend == :firstmatch
+          diagnostic = Diagnostics.error("FLEXR-E014", "pattern values in rule bodies require a longest-match backend",
+                                         help: "use backend :table, :direct, or :auto")
+          raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
+        end
+        dfa = compile_pattern_value(pattern, rule)
+        reject_empty_match!(Diagnostics.rule_label(rule)) if
+          !@spec.options[:allow_empty_match] && dfa.accepts.fetch(dfa.start).any?
+        @pattern_dfas[[rule.index, index]] = dfa
+      end
+
+      def validate_trailing(rule)
+        if rule.trailing.is_a?(Pattern)
+          rule.trailing_dfa = compile_pattern_value(rule.trailing, rule)
+          reject_empty_match!("trailing context for #{Diagnostics.rule_label(rule)}") if
+            rule.trailing_dfa.accepts.fetch(rule.trailing_dfa.start).any?
+          return
+        end
+        return unless rule.trailing.is_a?(::Regexp)
+
+        ast = parse_regexp(rule.trailing)
+        return unless Regexp::AST.absence?(ast)
+
+        reject_empty_match!("trailing context for #{Diagnostics.rule_label(rule)}") if Regexp::AST.nullable?(ast)
+        @active_rules = [rule]
+        body, bol_only, end_anchor = strip_anchors(ast)
+        condition = Acceptance.new(rule_index: 0, pattern_index: 0, bol_only: bol_only, end_anchor: end_anchor)
+        rule.trailing_dfa = determinize([[normalize_regexp(rule.trailing, body), condition]])
+      end
+
+      def reject_empty_match!(label)
+        diagnostic = Diagnostics.error("FLEXR-E005", "#{label} can match an empty string")
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+      end
+
       def parse_regexp(regexp)
         encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
-        Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
-                           unicode: @spec.options[:unicode] == true).parse
+        @regexp_asts[regexp] ||= Regexp::Parser.new(regexp.source, options: regexp.options, encoding: encoding,
+                                                  unicode: @spec.options[:unicode] == true).parse
+      end
+
+      def normalize_regexp(regexp, ast)
+        encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
+        Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, options: regexp.options).normalize
       end
 
       def diagnostics_for(compiled, elapsed)
         diagnostics = []
         present = compiled.machines.values.flat_map do |machine|
-          machine.dfa.accepts.filter_map { |acceptances| acceptances.min_by(&:rule_index)&.rule_index }
+          machine.dfa.accepts.filter_map { |acceptances| acceptances.first&.rule_index }
         end
         shadowers = shadowed_rules(compiled)
         rules_by_index = @spec.rules.to_h { |rule| [rule.index, rule] }
@@ -257,7 +472,7 @@ module Flexr
           suffix = winners.empty? ? "" : " (shadowed by #{winners.join(', ')})"
           Diagnostics.warning("FLEXR-W001", "#{Diagnostics.rule_label(rule)} is unreachable#{suffix}", location: rule.location,
                               help: "remove it, reorder the rules, or make its language distinct",
-                              note: example&.fetch(:note))
+                              note: example&.fetch(:note) || empty_absence_note(rule))
         end)
         diagnostics.concat(overlap_diagnostics(compiled, rules_by_index)) if @spec.options[:warn_level] == :all
 
@@ -331,6 +546,12 @@ module Flexr
         diagnostics
       end
 
+      def empty_absence_note(rule)
+        return unless @empty_absence_rules[rule.index]
+
+        'this language is empty; an absence group that excludes "" cannot match because every string contains ""'
+      end
+
       def overlap_diagnostics(compiled, rules_by_index)
         # shortcut: verify one shortest body and trailing candidate per rule; search alternatives if rejected examples need coverage.
         compiled.machines.flat_map do |state_name, machine|
@@ -367,20 +588,27 @@ module Flexr
 
               winner, length = result
             end
-            selected = Diagnostics.rule_label(rules_by_index.fetch(winner))
+            winner_rule = rules_by_index.fetch(winner)
+            selected = Diagnostics.rule_label(winner_rule)
             state = state_name == :initial ? "" : " in state #{state_name.inspect}"
             size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
+            tie = priority_tie_reason(winner_rule, rule)
             reason = if has_trailing
-              priority = @spec.backend == :firstmatch ? "first match wins" : "same total length, earlier rule wins"
-              "#{priority}; matched #{size}, looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}"
+              selection = @spec.backend == :firstmatch ? "first match wins" : "same total length, #{tie}"
+              "#{selection}; matched #{size}, looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}"
             elsif @spec.backend == :firstmatch
               "first match wins, matched #{size}"
             else
-              "#{size}, earlier rule wins"
+              "#{size}, #{tie}"
             end
             match_size = has_trailing ? "total length" : "length"
+            help = if winner_rule.priority == rule.priority
+              "reorder the rules if the later rule should take priority"
+            else
+              "raise the losing rule's priority if it should win equal-length matches"
+            end
             Diagnostics.info("FLEXR-I001", "#{Diagnostics.rule_label(rule)} overlaps #{selected} at the same #{match_size}",
-                             location: rule.location, help: "reorder the rules if the later rule should take priority",
+                             location: rule.location, help: help,
                              note: "example: #{input.inspect} selects #{selected}#{state} (#{reason})")
           end
         end
@@ -431,19 +659,33 @@ module Flexr
             examples[index] = [input, winner, state_name, length, lookahead]
           end
         end
-        examples.transform_values do |input, winner, state_name, length, lookahead|
+        examples.to_h do |index, (input, winner, state_name, length, lookahead)|
+          winner_rule = rules_by_index.fetch(winner)
+          rule = rules_by_index.fetch(index)
           state = state_name == :initial ? "" : " in state #{state_name.inspect}"
           reason = if @spec.backend == :firstmatch
             "first match wins, matched #{length} #{length == 1 ? 'byte' : 'bytes'}"
           elsif lookahead
-            "longest total match, then rule order; matched #{length} #{length == 1 ? 'byte' : 'bytes'}"
+            size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
+            selection = if winner_rule.priority == rule.priority
+              "longest total match, then rule order"
+            else
+              "longest total match, then priority #{winner_rule.priority} and rule order"
+            end
+            "#{selection}; matched #{size}"
           else
-            "same length, earlier rule wins"
+            "same length, #{priority_tie_reason(winner_rule, rule)}"
           end
           reason += ", looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}" if lookahead
-          note = "example: #{input.inspect} selects #{Diagnostics.rule_label(rules_by_index.fetch(winner))}#{state} (#{reason})"
-          { note: note, winner: winner }
+          note = "example: #{input.inspect} selects #{Diagnostics.rule_label(winner_rule)}#{state} (#{reason})"
+          [index, { note: note, winner: winner }]
         end
+      end
+
+      def priority_tie_reason(winner, loser)
+        return "earlier rule wins" if winner.priority == loser.priority
+
+        "priority #{winner.priority} beats #{loser.priority}"
       end
 
       def diagnostic_trailing_dfas(rules)
@@ -461,7 +703,7 @@ module Flexr
         shadowers = Hash.new { |hash, key| hash[key] = [] }
         compiled.machines.each_value do |machine|
           machine.dfa.accepts.each do |acceptances|
-            winner = acceptances.min_by(&:rule_index)&.rule_index
+            winner = acceptances.first&.rule_index
             next unless winner
 
             acceptances.each do |acceptance|
@@ -481,12 +723,13 @@ module Flexr
       end
 
       def capture_rules
-        @spec.rules.select do |rule|
-          rule.patterns.any? do |pattern|
-            source = pattern.respond_to?(:source) ? pattern.source : pattern.to_s
-            capturing_group?(source)
-          end
-        end
+        @spec.rules.select { |rule| rule.patterns.any? { |pattern| pattern_capture?(pattern) } }
+      end
+
+      def pattern_capture?(pattern)
+        return pattern.operands.any? { |operand| pattern_capture?(operand) } if pattern.is_a?(Pattern)
+
+        pattern.is_a?(::Regexp) && capturing_group?(pattern.source)
       end
 
       def capturing_group?(source)
@@ -515,6 +758,8 @@ module Flexr
         return {} if declared.empty?
 
         emitted = @spec.rules.each_with_object({}) do |rule, rules_by_token|
+          next if rule.channel
+
           action = rule.action
           tokens = if action.is_a?(Array) && action.first == :emit
             [action.last]
@@ -537,9 +782,37 @@ module Flexr
       end
 
       def variable_pattern?(pattern)
-        source = pattern.respond_to?(:source) ? pattern.source : pattern.to_s
-        source = source.gsub(/\\./, "")
+        return variable_algebra?(pattern) if pattern.is_a?(Pattern)
+        return false unless pattern.is_a?(::Regexp)
+        return true if Regexp::AST.absence?(@regexp_asts[pattern])
+
+        source = pattern.source.gsub(/\\./, "")
         source.match?(/[+*]|\{\d+,\d*\}/)
+      end
+
+      def variable_algebra?(pattern)
+        operands = pattern.operands
+        case pattern.operation
+        when :literal, :+
+          operands.any? { |operand| variable_pattern?(operand) }
+        when :|
+          operands.any? { |operand| variable_pattern?(operand) } ||
+            operands.filter_map { |operand| literal_width(operand) }.uniq.length > 1
+        when :&
+          operands.all? { |operand| variable_pattern?(operand) }
+        when :-
+          variable_pattern?(operands.first)
+        else
+          true
+        end
+      end
+
+      def literal_width(pattern)
+        return pattern.bytesize if pattern.is_a?(String)
+        return unless pattern.is_a?(Pattern) && %i[literal +].include?(pattern.operation)
+
+        widths = pattern.operands.map { |operand| literal_width(operand) }
+        widths.sum unless widths.include?(nil)
       end
     end
   end

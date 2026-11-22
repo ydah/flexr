@@ -302,7 +302,7 @@ module Flexr
     end
 
     def render_rule_call(indent, pattern, action)
-      prefix = "#{indent}rule(Regexp.new(#{pattern})"
+      prefix = "#{indent}rule(::Regexp.new(#{pattern})"
       return "#{prefix}, #{action})" unless action.start_with?("do\n")
 
       lines = action.lines.map(&:chomp)

@@ -3,15 +3,20 @@
 module Flexr
   module Regexp
     class Normalizer
-      def initialize(ast, encoding: Encoding::UTF_8, options: 0)
+      def initialize(ast, encoding: Encoding::UTF_8, options: 0, subject_encoding: encoding)
         @ast = ast
         @encoding = encoding
         @options = options
         @byte_mode = [Encoding::BINARY, Encoding::US_ASCII].include?(encoding)
+        @subject_byte_mode = [Encoding::BINARY, Encoding::US_ASCII].include?(subject_encoding)
       end
 
       def normalize
         normalize_node(@ast)
+      end
+
+      def universe
+        @universe ||= AST::Star.new(child: universal_character, loc: nil)
       end
 
       private
@@ -31,6 +36,8 @@ module Flexr
           child.is_a?(AST::Fail) ? AST::Empty.new(loc: node.loc) : AST::Star.new(child: child, loc: node.loc)
         when AST::Repeat
           repeat(node)
+        when AST::Absence
+          absence(node)
         else
           raise CompileError, "unknown regexp AST node: #{node.class}"
         end
@@ -141,6 +148,33 @@ module Flexr
           child.is_a?(AST::Fail)
 
         AST::Repeat.new(child: child, minimum: node.minimum, maximum: node.maximum, loc: node.loc)
+      end
+
+      def absence(node)
+        return AST::Fail.new(loc: node.loc) if AST.nullable?(node.child)
+
+        child = normalize_node(node.child)
+        AST::Difference.new(left: universe, right: sequence([universe, child, universe]), loc: node.loc)
+      end
+
+      def universal_character
+        return AST::ByteRange.new(lo: 0, hi: 255, loc: nil) if @subject_byte_mode
+
+        continuation = [0x80, 0xbf]
+        # Keep restricted lead bytes separate so the complement preserves scalar boundaries.
+        sequences = [
+          [[0x00, 0x7f]],
+          [[0xc2, 0xdf], continuation],
+          [[0xe0, 0xe0], [0xa0, 0xbf], continuation],
+          [[0xe1, 0xec], continuation, continuation],
+          [[0xed, 0xed], [0x80, 0x9f], continuation],
+          [[0xee, 0xef], continuation, continuation],
+          [[0xf0, 0xf0], [0x90, 0xbf], continuation, continuation],
+          [[0xf1, 0xf3], continuation, continuation, continuation],
+          [[0xf4, 0xf4], [0x80, 0x8f], continuation, continuation]
+        ]
+        @trie_cache = {}
+        trie(sequences, 0)
       end
 
       def complement(ranges)

@@ -1,5 +1,6 @@
 import { defineConfig, passthroughImageService } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { stableReleaseTag } from './scripts/stable-release.mjs';
 
 export default defineConfig({
   site: 'https://ydah.github.io',
@@ -11,6 +12,8 @@ export default defineConfig({
       title: 'flexr',
       description: 'A Ruby-native lexer generator for parser authors.',
       customCss: ['./src/styles/custom.css'],
+      components: { PageTitle: './src/components/DocsTitle.astro' },
+      routeMiddleware: './src/docs-navigation.ts',
       sidebar: [
         {
           label: 'Learn',
@@ -49,6 +52,11 @@ export default defineConfig({
             { label: 'Examples', slug: 'examples' },
             { label: 'Benchmarks', slug: 'benchmarks' }
           ]
+        },
+        {
+          label: `Stable ${stableReleaseTag}`,
+          autogenerate: { directory: 'stable' },
+          collapsed: true
         }
       ],
       social: [

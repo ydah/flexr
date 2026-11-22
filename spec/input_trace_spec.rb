@@ -62,6 +62,32 @@ RSpec.describe "input tracing" do
     expect(trace.steps.last[:candidates].map { |candidate| candidate[:rule] }).to eq([3])
   end
 
+  it "excludes partial UTF-8 lookahead matches from both tokens and trace candidates" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule("x", followed_by: /y(?~ab)\xC3/n, emit: :BYTE)
+      rule(/./m, emit: :OTHER)
+    end
+    trace = Flexr::Trace.new(lexer.new(StringIO.new("xyé"), chunk_size: 1, retain_input: false))
+
+    expect(trace.run).to eq([[:OTHER, "x"], [:OTHER, "y"], [:OTHER, "é".b]])
+    expect(trace.steps.first[:candidates].map { |candidate| candidate[:rule] }).to eq([1])
+  end
+
+  it "uses saved line-start state for empty-body lookahead after discarding the previous byte" do
+    lexer = Class.new(Flexr::Lexer) do
+      option :allow_empty_match
+      rule("\n", skip: true)
+      rule(//, followed_by: /^y(?~ab)ab/, emit: :AT_LINE)
+      rule(/./m, emit: :OTHER)
+    end
+    trace = Flexr::Trace.new(lexer.new(StringIO.new("xyab\nyab"), chunk_size: 1, retain_input: false))
+
+    expect(trace.run).to eq([[:OTHER, "x"], [:OTHER, "y"], [:OTHER, "a"], [:OTHER, "b"],
+                             [:AT_LINE, ""], [:OTHER, "a"], [:OTHER, "b"]])
+    expect(trace.steps[1][:candidates].map { |candidate| candidate[:rule] }).to eq([2])
+    expect(trace.steps[5][:candidates].map { |candidate| candidate[:rule] }).to eq([1, 2])
+  end
+
   it "records each state action once, including actions that emit nothing" do
     calls = 0
     lexer = Class.new(Flexr::Lexer) do

@@ -59,6 +59,16 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      if parsed.rules.any? { |rule| !rule.priority.to_i.zero? }
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support explicit rule priority")' \
+          ' unless Flexr::IR::Rule.method_defined?(:loses_priority_tie?)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
+      if parsed.rules.any?(&:channel)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support token channels")' \
+          ' unless defined?(Flexr::Runtime::Channels)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
@@ -93,10 +103,13 @@ module Flexr
         conditions = Array(rule.pattern_conditions).map do |condition|
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
+        priority = ("priority: #{rule.priority}, " unless rule.priority.to_i.zero?)
+        channel = "channel: #{ruby_literal(rule.channel)}, " if rule.channel
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
-          "#{trailing_dfa_expression(rule, parsed)}" \
+          "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
+          "#{priority}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
-          "bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
+          "#{channel}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
       "{ artifact: #{ruby_literal(artifact_metadata)}, rules: [#{definitions.join(', ')}], " \
         "backend: #{ruby_literal(effective_backend(parsed))}, " \
@@ -122,7 +135,7 @@ module Flexr
       rules = parsed.rules.map do |rule|
         IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),
                      action: rule.action, states: rule.states, bol_only: rule.bol_only,
-                     end_anchor: rule.end_anchor, location: rule.span)
+                     end_anchor: rule.end_anchor, location: rule.span, channel: rule.channel, priority: rule.priority)
       rescue CompileError => e
         e.diagnostic.location ||= rule.span if e.diagnostic
         raise
@@ -157,12 +170,12 @@ module Flexr
 
     def normalize_trailing(value)
       case value
-      when nil, ::Regexp
+      when nil, ::Regexp, Pattern
         value
       when String
         ::Regexp.new(::Regexp.escape(value))
       else
-        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp or String")
+        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp, String, or Pattern")
         raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
     end
@@ -180,11 +193,11 @@ module Flexr
         "stats: #{ruby_literal(compiled.stats)}, diagnostics: #{ruby_literal(diagnostics)} }"
     end
 
-    def trailing_dfa_expression(rule, parsed)
+    def trailing_dfa_expression(rule, parsed, dfa)
       return "" unless rule.trailing
 
-      dfa = Flexr.compile_pattern(normalize_trailing(rule.trailing), encoding: parsed.config[:encoding],
-                                  options: { unicode: effective_options(parsed)[:unicode] == true })
+      dfa ||= Flexr.compile_pattern(normalize_trailing(rule.trailing), encoding: parsed.config[:encoding],
+                                   options: { unicode: effective_options(parsed)[:unicode] == true })
       "trailing_dfa: #{ruby_literal(dfa_data(dfa, compression: table_compression(parsed)))}, "
     rescue CompileError => e
       e.diagnostic.location ||= rule.span if e.diagnostic
@@ -232,8 +245,11 @@ module Flexr
     def embedded_runtime(parsed)
       sources = RUNTIME_SOURCES.dup
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
+      sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
+        parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
+      sources << "runtime/channels.rb" if parsed.rules.any?(&:channel)
       sources.map do |relative|
-        File.binread(File.expand_path(relative, __dir__))
+        File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
     end
 
@@ -266,6 +282,7 @@ module Flexr
 
     def generated_action_source(parsed, indent)
       lines = ["#{indent}def __flexr_generated_execute(rule)", "#{indent}  case rule.index"]
+      keyword_tables = parsed.config.dig(:options, :keyword_tables)
       parsed.rules.each do |rule|
         lines << "#{indent}  when #{rule.index}"
         body = inline_simple_action(rule.action_source) if rule.bind_action && !rule.reads_locals
@@ -273,7 +290,7 @@ module Flexr
           lines << "#{indent}    instance_exec(&self.class.__flexr_generated_actions.fetch(rule.index))"
           next
         end
-        body ||= inline_action_body(rule)
+        body ||= inline_action_body(rule, keyword_tables: keyword_tables)
         if body.nil?
           lines << "#{indent}    instance_exec(&rule.action)"
         else
@@ -287,15 +304,18 @@ module Flexr
       lines.join("\n")
     end
 
-    def inline_action_body(rule)
+    def inline_action_body(rule, keyword_tables: nil)
       action = rule.action
       case action
       when :skip
         ""
       when Array
-        return "emit(#{ruby_literal(action.fetch(1))}, text)" if action.first == :emit
+        return unless action.first == :emit
 
-        nil
+        type = action.fetch(1)
+        return keyword_action_body(type) if !rule.channel && keyword_tables&.key?(type)
+
+        "emit(#{ruby_literal(type)}, text)"
       when String
         return inline_simple_action(rule.action_source) if rule.action_source
         return unless action.start_with?("proc")
@@ -310,6 +330,17 @@ module Flexr
 
         body.delete_prefix("do")[0...-3].strip
       end
+    end
+
+    def keyword_action_body(type)
+      literal = ruby_literal(type)
+      <<~RUBY
+        value = text
+        lexeme = @text_start == @match_start ? value : @buffer.byteslice(@match_start...@match_end)
+        lexeme = lexeme.dup.force_encoding(::Encoding::UTF_8) unless lexeme.encoding == ::Encoding::UTF_8
+        entry = self.class.__flexr_config.options.fetch(:keyword_tables).fetch(#{literal})[lexeme]
+        emit(entry ? entry.first : #{literal}, value)
+      RUBY
     end
 
     # Hash#inspect changed from hash rockets to keyword-style labels in Ruby
@@ -331,6 +362,8 @@ module Flexr
         "{#{entries.join(', ')}}"
       when Array
         "[#{value.map { |item| ruby_literal(item) }.join(', ')}]"
+      when Pattern
+        "::Flexr::Pattern.__flexr_restore(#{value.operation.inspect}, #{ruby_literal(value.operands)}, #{ruby_literal(value.name)})"
       else
         value.inspect
       end
@@ -381,11 +414,26 @@ module Flexr
       # --eval is intentionally explicit; the generated file still contains
       # executable action source, but its metadata is deterministic for this run.
       parsed = klass.__flexr_spec
+      if (tables = parsed.options[:keyword_tables])
+        (passthrough.config[:options] ||= {})[:keyword_tables] = tables
+        passthrough.config[:declared_tokens] |= parsed.declared_tokens
+      end
       runtime_rules = parsed.rules.to_h { |rule| [rule.index, rule] }
       passthrough.rules.each do |rule|
         runtime_rule = runtime_rules.fetch(rule.index)
         rule.patterns = runtime_rule.patterns
         rule.trailing = runtime_rule.trailing
+        rule.priority = runtime_rule.priority
+        next unless rule.dynamic_channel || rule.channel || runtime_rule.channel
+
+        rule.channel = runtime_rule.channel
+        next unless runtime_rule.skip? || runtime_rule.emit?
+
+        rule.action = runtime_rule.action
+        next unless rule.bind_action
+
+        rule.bind_action = false
+        passthrough.dsl_edits.map! { |edit| edit.first(2) == rule.span ? [*rule.span, ""] : edit }
       end
       generate_static(passthrough)
     end
