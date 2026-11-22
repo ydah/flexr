@@ -143,7 +143,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E013` | `reject` is not supported | Use states and `less` |
 | `FLEXR-E014` | Regexp construct is not DFA-compatible | Follow the diagnostic alternative |
 | `FLEXR-E017` | Pattern is not statically resolvable | Rewrite as a static expression or use trusted `--eval` |
-| `FLEXR-E018` | Rule pattern, trailing context, channel, or priority is invalid | Use a supported pattern, a valid channel symbol, or an integer priority with a longest-match backend |
+| `FLEXR-E018` | A rule pattern, trailing context, channel, priority, or `emits:` annotation is invalid | Check the accepted values for the option named in the diagnostic |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
 | `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
 | `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |
@@ -407,3 +407,10 @@ This analysis covers `table`, `direct`, `auto`, and `firstmatch` states.
 `--warn-as-error` does not turn informational diagnostics into failures.
 Generation with `--warn all` also preserves the information in generated and
 standalone artifacts.
+
+### Emit shorthand
+
+`flexr check SPEC --warn all` reports `FLEXR-I004` for action blocks consisting
+solely of `emit :TOKEN` or `emit :TOKEN, text`. Use `emit: :TOKEN` on the rule
+to take the shorthand emission path. Actions that transform the value or perform
+other work stay as blocks.

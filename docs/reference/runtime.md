@@ -31,11 +31,11 @@ must be positive.
 
 | Method | Result |
 |---|---|
-| `next_token` | One default-channel token, or `nil` at EOF |
+| `next_token(expect: nil)` | One default-channel token, or `nil` at EOF |
 | `tokens(channels: :default)` | Array containing the remaining default-channel tokens |
 | `tokens(channels: :all)` | Array containing the remaining tokens from every channel in input order |
 | `each_token` | Enumerator without a block; otherwise yields tokens and returns `self` |
-| `racc_next_token` | `[type, value]`, or `[false, "$end"]` at EOF |
+| `racc_next_token(expect: nil)` | `[type, value]`, or `[false, "$end"]` at EOF |
 | `input` | The currently retained input string |
 | `buffer` | Internal buffered input object; use only for integrations that need it |
 | `filename` | The configured filename |
@@ -49,6 +49,95 @@ selected. `tokens` always returns an array of token values.
 With trivia channels, `each_token` and `racc_next_token` expose the default
 channel just like `next_token`. Collect all channels from a fresh lexer to
 preserve the full stream. A lexer instance advances as tokens are consumed.
+
+## Parser token expectations
+
+Pass an array of token Symbols as `expect:` to select rules for one token
+request. A rule with `emit:` is eligible when its type is expected. For a
+keyword-table rule, flexr checks the exact spelling at each candidate's end
+and uses the resulting type. A rule with `emits:` is eligible when any of its
+declared types is expected. Skip and trivia rules and action blocks without
+annotations remain eligible. Use `nil` to make every rule eligible.
+
+Flexr applies the backend's usual ordering to eligible matches. For a
+longest-match lexer this includes trailing context and the usual tie
+breakers. A `firstmatch` lexer retains Ruby regexp alternative order and rule
+order. If no eligible rule matches input, normal error recovery applies.
+EOF actions also retain their normal behavior.
+
+Expectations restrict rule selection. A dynamic action can still emit any
+type it chooses, and a parser can validate the returned token in its current
+state. An empty array leaves skip, trivia, and unannotated rules eligible.
+See [Ruby slash and JavaScript template examples](../how-to/parser-driven-lexing.md).
+
+## Checkpoint and seek
+
+Use these methods between token reads.
+
+| Method | Result |
+|---|---|
+| `checkpoint` | An immutable, opaque bookmark for this lexer |
+| `restore(bookmark)` | Restores the bookmark and returns the lexer |
+| `seek(byte_position)` | Moves to an absolute byte offset and returns the lexer |
+
+A bookmark includes the cursor and its line and column, the lexical state and
+stack, any buffered token or accumulated `more` text, and EOF and halt state.
+Replay runs the same actions again. Application state and mutable token
+values stay under the caller's control. Keep the input bytes unchanged while
+using a bookmark. The work counter continues to count actual scanning work.
+
+`seek` recalculates line, column, and start-of-line status without running
+rules. It keeps the selected state and stack and clears the previous match,
+pending token, accumulated text, halt state, and per-state EOF bookkeeping.
+The next read can run an EOF action again.
+
+For IO, both methods use the bytes the lexer already has. Checkpoints allow
+the lexer to release bytes according to `retain_input`. Restore raises
+`RangeError` if its cursor or accumulated text has been discarded. Seek
+requires a retained byte offset with known coordinates. Its coordinate origin
+is the current cursor, the beginning of the input when retained, or the start
+of retained `more` text. Seek raises `RangeError` outside that range and
+`ArgumentError` at an interior UTF-8 byte or a buffered edge with an
+incomplete scalar. A bookmark from another lexer also raises `ArgumentError`.
+
+## Action-free recognition
+
+Use `Lexer.recognizer(state: :initial)` to obtain a reusable, immutable
+`Flexr::Recognizer` for one lexical state. Runtime, generated, and
+standalone lexers expose the same API.
+
+```ruby
+recognizer = GrammarLexer.recognizer
+rule, finish = recognizer.match("word", 0)  # [:IDENTIFIER, 4]
+
+recognizer.match("word", 0) do |identity, ending|
+  consume_match(identity, ending)
+end
+```
+
+The matcher starts at the given byte offset and returns the rule identity
+and exclusive end byte. The identity is the symbol declared with `emit:`
+or the zero-based source-rule index for other rules, including skips.
+Keyword classification and dynamic actions belong to token emission.
+Recognition reads the compiled tables without running actions, updating
+state, or constructing a lexer instance.
+
+Longest match includes trailing context when ranking rules, and `finish`
+excludes the lookahead. Line anchors use the original string. UTF-8
+recognition respects full scalar boundaries. Binary recognition operates on
+bytes. A no-match result or an offset at EOF returns `nil`. A non-EOF
+zero-width match requires `allow_empty_match` and can return the incoming
+offset, so the caller controls progress.
+
+The block form yields both fields and returns the block's result. It avoids
+allocating the result array. A recognizer is shareable across Ractors after
+construction. Build it once and reuse it for matching.
+
+Construction accepts `table`, `direct`, and `auto` lexers and raises
+`ArgumentError` for `firstmatch` or an unknown state. `match` requires a
+`String` and an `Integer` byte offset. An offset outside the input raises
+`RangeError`. Use `Lexer.new` for streaming, recovery, and lexer-instance
+limits.
 
 ## State and action context
 
