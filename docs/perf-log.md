@@ -1,5 +1,79 @@
 # Performance log
 
+## DFA stretch experiments (2026-11-22)
+
+Run `ruby benchmark/dfa_stretch.rb` to reproduce the results below. The probe
+walks compiled flexr DFA rows and checks them against lexer and recognizer
+results. It uses fixed ASCII fixtures and adds no scanner options or backends.
+Ruby 4.0.9 and 3.4.9 produced the same results on arm64-darwin25.
+
+### Shortest match
+
+For `aaa!`, the earliest accept is `SINGLE` at byte 1. The latest is `RUN`
+at byte 3, and the lexer emits `[:RUN, "aaa"]`. A separate grammar declaring
+`/a+/` before `"a"` also has an accept at byte 1, but flexr's `firstmatch`
+backend takes Ruby's `"aaa"` match for `/a+/`. OCamllex describes `shortest`
+as choosing the shortest matching prefix.
+[OCaml 5.4 reference manual, section 17.2.3](https://ocaml.org/manual/5.4/ocaml-5.4-refman.pdf)
+
+An early exit from the DFA can select the shortest eligible prefix when the
+body length is the ranking length. Trailing context makes that distinction
+observable. On `abcd`, `"a"` followed by `"bcd"` ends its body at byte 1 and its
+context at byte 4. The competing `"ab"` ends at byte 2. The current recognizer
+chooses `"a"` because its full match is longer. A shortest policy must specify
+whether this example compares 1 to 2 or 4 to 2. Before exposing an option,
+agree on scope and on that ordering, then check UTF-8 and anchor eligibility,
+parser expectations, and priority ties across runtime, generated, and
+standalone scanners. Trace and diagnostic witnesses would need the same policy.
+
+### REJECT
+
+The compiled history for `aaa!`, in retry order, is `RUN@3`, `PAIR@2`,
+`RUN@2`, `SINGLE@1`, `RUN@1`. `PAIR` has higher priority than `RUN` at byte 2.
+This history includes both the lower-ranked rule at the same endpoint and the
+same rule at shorter endpoints. Keeping just the losing rules at the winning
+byte or a single match per rule would discard candidates. Recording every
+acceptance took 2, 10, 66, and 1,026 entries for 1, 8, 64, and 1,024 `a` bytes.
+Flex describes `yyreject()` as continuing directly to the next-ranked choice
+after the effects of the preceding action have occurred.
+[Flex manual, Actions](https://westes.github.io/flex/manual/Actions.html)
+
+In the probe, the first action appends `[:run, "aaa"]` to an array and switches
+the scanner to `:inside` at byte 3. Checkpoint restoration returns the scanner
+to `:initial` at byte 0. The parser filter selects `[:PAIR, "aa"]` on the next
+call, and the array still holds the original entry. The filter lets a parser
+choose token kinds before any action runs, so it cannot select a shorter
+`RUN` after `RUN`'s action. A REJECT API would need an explicit action contract
+for emissions, state transitions, input changes, and effects already visible
+to callers. It would also need bounded retry work and streaming retention.
+The probe leaves REJECT at the feasibility stage until that contract exists.
+
+### Tagged captures
+
+`/(?<head>a|aa)(?<tail>a+)/` and `/(?<head>aa|a)(?<tail>a+)/` compile to identical
+three-state DFAs. The probe checks every state/byte transition and acceptance.
+For `aaa!`, both recognize a three-byte body with the same rule and pattern
+indices. Ruby replay gives `head = "a", tail = "aa"` for the first and
+`head = "aa", tail = "a"` for the second. The respective boundaries are
+`[0, 1), [1, 3)` and `[0, 2), [2, 3)`.
+
+The bounded model runs two compiled lanes, `/aa+/` and `/aaa+/`, in one pass.
+It retains the two active states and the split/end offsets of the last accept.
+The alternative order selects the split if both lanes accept. The model agreed
+with recognition and capture replay on 126 matching cases and six cases with
+no match. It handles this fixed-width-head example. A general TDFA needs tag
+updates and a way to distinguish and choose competing subgroup paths. re2c
+provides separate leftmost-greedy and POSIX policies.
+[re2c manual, Submatch extraction](https://re2c.org/manual/manual_c.html#submatch-extraction)
+
+Keep lazy replay as described in [ADR 0038](adr/0038-replay-named-regexp-captures.md).
+Before replacing it, compare subgroup values and byte ranges against Ruby for
+ambiguous alternatives, empty and optional groups, repetitions, and Unicode.
+Then check trailing context, streaming, delegation, and generated artifacts.
+Measure state growth, code size, and capture throughput under the supported
+Ruby engines. This small model establishes how to preserve the split in one
+case. Throughput remains an open question for a general TDFA.
+
 ## State-specific dispatch experiment (2026-11-20)
 
 `benchmark/state_dispatch.rb` compares generated table dispatch, the existing
