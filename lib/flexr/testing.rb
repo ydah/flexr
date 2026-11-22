@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../flexr"
+require_relative "../flexr" unless defined?(Flexr::Lexer)
 
 module Flexr
   module Testing
@@ -35,7 +35,10 @@ module Flexr
           pairs = value.map { |key, item| [encode(key), encode(item)] }
           { "hash" => pairs.sort_by { |key, _item| JSON.generate(key) } }
         when Runtime::Token
-          { "token" => encode(value.to_h) }
+          data = value.to_h
+          data = data.merge(channel: value.channel, leading_trivia: value.leading_trivia) if
+            value.channel != :default || !value.leading_trivia.empty?
+          { "token" => encode(data) }
         when Runtime::Location
           { "location" => encode(value.members.to_h { |name| [name, value.public_send(name)] }) }
         else

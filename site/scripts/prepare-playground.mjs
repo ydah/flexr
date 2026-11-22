@@ -24,8 +24,7 @@ if (useStable) {
 }
 files['/app/playground.rb'] = await readFile(path.join(site, 'ruby/playground.rb'), 'utf8');
 await mkdir(output, { recursive: true });
-const payload = JSON.stringify({ files });
-await writeFile(path.join(output, 'flexr.json'), payload);
+const readSource = async filename => useStable ? readStableFile(filename) : readFile(path.join(root, filename), 'utf8');
 const inputs = {
   toml: 'title = "flexr"',
   graphql: 'query { user(id: 12) { name } }',
@@ -34,8 +33,7 @@ const inputs = {
 const presets = {};
 for (const [name, input] of Object.entries(inputs)) {
   const filename = `examples/${name}/lexer.flexr.rb`;
-  const source = useStable ? readStableFile(filename) : await readFile(path.join(root, filename), 'utf8');
-  presets[name] = { source, input };
+  presets[name] = { source: await readSource(filename), input };
 }
 const updatedPresets = {
   absence: '/* 前 */first /* another comment */second',
@@ -43,14 +41,26 @@ const updatedPresets = {
   keywords: 'if iffy else end',
   trivia: '# note\nalpha \tbeta',
   priority: 'if ifx',
+  indentation: 'if ready:\n    run()\nfinish()',
+  heredoc: '<<FIRST\nhello\nFIRST\n<<SECOND\nworld\nSECOND\nnext',
 };
 const releasedPresets = useStable ? stableFiles('site/ruby/presets') : null;
 for (const [name, input] of Object.entries(updatedPresets)) {
   const filename = `site/ruby/presets/${name}.flexr.rb`;
   if (releasedPresets && !releasedPresets.includes(filename)) continue;
-  const source = useStable ? readStableFile(filename) : await readFile(path.join(root, filename), 'utf8');
-  presets[name] = { source, input };
+  presets[name] = { source: await readSource(filename), input };
 }
+const htmlPreset = 'site/ruby/presets/html-js.flexr.rb';
+const javascriptLexer = 'site/ruby/presets/html_javascript.rb';
+if (!releasedPresets || [htmlPreset, javascriptLexer].every(filename => releasedPresets.includes(filename))) {
+  files['/app/lib/playground/html_javascript.rb'] = await readSource(javascriptLexer);
+  presets['html-js'] = {
+    source: await readSource(htmlPreset),
+    input: '<p>Before</p>\n<script>\nlet x = 2;\n</script>\n<p>After</p>',
+  };
+}
+const payload = JSON.stringify({ files });
+await writeFile(path.join(output, 'flexr.json'), payload);
 await writeFile(path.join(output, 'presets.json'), JSON.stringify(presets));
 const wasm = path.join(site, 'node_modules/@ruby/4.0-wasm-wasi/dist');
 await cp(path.join(wasm, 'ruby+stdlib.wasm'), path.join(output, 'ruby.wasm'));

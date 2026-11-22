@@ -1,4 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
+
+const assets = JSON.parse(await readFile(new URL('../../public/playground-runtime/flexr.json', import.meta.url), 'utf8'));
+const flexrVersion = assets.files['/app/lib/flexr/version.rb'].match(/VERSION = "([^"]+)"/)[1];
 
 test('runs actual edited Ruby, steps the trace, draws the DFA, and restores a share link without running', async ({ page }, testInfo) => {
   const wasm = [];
@@ -8,12 +12,14 @@ test('runs actual edited Ruby, steps the trace, draws the DFA, and restores a sh
   await page.goto('/flexr/playground/');
   await expect(page.locator('#spec')).toContainText('');
   await expect(page.locator('#spec')).toHaveValue(/class Lexer/);
+  await expect(page.locator('#flexr-version')).toBeHidden();
   expect(wasm).toHaveLength(0);
   const source = 'class Lexer < Flexr::Lexer\n emits :INT\n rule(/[0-9]+/) { emit :INT, text.to_i * 3 }\n rule(/ +/, skip: true)\nend';
   await page.locator('#spec').fill(source);
   await page.locator('#input').fill('12 2');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.locator('#status')).toContainText('2 tokens, 3 steps', { timeout: 30_000 });
+  await expect(page.getByText(`flexr ${flexrVersion}`, { exact: true })).toBeVisible();
   expect(JSON.parse(await page.locator('#tokens').textContent())).toEqual([['INT', 36], ['INT', 6]]);
   await expect(page.locator('#metrics')).toContainText('MiB Ruby download');
   console.log(`Playground measurement: ${await page.locator('#metrics').textContent()}; ${await page.evaluate(() => navigator.userAgent)}`);
@@ -36,6 +42,7 @@ test('runs actual edited Ruby, steps the trace, draws the DFA, and restores a sh
   await shared.goto(link);
   await expect(shared.locator('#spec')).toHaveValue(source);
   await expect(shared.locator('#status')).toContainText('Review it');
+  await expect(shared.locator('#flexr-version')).toBeHidden();
   await expect(shared.locator('#mode')).toHaveValue('generated');
   await shared.setViewportSize({ width: 390, height: 844 });
   await shared.screenshot({ path: testInfo.outputPath('playground-mobile.png') });
@@ -51,10 +58,36 @@ test('shows source diagnostics and terminates runaway Ruby while the UI stays re
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.locator('#diagnostics')).toContainText('FLEXR-E014', { timeout: 30_000 });
   await expect(page.locator('#diagnostics')).toContainText('playground.flexr.rb:2:');
+  await expect(page.getByText(`flexr ${flexrVersion}`, { exact: true })).toBeVisible();
   await page.locator('#spec').fill('loop {}\nclass Lexer < Flexr::Lexer\n rule(/a/, emit: :A)\nend');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.locator('#status')).toContainText('Execution exceeded 5 seconds', { timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
+  await expect(page.getByText(`flexr ${flexrVersion}`, { exact: true })).toBeVisible();
+});
+
+test('prepares an issue draft from the run with its exact version and diagnostics', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  const prepare = page.getByRole('button', { name: 'Prepare issue draft' });
+  await expect(prepare).toBeDisabled();
+  const source = 'class ReportLexer < Flexr::Lexer\n rule(/a(?=b)/, emit: :A)\nend';
+  await page.locator('#spec').fill(source);
+  await page.locator('#input').fill('ab');
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await expect(page.locator('#diagnostics')).toContainText('FLEXR-E014', { timeout: 30_000 });
+  await page.locator('#input').fill('a later edit');
+  await prepare.click();
+  const link = page.getByRole('link', { name: 'Open GitHub issue form' });
+  const url = new URL(await link.getAttribute('href'));
+  expect(url.origin + url.pathname).toBe('https://github.com/ydah/flexr/issues/new');
+  const body = url.searchParams.get('body');
+  expect(body).toContain(`flexr ${flexrVersion}`);
+  expect(body).toContain('class ReportLexer');
+  expect(body).toContain('    ab\n');
+  expect(body).toContain('FLEXR-E014');
+  expect(body).not.toContain('a later edit');
+  await expect(page.getByRole('textbox', { name: 'Issue draft' })).toHaveValue(body);
+  await expect(page).toHaveURL(/\/flexr\/playground\/$/);
 });
 
 test('treats tokens and console text as text and disables worker network access', async ({ page }) => {
@@ -132,3 +165,34 @@ test('runs the equal-length rule priority preset', async ({ page }) => {
   await expect(page.locator('#status')).toContainText('2 tokens', { timeout: 30_000 });
   expect(JSON.parse(await page.locator('#tokens').textContent())).toEqual([['IF', 'if'], ['IDENT', 'ifx']]);
 });
+
+for (const mode of ['runtime', 'generated']) {
+  test(`runs the context presets in ${mode} mode`, async ({ page }) => {
+    await page.goto('/flexr/playground/');
+    const preset = page.getByRole('combobox', { name: 'Choose a playground preset' });
+    const run = page.getByRole('button', { name: 'Run', exact: true });
+    const status = page.locator('#status');
+    const tokens = page.locator('#tokens');
+    await page.locator('#mode').selectOption(mode);
+
+    await preset.selectOption('indentation');
+    await expect(page.locator('#spec')).toHaveValue(/indentation newline:/);
+    await run.click();
+    await expect(status).toContainText('13 tokens', { timeout: 30_000 });
+    expect(JSON.parse(await tokens.textContent()).map(token => token.type)).toEqual(expect.arrayContaining(['INDENT', 'DEDENT']));
+
+    await preset.selectOption('heredoc');
+    await expect(page.locator('#spec')).toHaveValue(/scan_until_line/);
+    await run.click();
+    await expect(status).toContainText('3 tokens', { timeout: 30_000 });
+    expect(JSON.parse(await tokens.textContent())).toEqual([['HEREDOC', 'hello\n'], ['HEREDOC', 'world\n'], ['WORD', 'next']]);
+
+    await preset.selectOption('html-js');
+    await expect(page.locator('#spec')).toHaveValue(/delegate PlaygroundJavaScriptLexer/);
+    await run.click();
+    await expect(status).toContainText('11 tokens', { timeout: 30_000 });
+    expect(JSON.parse(await tokens.textContent())[3]).toMatchObject({
+      type: 'JS_LET', value: 'let', location: { byte_begin: 23, line_begin: 3 },
+    });
+  });
+}

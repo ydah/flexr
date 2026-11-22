@@ -8,6 +8,22 @@ const binary = await readFile(new URL('../node_modules/@ruby/4.0-wasm-wasi/dist/
 const assets = JSON.parse(await readFile(new URL('../public/playground-runtime/flexr.json', import.meta.url), 'utf8'));
 const runtime = await createRuntime(binary, assets);
 
+test('reports the loaded flexr version before a Ruby action can change it', async () => {
+  const versionSource = assets.files['/app/lib/flexr/version.rb'];
+  const expected = versionSource.match(/VERSION = "([^"]+)"/)[1];
+  const source = `class Lexer < Flexr::Lexer
+    rule(/a/) do
+      Flexr.send(:remove_const, :VERSION)
+      Flexr.const_set(:VERSION, 'edited')
+      emit :A, Flexr::VERSION
+    end
+  end`;
+  const versions = [];
+  const result = await runtime.run({ source, input: 'a', mode: 'runtime' }, (_startupMs, version) => versions.push(version));
+  assert.deepEqual(result.tokens, [['A', 'edited']]);
+  assert.deepEqual(versions, [expected]);
+});
+
 test('executes edited Ruby actions and generates a real scanner with Prism', async () => {
   const source = 'class Lexer < Flexr::Lexer\n emits :INT\n rule(/[0-9]+/) { emit :INT, text.to_i * 2 }\nend';
   const request = { source, input: '12', mode: 'runtime' };
@@ -115,6 +131,38 @@ test('priority changes the winner only on equal-length matches', async () => {
     const result = await runtime.run({ ...presets.priority, mode });
     assert.equal(result.error, undefined, result.error);
     assert.deepEqual(result.tokens, [['IF', 'if'], ['IDENT', 'ifx']]);
+  }
+});
+
+test('context presets emit layout, dynamic heredoc, and delegated tokens in both modes', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  for (const name of ['indentation', 'heredoc', 'html-js']) {
+    assert.ok(presets[name], `${name} preset is packaged`);
+  }
+  for (const mode of ['runtime', 'generated']) {
+    const layout = await runtime.run({ ...presets.indentation, mode });
+    assert.equal(layout.error, undefined, layout.error);
+    assert.deepEqual(layout.tokens.map(token => token.type), [
+      'IF', 'IDENT', 'COLON', 'NEWLINE', 'INDENT', 'IDENT', 'PAREN', 'PAREN', 'NEWLINE', 'DEDENT', 'IDENT', 'PAREN', 'PAREN',
+    ]);
+    const indent = layout.tokens[4].location;
+    assert.deepEqual([indent.byte_begin, indent.byte_end, indent.line_begin, indent.column_begin], [14, 14, 2, 5]);
+    assert.equal(layout.tokens[9].location.byte_begin, 20);
+
+    const heredoc = await runtime.run({ ...presets.heredoc, mode });
+    assert.equal(heredoc.error, undefined, heredoc.error);
+    assert.deepEqual(heredoc.tokens, [['HEREDOC', 'hello\n'], ['HEREDOC', 'world\n'], ['WORD', 'next']]);
+
+    const html = await runtime.run({ ...presets['html-js'], mode });
+    assert.equal(html.error, undefined, html.error);
+    assert.deepEqual(html.tokens.map(({ type, value }) => [type, value]), [
+      ['HTML_TAG', '<p>'], ['HTML_TEXT', 'Before'], ['HTML_TAG', '</p>'],
+      ['JS_LET', 'let'], ['JS_IDENT', 'x'], ['JS_OPERATOR', '='], ['JS_NUMBER', '2'], ['JS_PUNCTUATION', ';'],
+      ['HTML_TAG', '<p>'], ['HTML_TEXT', 'After'], ['HTML_TAG', '</p>'],
+    ]);
+    const firstJS = html.tokens[3].location;
+    assert.deepEqual([firstJS.byte_begin, firstJS.byte_end, firstJS.line_begin, firstJS.column_begin], [23, 26, 3, 1]);
+    assert.match(html.generated, /delegate PlaygroundJavaScriptLexer, capture: :js/);
   }
 });
 

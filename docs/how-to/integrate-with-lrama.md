@@ -1,8 +1,8 @@
 # Integrate with Lrama
 
-Lrama-generated parsers use the same two-element token protocol as Racc.
-Implement the lexer with `racc_next_token`, declare the grammar tokens with
-`emits`, and generate the lexer as part of the parser build.
+Lrama generates a C parser that reads tokens from its C `yylex` function.
+The Flexr lexer supplies the token kinds and values. A Ruby driver can send
+those pairs to the compiled parser, as in the generated calculator project.
 
 ```ruby
 class Lexer < Flexr::Lexer
@@ -13,9 +13,10 @@ class Lexer < Flexr::Lexer
 end
 ```
 
-`racc_next_token` returns `[type, value]` for a token and `[false, "$end"]` at
-EOF. `emits` is a documentation and diagnostic contract; it does not alter
-the value returned by the lexer.
+Keep the names in `emits` aligned with the grammar's `%token` declarations.
+Use `flexr check lexer.flexr.rb --grammar parser.y` to compare the names.
 
-See the runnable [Lrama example](../../examples/with_lrama/README.md) and the
-[token contract](../reference/tokens-and-locations.md).
+Generate a working project with `flexr new NAME --parser lrama`.
+The [calculator tutorial](../tutorial/build-a-calculator-parser.md#lrama)
+shows how to build and test it with a C compiler. The [lexer example](../../examples/with_lrama/README.md)
+shows how to inspect the token stream.

@@ -1,4 +1,8 @@
 module PublicApiTypecheck
+  module SharedRules
+    extend Flexr::Rules
+  end
+
   class Cancellation
     def call: () -> bool
   end
@@ -9,5 +13,8 @@ module PublicApiTypecheck
 
   class ErrorHandler
     def call: (Flexr::LexError) -> (:skip | :token)
+  end
+
+  class EmbeddedLexer < Flexr::Lexer
   end
 end

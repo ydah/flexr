@@ -9,18 +9,20 @@ pages explain how to use those specifications.
 | You want to... | Read |
 |---|---|
 | Build your first lexer | [Build a calculator lexer](tutorial/build-a-calculator-lexer.md) |
+| Generate a working parser project | [Build a calculator parser](tutorial/build-a-calculator-parser.md) |
 | Run a specification | [Run at runtime](how-to/run-a-lexer-at-runtime.md) |
 | Generate Ruby | [Generate a lexer](how-to/generate-a-lexer.md) |
 | Ship one file | [Deploy a standalone lexer](how-to/deploy-a-standalone-lexer.md) |
 | Add states or trailing context | [States](how-to/use-states.md), [trailing context](how-to/use-trailing-context.md) |
 | Integrate a parser | [Racc](how-to/integrate-with-racc.md), [Lrama](how-to/integrate-with-lrama.md) |
-| Migrate an existing lexer | [flex](how-to/migrate-from-flex.md), [Rexical](how-to/migrate-from-rexical.md) |
+| Migrate an existing lexer | [flex](how-to/migrate-from-flex.md), [Rexical](how-to/migrate-from-rexical.md), [oedipus_lex](how-to/migrate-from-oedipus-lex.md) |
 | Look up exact behavior | [Reference](reference/README.md) |
 | Understand design trade-offs | [Explanation](explanation/) |
 
 ## Tutorial
 
 - [Build a calculator lexer](tutorial/build-a-calculator-lexer.md)
+- [Build a calculator parser](tutorial/build-a-calculator-parser.md)
 
 ## How-to
 
@@ -35,6 +37,7 @@ pages explain how to use those specifications.
 - [Integrate with Lrama](how-to/integrate-with-lrama.md)
 - [Migrate from flex](how-to/migrate-from-flex.md)
 - [Migrate from Rexical](how-to/migrate-from-rexical.md)
+- [Migrate from oedipus_lex](how-to/migrate-from-oedipus-lex.md)
 - [Tune performance](how-to/tune-performance.md)
 
 ## Reference
