@@ -95,6 +95,9 @@ module Flexr
         when "--target"
           raise ArgumentError, "--target is only valid for the check command" unless command == :check
           options.target = required_argument!(args, argument)
+        when "--from"
+          raise ArgumentError, "--from is only valid for import" unless command == :import
+          options.import_format = required_argument!(args, argument).to_sym
         when "--rule"
           rule_number = Integer(required_argument!(args, argument), 10)
           raise ArgumentError, "--rule must be non-negative" if rule_number.negative?
@@ -167,7 +170,7 @@ module Flexr
       when :bench
         run_benchmark(spec, options, benchmark_args, out)
       when :import
-        result = Importer.import(spec)
+        result = Importer.import(spec, from: options.import_format)
         result.warnings.each { |warning| err.puts "warning: #{warning}" }
         return EXIT_FAILURE unless result.complete?
 
@@ -189,22 +192,29 @@ module Flexr
       require_relative "source/fixes"
       path = File.realpath(spec)
       parsed = read_spec(path)
-      edits = begin
+      original = parsed
+      begin
         compiled = compile(parsed, overrides: { warn_level: :all })
-        Source::Fixes.edits(parsed, compiled)
       rescue CompileError => e
         repairs = Source::Fixes.regexp_edits(parsed, e.diagnostic)
-        raise if repairs.empty?
+        if repairs.empty?
+          index = parsed.rules.index { |rule| rule.span == e.diagnostic&.location }
+          e.diagnostic.location = original.rules.fetch(index).span if index
+          raise
+        end
 
-        repairs
+        repaired = Source::Fixes.apply(parsed.source, repairs)
+        parsed = Source::PrismReader.new(repaired, path: path).read
+        retry
       end
+      edits = Source::Fixes.edits(parsed, compiled)
       fixed = Source::Fixes.apply(parsed.source, edits)
       compile(Source::PrismReader.new(fixed, path: path).read) unless edits.empty?
 
       if options.dry_run
         out.write(fixed)
-      elsif !edits.empty?
-        raise CompileError, "spec changed while preparing fixes: #{spec}" unless File.binread(path) == parsed.source.b
+      elsif fixed != original.source
+        raise CompileError, "spec changed while preparing fixes: #{spec}" unless File.binread(path) == original.source.b
 
         ArtifactWriter.write!(path, fixed)
       end
@@ -229,6 +239,7 @@ module Flexr
         options.warn_level == :all ||
           (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
       end
+      diagnostics.concat(emit_shorthand_suggestions(parsed)) if parsed && options.warn_level == :all
       if parsed && options.overrides.fetch(:backend, parsed.config[:backend]) != :firstmatch && options.warn_level != :none
         tables = parsed.config.dig(:options, :keyword_tables)
         diagnostics.concat(Automaton::KeywordTables.grouping_suggestions(compiled, tables))
@@ -245,6 +256,18 @@ module Flexr
       return EXIT_FAILURE if options.warn_as_error && diagnostics.any?(&:warning?)
 
       EXIT_OK
+    end
+
+    def emit_shorthand_suggestions(parsed)
+      parsed.rules.filter_map do |rule|
+        token = rule.emit_shorthand
+        next unless token
+
+        Diagnostics.info(
+          "FLEXR-I004", "rule emits #{token.inspect} with unchanged matched text",
+          location: rule.span, help: "use emit: #{token.inspect} on the rule"
+        )
+      end
     end
 
     def print_stats(spec, options, out)
@@ -433,6 +456,7 @@ module Flexr
       if (tables = config_options[:keyword_tables])
         klass.__flexr_config.options[:keyword_tables] = tables
       end
+      klass.indentation(**config_options[:indentation]) if config_options[:indentation]
       config_options.slice(*Configuration::BOOLEAN_OPTIONS).each do |name, value|
         klass.option(name) if value
       end
@@ -519,6 +543,7 @@ module Flexr
               --generated             trace generated scanner
               --target 2.0            report migration requirements (static check only)
               --dry-run               print the fixed spec without writing (fix only)
+              --from oedipus_lex      read an oedipus_lex .rex file (import only)
       USAGE
       status
     end

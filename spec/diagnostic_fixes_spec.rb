@@ -49,6 +49,21 @@ RSpec.describe "diagnostic fixes" do
     end
   end
 
+  it "leaves rules with named captures untouched" do
+    source = <<~RUBY
+      class NamedCaptureFixLexer < Flexr::Lexer
+        rule(/(a)(?<name>b)/) { emit :VALUE, captures[:name] }
+      end
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      File.binwrite(path, source)
+      errors = StringIO.new
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      expect(File.binread(path)).to eq(source)
+    end
+  end
+
   it "groups adjacent keywords and preserves both token types and values" do
     source = <<~RUBY
       class GroupedKeywordLexer < Flexr::Lexer
@@ -70,6 +85,27 @@ RSpec.describe "diagnostic fixes" do
         lexer = Module.new.tap { |scope| scope.module_eval(definition, path) }.const_get(:GroupedKeywordLexer)
         expect(lexer.new("if iffy end").tokens).to eq([[:IF, "if"], [:IDENT, "iffy"], [:END, "end"]])
       end
+    end
+  end
+
+  it "leaves the declaration site of shared keyword rules unchanged" do
+    source = <<~RUBY
+      module SharedKeywordRules
+        extend Flexr::Rules
+        rule("if", emit: :IF)
+        rule("end", emit: :END)
+        rule(/[a-z]+/, emit: :IDENT)
+      end
+      class SharedKeywordLexer < Flexr::Lexer
+        use SharedKeywordRules
+      end
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      File.binwrite(path, source)
+      errors = StringIO.new
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      expect(File.binread(path)).to eq(source)
     end
   end
 
@@ -98,10 +134,11 @@ RSpec.describe "diagnostic fixes" do
     end
   end
 
-  it "rewrites a lazy quoted pattern to stop at its first delimiter" do
+  it "rewrites lazy quoted patterns to stop at their first delimiters" do
     source = <<~RUBY
       class RepairAbsenceLexer < Flexr::Lexer
         rule(/".*?"/m, emit: :STRING)
+        rule(/'.*?'/, emit: :SINGLE)
         rule(" ", skip: true)
       end
     RUBY
@@ -112,8 +149,10 @@ RSpec.describe "diagnostic fixes" do
       expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
       fixed = File.binread(path)
       expect(fixed).to include('rule(/"(?~")"/m,')
+      expect(fixed).to include("rule(/'(?~['\\n])'/,")
       lexer = Module.new.tap { |scope| scope.module_eval(fixed, path) }.const_get(:RepairAbsenceLexer)
       expect(lexer.new(%("a\n" "b")).tokens).to eq([[:STRING, %("a\n")], [:STRING, '"b"']])
+      expect(lexer.new("'c'").tokens).to eq([[:SINGLE, "'c'"]])
     end
   end
 end

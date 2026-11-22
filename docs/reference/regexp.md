@@ -27,7 +27,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `\X` | Unsupported | Use the ASCII-only standalone token example in `FLEXR-E014` where applicable; Unicode graphemes need separate segmentation |
 | Lazy or possessive quantifiers | Unsupported | For unescaped single-line quoted text, use `/"[^"\n]*"/`; other patterns need a separate rewrite |
 | Atomic groups | Unsupported | Use the delimited-text example in `FLEXR-E014` where applicable; removing atomic groups can change matches |
-| Named captures | Unsupported | Use `(?:...)` when only grouping is needed; capture-dependent patterns need a separate rewrite |
+| Named groups `(?<name>...)` and `(?'name'...)` | Supported | Read values from `captures` in rule actions |
 | Conditional groups | Unsupported | Use the finite alternatives shown by `FLEXR-E014` where applicable, or separate rules and state checks |
 | Absence groups `(?~X)` | Supported | Rule patterns require a longest-match backend. See [absence groups](#absence-groups) |
 
@@ -80,6 +80,29 @@ See [ADR 0028](../adr/0028-dfa-absence-groups.md) for the compilation strategy.
 
 ## Captures
 
-Unnamed capturing parentheses do not expose match groups to actions. They are treated
-as grouping syntax and produce `FLEXR-W013`; use `(?:...)` and inspect `text`
-in the action instead.
+A rule action can read named groups from the winning regexp.
+
+```ruby
+rule(/(?<integer>[0-9]+)\.(?<fraction>[0-9]+)/) do
+  emit :DECIMAL, [captures[:integer], captures[:fraction]]
+end
+```
+
+`captures` returns a frozen hash with symbol keys and frozen string values.
+An optional group that did not participate has the value `nil`.
+Actions for other patterns and EOF receive an empty hash.
+
+Longest-match backends select the rule and its body before Ruby's regexp
+engine resolves the groups within that body. Ambiguous groups follow
+Ruby's capture rules. `firstmatch` uses the captures from its selected native
+match. If two patterns of the same rule accept the winning body, the first
+eligible pattern supplies the captures.
+
+The body excludes `followed_by:` and any prefix accumulated by `more`.
+Calling `less` changes the token text and position while captures still
+describe the original body. Groups in pattern algebra and trailing context
+affect matching and produce no entries in `captures`.
+
+Unnamed groups are treated as grouping syntax and produce `FLEXR-W013`.
+Backreferences and calls to capture groups still report `FLEXR-E014`.
+See [ADR 0038](../adr/0038-replay-named-regexp-captures.md) for the extraction strategy.

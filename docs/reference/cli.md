@@ -8,7 +8,7 @@ flexr [COMMAND] SPEC.rb [options]
 
 Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 `.flexr.rb` file, except for `import`, which accepts flex `.l` and Rexical
-`.rex` input.
+`.rex` input. Use `--from oedipus_lex` for the other `.rex` dialect.
 
 ## Commands
 
@@ -22,7 +22,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `trace SPEC` | Print DFA states, or trace input when supplied | Human or JSON input trace |
 | `explain SPEC` | List parsed rules and patterns | Text on stdout |
 | `bench SPEC` | Run the benchmark harness | Benchmark output |
-| `import INPUT` | Translate flex/Rexical input | Ruby on stdout or `--output` |
+| `import INPUT` | Translate flex, Rexical, or oedipus_lex input | Ruby on stdout or `--output` |
 
 `trace` without input describes the automaton. To execute a specification and
 inspect rule selection, pass `--input STRING` or `--input-file PATH`.
@@ -52,6 +52,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--input STRING` | Literal input, including an empty string | Trace |
 | `--input-file PATH` | Input file | Trace and bench |
 | `--generated` | Run the generated scanner | Input trace |
+| `--from oedipus_lex` | Select the oedipus_lex `.rex` dialect | Import |
 
 The complete help output is kept as a checked snapshot:
 
@@ -79,6 +80,7 @@ Options:
       --generated             trace generated scanner
       --target 2.0            report migration requirements (static check only)
       --dry-run               print the fixed spec without writing (fix only)
+      --from oedipus_lex      read an oedipus_lex .rex file (import only)
 <!-- flexr-help:end -->
 
 ## Automatic fixes
@@ -91,6 +93,7 @@ The command reads the specification statically. Ruby LSP offers the same edits
 as quick fixes for DFA backends.
 
 - `FLEXR-W013` makes ordinary groups in direct regexp rule arguments non-capturing.
+  Rules with named captures keep their original groups.
 - `FLEXR-W001` raises the priority of a shadowed literal with `emit:` when the
   DFA shows that every previous winner can still win elsewhere. After the
   change, the literal emits its own token type on equal-length matches.

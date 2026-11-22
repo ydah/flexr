@@ -18,11 +18,12 @@ module Flexr
 
         groups = keyword_edits(parsed, compiled)
         priority = priority_edits(parsed, compiled, groups)
-        (capture_edits(parsed, compiled.diagnostics) + groups + priority).sort_by { |edit| edit.range.begin }
+        (capture_edits(parsed, compiled) + groups + priority).sort_by { |edit| edit.range.begin }
       end
 
-      def capture_edits(parsed, diagnostics)
-        spans = diagnostics.filter_map { |item| item.location if item.code == "FLEXR-W013" }
+      def capture_edits(parsed, compiled)
+        captured = compiled.rules.filter_map { |rule| rule.location if rule.capture_patterns }
+        spans = compiled.diagnostics.filter_map { |item| item.location if item.code == "FLEXR-W013" } - captured
         rule_calls(parsed, spans).flat_map do |node|
           node.arguments.arguments.grep(::Prism::RegularExpressionNode).flat_map do |argument|
             capture_literal_edits(argument, parsed.config.fetch(:encoding))
@@ -31,6 +32,7 @@ module Flexr
       end
 
       def rule_calls(parsed, spans)
+        spans &= parsed.dsl_spans
         return [] if spans.empty?
 
         nodes = [::Prism.parse(parsed.source).value]
@@ -51,7 +53,7 @@ module Flexr
         tables = parsed.config.dig(:options, :keyword_tables)
         Automaton::KeywordTables.grouping_candidates(compiled, tables).filter_map do |literals, rule|
           spans = [*literals, rule].map(&:location)
-          next if spans.any?(&:nil?)
+          next unless (spans - parsed.dsl_spans).empty?
           next unless spans.each_cons(2).all? do |(_, last), (first, _)|
             first >= last && parsed.source.byteslice(last...first).match?(/\A[ \t]*\r?\n[ \t]*\z/)
           end
