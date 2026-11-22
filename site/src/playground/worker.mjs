@@ -17,7 +17,7 @@ export async function run({ state, base }) {
         }
       }
     }
-    const result = await runtime.run(state, startupMs => postMessage({ phase: 'ready', startupMs }));
+    const result = await runtime.run(state, (startupMs, flexrVersion) => postMessage({ phase: 'ready', startupMs, flexrVersion }));
     const payload = JSON.stringify({ ...result, wasm_bytes: binary.byteLength, download_ms: downloadMs });
     if (new TextEncoder().encode(payload).byteLength > 4_000_000) throw new Error('Output exceeds 4 MB. Reduce the input or number of states.');
     postMessage({ phase: 'result', result: JSON.parse(payload) });
