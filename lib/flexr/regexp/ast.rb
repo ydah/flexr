@@ -14,6 +14,7 @@ module Flexr
       Absence = Struct.new(:child, :loc, keyword_init: true)
       Difference = Struct.new(:left, :right, :loc, keyword_init: true)
       EmbeddedDFA = Struct.new(:dfa)
+      NamedCapture = Struct.new(:opening, :child, keyword_init: true)
       Anchor = Struct.new(:kind, :loc, keyword_init: true)
       TrailMark = Struct.new(:rule_id, :loc, keyword_init: true)
       CharClass = Struct.new(:ranges, :negated, :loc, keyword_init: true)
@@ -54,6 +55,7 @@ module Flexr
         case node
         when Empty, Anchor, Star then true
         when Repeat then node.minimum.zero? || nullable?(node.child)
+        when NamedCapture then nullable?(node.child)
         when Seq then node.children.all? { |child| nullable?(child) }
         when Alt then node.children.any? { |child| nullable?(child) }
         when Absence then !nullable?(node.child)

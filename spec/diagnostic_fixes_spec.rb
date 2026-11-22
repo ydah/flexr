@@ -49,6 +49,21 @@ RSpec.describe "diagnostic fixes" do
     end
   end
 
+  it "leaves rules with named captures untouched" do
+    source = <<~RUBY
+      class NamedCaptureFixLexer < Flexr::Lexer
+        rule(/(a)(?<name>b)/) { emit :VALUE, captures[:name] }
+      end
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      File.binwrite(path, source)
+      errors = StringIO.new
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      expect(File.binread(path)).to eq(source)
+    end
+  end
+
   it "groups adjacent keywords and preserves both token types and values" do
     source = <<~RUBY
       class GroupedKeywordLexer < Flexr::Lexer

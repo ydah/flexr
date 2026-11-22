@@ -84,6 +84,7 @@ module Flexr
     attr_writer on_error: error_handler?
     def input: () -> String
     def text: () -> String
+    def captures: () -> Hash[Symbol, String?]
     def text_bytesize: () -> Integer
     def last_location: () -> Runtime::Location
     def byte_pos: () -> Integer

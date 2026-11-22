@@ -91,6 +91,7 @@ The command reads the specification statically. Ruby LSP offers the same edits
 as quick fixes for DFA backends.
 
 - `FLEXR-W013` makes ordinary groups in direct regexp rule arguments non-capturing.
+  Rules with named captures keep their original groups.
 - `FLEXR-W001` raises the priority of a shadowed literal with `emit:` when the
   DFA shows that every previous winner can still win elsewhere. After the
   change, the literal emits its own token type on equal-length matches.

@@ -18,11 +18,12 @@ module Flexr
 
         groups = keyword_edits(parsed, compiled)
         priority = priority_edits(parsed, compiled, groups)
-        (capture_edits(parsed, compiled.diagnostics) + groups + priority).sort_by { |edit| edit.range.begin }
+        (capture_edits(parsed, compiled) + groups + priority).sort_by { |edit| edit.range.begin }
       end
 
-      def capture_edits(parsed, diagnostics)
-        spans = diagnostics.filter_map { |item| item.location if item.code == "FLEXR-W013" }
+      def capture_edits(parsed, compiled)
+        captured = compiled.rules.filter_map { |rule| rule.location if rule.capture_patterns }
+        spans = compiled.diagnostics.filter_map { |item| item.location if item.code == "FLEXR-W013" } - captured
         rule_calls(parsed, spans).flat_map do |node|
           node.arguments.arguments.grep(::Prism::RegularExpressionNode).flat_map do |argument|
             capture_literal_edits(argument, parsed.config.fetch(:encoding))
