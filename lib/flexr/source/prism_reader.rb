@@ -4,7 +4,7 @@ module Flexr
   module Source
       RuleDefinition = Struct.new(
       :index, :patterns, :trailing, :action_source, :action, :states, :bol_only, :end_anchor,
-      :pattern_conditions, :bind_action, :reads_locals, :channel, :dynamic_channel,
+      :pattern_conditions, :bind_action, :reads_locals, :channel, :dynamic_channel, :emits,
       :span, keyword_init: true
     )
       SpecSource = Struct.new(
@@ -279,7 +279,7 @@ module Flexr
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
         options = keywords(node)
-        validate_keywords!(node, %i[skip emit followed_by channel])
+        validate_keywords!(node, %i[skip emit followed_by channel emits])
         action_source = node.block && source_slice(node.block)
         if action_source && reject_action?(node.block)
           diagnostic = Diagnostics.error(
@@ -293,6 +293,10 @@ module Flexr
         end
         skip = options.key?(:skip) ? static(options[:skip], scope: @lexer_scope) : false
         emit = options.key?(:emit) ? static(options[:emit], scope: @lexer_scope) : nil
+        emits = options[:emits] && Configuration.rule_emits!(
+          static(options[:emits], scope: @lexer_scope), emit: emit,
+          location: [options[:emits].location.start_offset, options[:emits].location.end_offset]
+        )
         channel = options.key?(:channel) ? static(options[:channel], scope: @lexer_scope) : :default
         dynamic_channel = @allow_dynamic && channel.nil?
         channel = dynamic_channel ? :default : Configuration.rule_channel!(channel)
@@ -314,6 +318,7 @@ module Flexr
           index: rule_index, patterns: patterns,
           trailing: options[:followed_by] && static(options[:followed_by], scope: @lexer_scope),
           action_source: action_source, action: action, states: states.dup, channel: channel, dynamic_channel: dynamic_channel,
+          emits: emits,
           bol_only: false, end_anchor: nil,
           span: [node.location.start_offset, node.location.end_offset], bind_action: bind_action, reads_locals: reads_locals
         )

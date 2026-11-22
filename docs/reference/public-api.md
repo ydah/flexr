@@ -8,7 +8,8 @@ else may change between releases without a deprecation cycle.
 - `Flexr::Lexer` and the DSL methods in [dsl.md](dsl.md).
 - `Flexr::Pattern` values and the [pattern algebra](dsl.md#patternvalues).
 - Runtime consumption: `initialize`, `next_token`, `tokens`, `each_token`, and
-  `racc_next_token`.
+  `racc_next_token`. See [parser token expectations](runtime.md#parser-token-expectations)
+  for the `expect:` keyword.
 - Action context methods in [actions.md](actions.md).
 - `Flexr::Runtime::Token`, `Flexr::Runtime::Location`, `Flexr::LexError`,
   `Flexr::CompileError`, `Flexr::UnsupportedRegexpError`, and

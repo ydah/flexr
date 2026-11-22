@@ -19,12 +19,12 @@ module Flexr
         @config = klass.__flexr_config
       end
 
-      def scan
+      def scan(expected = nil)
         machine = @compiled.machines.fetch(@lexer.state)
         position = @lexer.byte_pos
         return nil unless @lexer.valid_utf8_at?(position)
-        return scan_firstmatch(position) if @config.backend == :firstmatch
-        if fast_path?(machine)
+        return scan_firstmatch(position, expected) if @config.backend == :firstmatch
+        if !expected && fast_path?(machine)
           if machine.whole_tokens
             match = @lexer.__flexr_whole_token_match(machine.whole_tokens, position)
             return match if match
@@ -37,8 +37,8 @@ module Flexr
         state = machine.dfa.start
         best = reference_match(position, buffer)
         cursor = position
-        best = consider_acceptances(machine, state, cursor, position, buffer, best) if @config.options[:allow_empty_match]
-        acceleration_regions = acceleration_enabled? ? acceleration_regions_for(machine) : nil
+        best = consider_acceptances(machine, state, cursor, position, buffer, best, expected) if @config.options[:allow_empty_match]
+        acceleration_regions = acceleration_regions_for(machine) if !expected && acceleration_enabled?
 
         while buffer.ensure_available?(cursor + 1)
           if acceleration_regions && (region = acceleration_regions[state]) &&
@@ -63,7 +63,7 @@ module Flexr
           cursor += 1
           acceptance = machine.dfa.accepts[state].first
           ensure_token_size!(cursor, position, rule: acceptance&.rule_index)
-          best = consider_acceptances(machine, state, cursor, position, buffer, best)
+          best = consider_acceptances(machine, state, cursor, position, buffer, best, expected)
         end
         best
       end
@@ -211,24 +211,27 @@ module Flexr
         Regexp::Matcher.reference?(pattern, encoding: @config.encoding, unicode: @config.options[:unicode] == true)
       end
 
-      def scan_firstmatch(position)
+      def scan_firstmatch(position, expected)
         buffer = @lexer.buffer
         @rules.sort_by(&:index).each do |rule|
           next unless rule_active?(rule)
+          next if expected && !expected_rule?(rule, expected, buffer, position)
 
           matches = rule.patterns.each_with_index.filter_map do |pattern, pattern_index|
             condition = rule.pattern_conditions.fetch(pattern_index)
             next if condition.bol_only && !@lexer.beginning_of_line?
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            streamed_match(
+            match = streamed_match(
               regexp, buffer, position, reference: reference_pattern?(regexp),
               limit: :token, rule: rule
             )
-              &.then { |match| [match, condition] }
+            next unless match&.begin(0)&.zero?
+            next if expected && !expected_rule?(rule, expected, buffer, position, position + match[0].bytesize)
+
+            [match, condition]
           end
-          match, condition = matches.select { |candidate| candidate[0].begin(0).zero? }
-            .max_by { |candidate| candidate[0][0].bytesize }
+          match, condition = matches.max_by { |candidate| candidate[0][0].bytesize }
           next unless match
 
           end_position = position + match[0].bytesize
@@ -478,12 +481,13 @@ module Flexr
         pattern.is_a?(::Regexp) && pattern.source.match?(/\[:(?:\^)?[a-z]+:\]/)
       end
 
-      def consider_acceptances(machine, state, cursor, position, buffer, best)
+      def consider_acceptances(machine, state, cursor, position, buffer, best, expected = nil)
         machine.dfa.accepts[state].each do |acceptance|
           candidate = @rules.fetch(acceptance.rule_index)
           next if acceptance.bol_only && !@lexer.beginning_of_line?
           next unless @lexer.utf8_boundary?(cursor)
           next unless !acceptance.end_anchor || end_anchor_match?(buffer, cursor)
+          next if expected && !expected_rule?(candidate, expected, buffer, position, cursor)
 
           trailing_size = trailing_length(candidate, buffer, cursor)
           next if candidate.trailing && trailing_size.nil?
@@ -500,6 +504,21 @@ module Flexr
           best.total_end_pos = total_end
         end
         best
+      end
+
+      def expected_rule?(rule, expected, buffer, start_pos, end_pos = nil)
+        return true if rule.skip? || rule.channel
+        return rule.emits.any? { |type| expected.key?(type) } if rule.emits
+        return true unless rule.emit?
+
+        type = rule.action[1]
+        if (table = @config.options[:keyword_tables]&.[](type))
+          return expected.key?(type) || table.any? { |_, entry| expected.key?(entry.first) } unless end_pos
+
+          lexeme = buffer.byteslice(start_pos, end_pos - start_pos).force_encoding(Encoding::UTF_8)
+          type = table[lexeme]&.first || type
+        end
+        expected.key?(type)
       end
 
       def acceleration_enabled?
