@@ -43,7 +43,7 @@ Source ranges are available for:
   constructs (`FLEXR-E014`), including errors in trailing context.
 - Rule warnings: `FLEXR-W001`, `FLEXR-W003`, `FLEXR-W010`, `FLEXR-W012`,
   `FLEXR-W013`, and `FLEXR-W014`.
-- Rule overlap information: `FLEXR-I001`, pointing to the later rule.
+- Rule overlap information: `FLEXR-I001`, pointing to the lower-ranked rule.
 - State and specification diagnostics: DFA state limits (`FLEXR-E006`), empty
   states (`FLEXR-W002`), large transition tables (`FLEXR-W011`), and slow DFA
   construction (`FLEXR-W016`).
@@ -143,7 +143,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E013` | `reject` is not supported | Use states and `less` |
 | `FLEXR-E014` | Regexp construct is not DFA-compatible | Follow the diagnostic alternative |
 | `FLEXR-E017` | Pattern is not statically resolvable | Rewrite as a static expression or use trusted `--eval` |
-| `FLEXR-E018` | Rule pattern or trailing context has an invalid type | Use a regexp, string, or valid array |
+| `FLEXR-E018` | Rule pattern, trailing context, or priority is invalid | Use a supported pattern or an integer priority with a longest-match backend |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
 | `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
 | `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |

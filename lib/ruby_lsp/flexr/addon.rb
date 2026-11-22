@@ -81,10 +81,24 @@ module RubyLsp
           diagnostic.location &&
             (node.location.start_offset...node.location.end_offset).cover?(diagnostic.location.first)
         end
-        return if diagnostics.empty?
+        text = diagnostics.map { |diagnostic| "#{diagnostic.code}: #{@analysis.message(diagnostic)}" }
+        hint = priority_hint(node)
+        text << hint if hint
+        return if text.empty?
 
-        text = diagnostics.map { |diagnostic| "#{diagnostic.code}: #{@analysis.message(diagnostic)}" }.join("\n\n")
-        @builder.push("```text\n#{text}\n```", category: :documentation)
+        @builder.push("```text\n#{text.join("\n\n")}\n```", category: :documentation)
+      end
+
+      private
+
+      def priority_hint(node)
+        keywords = Array(node.arguments&.arguments).grep(Prism::KeywordHashNode).flat_map(&:elements)
+        pair = keywords.grep(Prism::AssocNode).find do |option|
+          option.key.is_a?(Prism::SymbolNode) && option.key.value == "priority"
+        end
+        return unless pair&.value.is_a?(Prism::IntegerNode)
+
+        "priority #{pair.value.value} breaks equal-length matches. Higher priority wins, then source order."
       end
     end
 

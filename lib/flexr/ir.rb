@@ -4,7 +4,7 @@ module Flexr
   module IR
     Rule = Struct.new(
       :index, :patterns, :trailing, :action, :states, :bol_only, :end_anchor, :location,
-      :pattern_conditions, :trailing_dfa,
+      :pattern_conditions, :trailing_dfa, :priority,
       keyword_init: true
     ) do
       def skip?
@@ -13,6 +13,14 @@ module Flexr
 
       def emit?
         action.is_a?(Array) && action.first == :emit
+      end
+
+      def priority
+        self[:priority] || 0
+      end
+
+      def loses_priority_tie?(other)
+        priority < other.priority || (priority == other.priority && index > other.index)
       end
     end
 

@@ -3,6 +3,7 @@
 require "json"
 require "open3"
 require "rbconfig"
+require "flexr/trace"
 
 RSpec.describe "runtime and generated parity" do
   def repository_root
@@ -128,6 +129,98 @@ RSpec.describe "runtime and generated parity" do
       input = "/*é\n***/x/**/"
       expected = [[["COMMENT", "/*é\n***/"], ["OTHER", "x"], ["COMMENT", "/**/"]]]
       expect(outcomes_for(source, "AbsenceParityLexer", [input]).values).to all(eq(expected))
+    end
+
+    it "uses explicit priority only for equal-length matches in #{backend}" do
+      source = <<~RUBY
+        require "flexr"
+        class PriorityLexer < Flexr::Lexer
+          backend :#{backend}
+          rule(/[a-z]+/, emit: :IDENT)
+          rule("if", emit: :IF, priority: 10)
+          rule("if", emit: :LATER, priority: 10)
+          rule(" ", skip: true)
+        end
+      RUBY
+
+      expected = [[%w[IF if], %w[IDENT ifx]]]
+      expect(outcomes_for(source, "PriorityLexer", ["if ifx"]).values).to all(eq(expected))
+    end
+  end
+
+  it "uses priority to break ties that include trailing lookahead" do
+    source = <<~RUBY
+      require "flexr"
+      class TrailingPriorityLexer < Flexr::Lexer
+        rule("ab", followed_by: "c", emit: :LOW)
+        rule("a", followed_by: "bc", emit: :HIGH, priority: 10)
+        rule(/[abc]/, emit: :CHAR)
+      end
+    RUBY
+
+    expected = [[%w[HIGH a], %w[CHAR b], %w[CHAR c]]]
+    expect(outcomes_for(source, "TrailingPriorityLexer", ["abc"]).values).to all(eq(expected))
+  end
+
+  it "explains priority in shadowing diagnostics and the input trace" do
+    source = <<~RUBY
+      class PriorityDiagnosticLexer < Flexr::Lexer
+        rule("if", emit: :LOW, priority: -1)
+        rule("if", emit: :HIGH, priority: 10)
+      end
+    RUBY
+    parsed = Flexr::Source::PrismReader.new(source).read
+    diagnostics = Flexr::CLI.compile(parsed, overrides: { warn_level: :all }).diagnostics
+    %w[FLEXR-W001 FLEXR-I001].each do |code|
+      diagnostic = diagnostics.find { |item| item.code == code }
+      expect(diagnostic.note).to include('"if"', "priority 10")
+    end
+
+    lexer = Class.new(Flexr::Lexer) do
+      rule("if", emit: :LOW, priority: -1)
+      rule("if", emit: :HIGH, priority: 10)
+    end
+    trace = Flexr::Trace.new(lexer.new("if"))
+    expect(trace.run).to eq([[:HIGH, "if"]])
+    expect(trace.steps.first).to include(reason: "priority")
+    expect(trace.steps.first.fetch(:candidates)).to include(a_hash_including(rule: 1, priority: 10))
+  end
+
+  it "reports source order when several highest-priority matches tie" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule("if", emit: :LOW)
+      rule("if", emit: :HIGH, priority: 10)
+      rule("if", emit: :LATER, priority: 10)
+    end
+    trace = Flexr::Trace.new(lexer.new("if"))
+    expect(trace.run).to eq([[:HIGH, "if"]])
+    expect(trace.steps.first.fetch(:reason)).to eq("rule_order")
+  end
+
+  it "rejects an explicit-priority artifact on a runtime without its capability" do
+    Dir.mktmpdir do |directory|
+      source = File.join(directory, "lexer.flexr.rb")
+      generated = File.join(directory, "lexer.generated.rb")
+      File.write(source, <<~RUBY)
+        require "flexr"
+        class ABI2PriorityLexer < Flexr::Lexer
+          rule("if", emit: :IF, priority: 10)
+        end
+      RUBY
+      Flexr::Generator.new(source, output: generated).generate
+      script = <<~RUBY
+        require "flexr"
+        Flexr::IR::Rule.send(:remove_method, :loses_priority_tie?)
+        begin
+          load ARGV.fetch(0)
+        rescue Flexr::CompileError => error
+          puts error.diagnostic.code
+          puts error.diagnostic.note
+        end
+      RUBY
+      output, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script, generated)
+      expect(status).to be_success, stderr
+      expect(output).to include("FLEXR-E020", "runtime does not support explicit rule priority")
     end
   end
 

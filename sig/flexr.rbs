@@ -32,7 +32,7 @@ module Flexr
   def self.parse_pattern: (pattern, ?options: Hash[Symbol, untyped]) -> untyped
 
   module DSL
-    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?) ?{ () [self: Lexer] -> untyped } -> nil
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?priority: Integer) ?{ () [self: Lexer] -> untyped } -> nil
     def state: (*(Symbol | String), ?inclusive: bool) { () [self: singleton(Lexer)] -> untyped } -> void
     def all_states: () { () [self: singleton(Lexer)] -> untyped } -> void
     def on_eof: () { () [self: Lexer] -> untyped } -> void

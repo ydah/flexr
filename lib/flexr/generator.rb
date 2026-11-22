@@ -59,6 +59,11 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      if parsed.rules.any? { |rule| !rule.priority.to_i.zero? }
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support explicit rule priority")' \
+          ' unless Flexr::IR::Rule.method_defined?(:loses_priority_tie?)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
@@ -93,8 +98,10 @@ module Flexr
         conditions = Array(rule.pattern_conditions).map do |condition|
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
+        priority = ("priority: #{rule.priority}, " unless rule.priority.to_i.zero?)
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
           "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
+          "#{priority}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
           "bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
@@ -122,7 +129,7 @@ module Flexr
       rules = parsed.rules.map do |rule|
         IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),
                      action: rule.action, states: rule.states, bol_only: rule.bol_only,
-                     end_anchor: rule.end_anchor, location: rule.span)
+                     end_anchor: rule.end_anchor, location: rule.span, priority: rule.priority)
       rescue CompileError => e
         e.diagnostic.location ||= rule.span if e.diagnostic
         raise
@@ -386,6 +393,7 @@ module Flexr
         runtime_rule = runtime_rules.fetch(rule.index)
         rule.patterns = runtime_rule.patterns
         rule.trailing = runtime_rule.trailing
+        rule.priority = runtime_rule.priority
       end
       generate_static(passthrough)
     end

@@ -237,7 +237,10 @@ module Flexr
           node_name = "#{state_name}_#{state}"
           node = dot_quote(node_name)
           accepting = !dfa.accepts[state].empty?
-          label = dfa.accepts[state].map(&:rule_index).uniq.join(",")
+          label = dfa.accepts[state].map(&:rule_index).uniq.map do |index|
+            priority = compiled.rules.fetch(index).priority
+            priority.zero? ? index : "#{index} (priority #{priority})"
+          end.join(",")
           label = "#{node_name}\naccept=#{label}" unless label.empty?
           attributes = dot_node_attributes(label, accepting: accepting, accelerated: accelerated_states[state])
           out.puts "  #{node} [#{attributes}];"
@@ -300,7 +303,10 @@ module Flexr
       rules = rules.select { |rule| rule.index == rule_number } if rule_number
       raise ArgumentError, "rule not found: #{rule_number}" if rules.empty? && rule_number
 
-      out.puts(rules.map { |rule| "rule #{rule.index}: #{rule.patterns.inspect}" })
+      out.puts(rules.map do |rule|
+        priority = rule.priority.to_i.zero? ? "" : " priority #{rule.priority}"
+        "rule #{rule.index}#{priority}: #{rule.patterns.inspect}"
+      end)
       EXIT_OK
     end
 

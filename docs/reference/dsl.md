@@ -4,7 +4,7 @@ The DSL is extended onto a subclass of `Flexr::Lexer`. Class bodies are normal
 Ruby and may contain constants, methods, requires, comments, and ordinary
 expressions.
 
-## `rule(pattern, skip: false, emit: nil, followed_by: nil, &action)`
+## `rule(pattern, skip: false, emit: nil, followed_by: nil, priority: 0, &action)`
 
 Registers one rule. `pattern` is a `Regexp`, `String`, or an array containing
 those values. A string is matched literally. Array members are alternatives of
@@ -22,6 +22,13 @@ token. Use a block when converting a value or changing lexer state.
 `followed_by:` accepts a `Regexp` or `String`. It participates in rule
 selection but is not consumed. The method returns `nil`. Rules are numbered in
 source order starting at zero.
+
+`priority:` accepts an integer and defaults to zero. On longest-match
+backends, the highest priority wins among rules with the same total match
+length, including any trailing context. Source order breaks ties between
+equal priorities. For example, a later `rule("if", emit: :IF, priority: 10)`
+can win over an identifier rule on `if`, while the identifier rule still
+wins on `ifx`.
 
 ## `state(*names, inclusive: false, &block)`
 
