@@ -12,6 +12,10 @@ Write one specification, run it directly while developing, or generate Ruby
 for deployment when startup cost and build reproducibility matter. Both modes
 use the same rules and actions.
 
+![Playground scans two separate comments with an absence group, then shows the input that shadows an if rule.](docs/assets/playground-absence-and-diagnostics.gif)
+
+[Open the specifications from the demo](docs/how-to/try-playground-demos.md).
+
 ## Why flexr?
 
 - Ordinary Ruby DSL; no separate lexer language is required.
