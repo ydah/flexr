@@ -102,6 +102,7 @@ module Flexr
 
         candidates.uniq.each do |candidate|
           value = constant_value(candidate)
+          return value.__flexr_named(parts.join("::")) if value.is_a?(Pattern)
           return value unless value.equal?(MISSING)
         end
 
@@ -127,6 +128,19 @@ module Flexr
       end
 
       def evaluate_call(node)
+        if !node.block && %i[pattern upto].include?(node.name) && node.receiver.nil?
+          arguments = Array(node.arguments&.arguments)
+          return Pattern.build(*arguments.map { |argument| evaluate(argument) }) if node.name == :pattern
+          return Pattern.upto(evaluate(arguments.first)) if arguments.one? && !arguments.first.is_a?(::Prism::SplatNode)
+        end
+        if !node.block && node.receiver && %i[| + & - !].include?(node.name)
+          value = evaluate(node.receiver)
+          arguments = Array(node.arguments&.arguments)
+          if value.is_a?(Pattern) && arguments.size == (node.name == :! ? 0 : 1) &&
+             arguments.none?(::Prism::SplatNode)
+            return value.public_send(node.name, *arguments.map { |argument| evaluate(argument) })
+          end
+        end
         return evaluate(node.receiver).freeze if node.receiver && node.name == :freeze
         return ::Regexp.union(positional_arguments(node).map { |argument| evaluate(argument) }) if node.receiver && node.name == :union && constant_name(node.receiver) == "Regexp"
         if node.receiver && node.name == :new && source_slice(node.receiver) == "::Regexp"

@@ -157,12 +157,12 @@ module Flexr
 
     def normalize_trailing(value)
       case value
-      when nil, ::Regexp
+      when nil, ::Regexp, Pattern
         value
       when String
         ::Regexp.new(::Regexp.escape(value))
       else
-        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp or String")
+        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp, String, or Pattern")
         raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
     end
@@ -232,6 +232,8 @@ module Flexr
     def embedded_runtime(parsed)
       sources = RUNTIME_SOURCES.dup
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
+      sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
+        parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__))
       end.join("\n")
@@ -331,6 +333,8 @@ module Flexr
         "{#{entries.join(', ')}}"
       when Array
         "[#{value.map { |item| ruby_literal(item) }.join(', ')}]"
+      when Pattern
+        "::Flexr::Pattern.__flexr_restore(#{value.operation.inspect}, #{ruby_literal(value.operands)}, #{ruby_literal(value.name)})"
       else
         value.inspect
       end

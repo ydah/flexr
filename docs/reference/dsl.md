@@ -6,9 +6,9 @@ expressions.
 
 ## `rule(pattern, skip: false, emit: nil, followed_by: nil, &action)`
 
-Registers one rule. `pattern` is a `Regexp`, `String`, or an array containing
-those values. A string is matched literally. Array members are alternatives of
-one rule and share its action.
+Registers one rule. `pattern` is a `Regexp`, `String`, `Flexr::Pattern`, or an
+array containing those values. A string is matched literally. Array members
+are alternatives of one rule and share its action.
 
 `skip: true` discards the match and takes precedence over `emit` and the block.
 `emit: :TOKEN` installs a simple action that emits the token with the matched
@@ -19,9 +19,66 @@ Prefer `emit:` when the value is the unchanged matched text, such as
 `rule(/\+/, emit: :PLUS)`. This avoids executing a Ruby action block for each
 token. Use a block when converting a value or changing lexer state.
 
-`followed_by:` accepts a `Regexp` or `String`. It participates in rule
-selection but is not consumed. The method returns `nil`. Rules are numbered in
-source order starting at zero.
+`followed_by:` accepts a `Regexp`, `String`, or `Flexr::Pattern`. It
+participates in rule selection while leaving the lookahead for the next token.
+The method returns `nil`. Rules are numbered in source order starting at zero.
+
+## `pattern(*values)`
+
+Builds an immutable, Ractor-shareable `Flexr::Pattern` from regexps, literal
+strings, existing pattern values, and arrays of those values. Multiple values
+form alternatives. Assign a pattern to a constant to reuse it in other
+patterns and in rules.
+
+```ruby
+class Words < Flexr::Lexer
+  IDENT = pattern(/[a-z_][a-z0-9_]*/)
+  KEYWORD = pattern(%w[if else end while])
+  SHORT = pattern(/.{1,8}/)
+
+  rule(KEYWORD, emit: :KEYWORD)
+  rule((IDENT & SHORT) - KEYWORD, emit: :SHORT_IDENT)
+  rule(!pattern(/.*__.*/) & IDENT, emit: :IDENT)
+end
+```
+
+| Operator | Language |
+|---|---|
+| `a \| b` | Strings matched by either operand |
+| `a + b` | A match of `a` followed by a match of `b` |
+| `a & b` | Strings matched by both operands |
+| `a - b` | Strings matched by `a` and excluded by `b` |
+| `!a` | All strings in the subject alphabet outside `a` |
+
+Complement is relative to valid Unicode scalar strings in a UTF-8 lexer and
+all byte strings in a binary lexer. Use line anchors in a plain rule regexp.
+Pattern operations and earlier constant definitions are resolved by the static
+generator. `flexr explain` and `flexr dot` display the constant names used
+in a rule.
+
+Use `table`, `direct`, or `auto` for rule bodies built from pattern values.
+All backends can use pattern values as trailing context. Runtime and generated
+scanners keep the usual longest-match and rule order policies. Whole-token
+acceleration is disabled in states that contain pattern values.
+
+## `upto(terminator)`
+
+Returns a pattern that ends at the first completed match of `terminator`,
+including that match. The terminator uses the same input forms as `pattern`.
+An occurrence can start anywhere in the span, and an absent terminator gives
+no match. If the terminator can match the empty string, its first occurrence
+ends immediately. A whole rule that can match without consuming input
+reports `FLEXR-E005` unless empty matches are enabled.
+
+```ruby
+rule(pattern("/*") + upto("*/"), skip: true)
+```
+
+For an overlapping terminator such as `"aba"`, `upto("aba")` consumes
+three bytes from `"ababa"`. Further rules can consume the remaining text.
+
+See [pattern diagnostics](diagnostics.md#pattern-operations) and
+[ADR 0029](../adr/0029-pattern-algebra.md).
 
 ## `state(*names, inclusive: false, &block)`
 

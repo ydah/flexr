@@ -9,7 +9,7 @@ module Flexr
     )
       SpecSource = Struct.new(
         :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
-        :states, :flexr_require_spans, :dsl_edits, keyword_init: true
+      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, keyword_init: true
     )
 
     class PrismReader
@@ -57,10 +57,14 @@ module Flexr
         require_spans = flexr_require_spans(prism.value)
         first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
+        uses_patterns = false
+        each_node(prism.value) do |node|
+          uses_patterns ||= node.is_a?(::Prism::CallNode) && %i[pattern upto].include?(node.name)
+        end
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq(&:first),
                        first_dsl_offset: first_dsl_offset, constants: @constants, states: @states,
-                       flexr_require_spans: require_spans, dsl_edits: @edits)
+                       flexr_require_spans: require_spans, dsl_edits: @edits, uses_patterns: uses_patterns)
       end
 
       private
@@ -255,8 +259,8 @@ module Flexr
         values = positional(node)
         patterns = static(values.first, scope: @lexer_scope)
         patterns = [patterns] unless patterns.is_a?(Array)
-        unless (@allow_dynamic && patterns.any?(&:nil?)) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) }
-          diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, or Array")
+        unless (@allow_dynamic && patterns.any?(&:nil?)) || patterns.all? { |pattern| pattern.is_a?(::Regexp) || pattern.is_a?(String) || pattern.is_a?(Pattern) }
+          diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, Pattern, or Array")
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
         options = keywords(node)

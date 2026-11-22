@@ -145,6 +145,26 @@ RSpec.describe "runtime and generated parity" do
     expect(outcomes_for(source, "AbsenceTrailingLexer", [input]).values).to all(eq(expected))
   end
 
+  it "runs static pattern algebra with identical longest matches in all modes" do
+    source = <<~RUBY
+      require "flexr"
+      class AlgebraParityLexer < Flexr::Lexer
+        IDENT = pattern(/[a-z]+/)
+        KEYWORD = pattern(%w[if else])
+        TERMINATED = upto("aba")
+        rule(KEYWORD, emit: :KEYWORD)
+        rule(IDENT - KEYWORD, emit: :IDENT)
+        rule(pattern("<") + TERMINATED, emit: :SEGMENT)
+        rule("!", followed_by: TERMINATED, emit: :LOOKAHEAD)
+        rule(/ +/, skip: true)
+      end
+    RUBY
+    input = "if ify <éababa !aba"
+    expected = [[%w[KEYWORD if], %w[IDENT ify], %w[SEGMENT <éaba], %w[IDENT ba], %w[LOOKAHEAD !], %w[IDENT aba]]]
+
+    expect(outcomes_for(source, "AlgebraParityLexer", [input]).values).to all(eq(expected))
+  end
+
   { "UTF_8" => "OTHER", "BINARY" => "BYTE" }.each do |encoding, byte_token|
     it "respects trailing absence anchors and boundaries in streaming #{encoding}" do
       source = <<~'RUBY'.sub("INPUT_ENCODING", encoding)
