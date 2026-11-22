@@ -27,6 +27,10 @@ const presets = {};
 for (const [name, input] of Object.entries(inputs)) {
   presets[name] = { source: await readFile(path.join(root, `examples/${name}/lexer.flexr.rb`), 'utf8'), input };
 }
+presets.absence = {
+  source: await readFile(path.join(site, 'ruby/presets/absence.flexr.rb'), 'utf8'),
+  input: '/* 前 */first /* another comment */second',
+};
 await writeFile(path.join(output, 'presets.json'), JSON.stringify(presets));
 const wasm = path.join(site, 'node_modules/@ruby/4.0-wasm-wasi/dist');
 await cp(path.join(wasm, 'ruby+stdlib.wasm'), path.join(output, 'ruby.wasm'));
