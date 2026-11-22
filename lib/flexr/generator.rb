@@ -17,7 +17,7 @@ module Flexr
       version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
       unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/accel.rb
       runtime/record.rb runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
-      runtime/interpreter.rb runtime/core.rb dsl.rb lexer.rb generated.rb
+      runtime/interpreter.rb runtime/recognizer.rb runtime/core.rb dsl.rb lexer.rb generated.rb
     ].freeze
 
     MATCHER_RUNTIME_SOURCES = %w[
@@ -231,6 +231,7 @@ module Flexr
 
     def embedded_runtime(parsed)
       sources = RUNTIME_SOURCES.dup
+      sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb") if effective_backend(parsed) == :firstmatch
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }

@@ -135,6 +135,14 @@ module Flexr
       __flexr_compiled
     end
 
+    def recognizer(state: :initial)
+      raise ArgumentError, "recognizer requires a longest-match backend; firstmatch uses Ruby regexp order" if
+        @__flexr_config.backend == :firstmatch
+      raise ArgumentError, "undefined lexer state #{state.inspect}" unless @__flexr_states.key?(state)
+
+      Recognizer.new(compile!, @__flexr_config, state)
+    end
+
     def __flexr_spec
       IR::Spec.new(
         class_name: name,
