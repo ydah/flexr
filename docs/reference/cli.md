@@ -15,6 +15,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | Command | Purpose | Main output |
 |---|---|---|
 | `check SPEC` | Compile and render diagnostics | Human or JSON diagnostics |
+| `fix SPEC` | Apply supported diagnostic fixes | Updated spec, or full source with `--dry-run` |
 | `stats SPEC` | Report DFA states, byte classes, and table sizes | JSON |
 | `tokens SPEC` | Print names declared by `emits` | Space-separated names |
 | `dot SPEC` | Render the DFA as Graphviz DOT | DOT on stdout |
@@ -46,6 +47,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--format FMT` | `human`, `json`, `lrama` | `lrama` is for tokens only |
 | `--grammar PATH` | Grammar path | Compare `%token` names with `emits` during check |
 | `--target 2.0` | none | Static check migration requirements and structured-token declarations |
+| `--dry-run` | Flag | Preview fixes on stdout |
 | `--rule N` | Non-negative integer | Explain |
 | `--input STRING` | Literal input, including an empty string | Trace |
 | `--input-file PATH` | Input file | Trace and bench |
@@ -57,7 +59,7 @@ The complete help output is kept as a checked snapshot:
 <!-- flexr-help:start -->
 Usage: flexr [COMMAND] SPEC.rb [options]
 
-Commands: check, stats, tokens, dot, explain, trace, bench, import
+Commands: check, fix, stats, tokens, dot, explain, trace, bench, import
 Options:
   -o, --output PATH          generated output path
   -b, --backend NAME         table | direct | firstmatch | auto
@@ -77,8 +79,28 @@ Options:
       --input-file PATH       trace or benchmark input
       --generated             trace generated scanner
       --target 2.0            report migration requirements (static check only)
+      --dry-run               print the fixed spec without writing (fix only)
       --from oedipus_lex      read an oedipus_lex .rex file (import only)
 <!-- flexr-help:end -->
+
+## Automatic fixes
+
+`flexr fix lexer.flexr.rb --dry-run` prints the proposed Ruby source.
+Run `flexr fix lexer.flexr.rb` to apply it. The command validates the resulting
+specification before saving and preserves its line endings.
+
+The command reads the specification statically. Ruby LSP offers the same edits
+as quick fixes for DFA backends.
+
+- `FLEXR-W013` makes ordinary groups in direct regexp rule arguments non-capturing.
+  Rules with named captures keep their original groups.
+- `FLEXR-W001` raises the priority of a shadowed literal with `emit:` when the
+  DFA shows that every previous winner can still win elsewhere. After the
+  change, the literal emits its own token type on equal-length matches.
+- `FLEXR-E014` rewrites a quoted lazy dot-star to an absence group that stops
+  at the first closing quote. It preserves the regexp's newline handling.
+- `FLEXR-I003` groups adjacent literal rules into a keyword table when the
+  compiler verifies the change and there are no intervening comments.
 
 ## Input trace
 
