@@ -124,7 +124,7 @@ module DFAStretch
     check(dfa_signature(dfa), dfa_signature(other))
 
     lanes = { 1 => Flexr.compile_pattern(/aa+/), 2 => Flexr.compile_pattern(/aaa+/) }
-    inputs = (2..64).map { |size| "a" * size + "!" }
+    inputs = (2..64).map { |size| "#{'a' * size}!" }
     examples = grammars.zip(variants.values).map do |grammar, widths|
       inputs.each do |input|
         ranges = bounded_capture_ranges(input, widths, lanes)
@@ -146,6 +146,4 @@ module DFAStretch
   end
 end
 
-if $PROGRAM_NAME == __FILE__
-  puts JSON.pretty_generate(ruby: RUBY_DESCRIPTION, selection: DFAStretch.selection_probe, captures: DFAStretch.captures_probe)
-end
+puts JSON.pretty_generate(ruby: RUBY_DESCRIPTION, selection: DFAStretch.selection_probe, captures: DFAStretch.captures_probe) if $PROGRAM_NAME == __FILE__
