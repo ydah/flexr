@@ -46,6 +46,36 @@ must be positive.
 `each_token` yields two arguments instead of one when `token_kind :yield` is
 selected. `tokens` always returns an array of token values.
 
+## Checkpoint and seek
+
+Use these methods between token reads.
+
+| Method | Result |
+|---|---|
+| `checkpoint` | An immutable, opaque bookmark for this lexer |
+| `restore(bookmark)` | Restores the bookmark and returns the lexer |
+| `seek(byte_position)` | Moves to an absolute byte offset and returns the lexer |
+
+A bookmark includes the cursor and its line and column, the lexical state and
+stack, any buffered token or accumulated `more` text, and EOF and halt state.
+Replay runs the same actions again. Application state and mutable token
+values stay under the caller's control. Keep the input bytes unchanged while
+using a bookmark. The work counter continues to count actual scanning work.
+
+`seek` recalculates line, column, and start-of-line status without running
+rules. It keeps the selected state and stack and clears the previous match,
+pending token, accumulated text, halt state, and per-state EOF bookkeeping.
+The next read can run an EOF action again.
+
+For IO, both methods use the bytes the lexer already has. Checkpoints allow
+the lexer to release bytes according to `retain_input`. Restore raises
+`RangeError` if its cursor or accumulated text has been discarded. Seek
+requires a retained byte offset with known coordinates. Its coordinate origin
+is the current cursor, the beginning of the input when retained, or the start
+of retained `more` text. Seek raises `RangeError` outside that range and
+`ArgumentError` at an interior UTF-8 byte or a buffered edge with an
+incomplete scalar. A bookmark from another lexer also raises `ArgumentError`.
+
 ## State and action context
 
 The public action methods are collected in the [actions reference](actions.md).

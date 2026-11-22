@@ -52,6 +52,9 @@ lexer.on_error = ->(_error) { :skip }
 lexer.on_error = PublicApiTypecheck::ErrorHandler.new
 lexer.on_error = PublicApiTypecheck::ErrorHandler.new.method(:call)
 lexer.on_error = nil
+# @type var bookmark: Flexr::Runtime::Checkpoint
+bookmark = lexer.checkpoint
+lexer.seek(1).restore(bookmark)
 # @type var tokens: Array[Flexr::token]
 tokens = lexer.tokens
 # @type var byte_position: Integer
