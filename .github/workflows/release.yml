@@ -87,3 +87,25 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/flexr-release-notes.md" "${flags[@]}"
+
+  refresh-site:
+    needs: github-release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Refresh Pages for the latest stable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            exit 0
+          fi
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
+          if [[ "$latest" == "$GITHUB_REF_NAME" ]]; then
+            gh workflow run pages.yml --ref "$DEFAULT_BRANCH" --repo "$GITHUB_REPOSITORY"
+          fi

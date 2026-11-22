@@ -14,6 +14,8 @@ Getting started in the other version.
 ignored `src/content/docs/stable/` directory. The GitHub Pages build selects
 the latest published stable GitHub release. Its tag supplies both the
 documentation and the public Playground's Ruby library and example presets.
+After publishing the gem and GitHub Release, the release workflow refreshes
+Pages when GitHub lists that tag as its latest stable release.
 
 Local builds default to `v2.0.0`. To reproduce a Pages build for a specific
 release, fetch its tag if needed and pass it to the build:
