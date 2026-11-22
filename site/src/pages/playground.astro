@@ -27,6 +27,9 @@ const presets = JSON.parse(await readFile(new URL('../../public/playground-runti
           {Object.hasOwn(presets, 'keywords') && <option value="keywords">Keywords and identifiers</option>}
           {Object.hasOwn(presets, 'trivia') && <option value="trivia">Comments and whitespace trivia</option>}
           {Object.hasOwn(presets, 'priority') && <option value="priority">Equal-length rule priority</option>}
+          {Object.hasOwn(presets, 'indentation') && <option value="indentation">Python-like indentation</option>}
+          {Object.hasOwn(presets, 'heredoc') && <option value="heredoc">Dynamic heredoc</option>}
+          {Object.hasOwn(presets, 'html-js') && <option value="html-js">HTML with embedded JavaScript</option>}
         </select>
         <textarea id="spec" aria-label="Lexer specification" spellcheck="false" maxlength="20000"></textarea>
       </div>

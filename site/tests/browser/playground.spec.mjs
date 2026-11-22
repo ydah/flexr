@@ -141,3 +141,34 @@ test('runs the equal-length rule priority preset', async ({ page }) => {
   await expect(page.locator('#status')).toContainText('2 tokens', { timeout: 30_000 });
   expect(JSON.parse(await page.locator('#tokens').textContent())).toEqual([['IF', 'if'], ['IDENT', 'ifx']]);
 });
+
+for (const mode of ['runtime', 'generated']) {
+  test(`runs the context presets in ${mode} mode`, async ({ page }) => {
+    await page.goto('/flexr/playground/');
+    const preset = page.getByRole('combobox', { name: 'Choose a playground preset' });
+    const run = page.getByRole('button', { name: 'Run', exact: true });
+    const status = page.locator('#status');
+    const tokens = page.locator('#tokens');
+    await page.locator('#mode').selectOption(mode);
+
+    await preset.selectOption('indentation');
+    await expect(page.locator('#spec')).toHaveValue(/indentation newline:/);
+    await run.click();
+    await expect(status).toContainText('13 tokens', { timeout: 30_000 });
+    expect(JSON.parse(await tokens.textContent()).map(token => token.type)).toEqual(expect.arrayContaining(['INDENT', 'DEDENT']));
+
+    await preset.selectOption('heredoc');
+    await expect(page.locator('#spec')).toHaveValue(/scan_until_line/);
+    await run.click();
+    await expect(status).toContainText('3 tokens', { timeout: 30_000 });
+    expect(JSON.parse(await tokens.textContent())).toEqual([['HEREDOC', 'hello\n'], ['HEREDOC', 'world\n'], ['WORD', 'next']]);
+
+    await preset.selectOption('html-js');
+    await expect(page.locator('#spec')).toHaveValue(/delegate PlaygroundJavaScriptLexer/);
+    await run.click();
+    await expect(status).toContainText('11 tokens', { timeout: 30_000 });
+    expect(JSON.parse(await tokens.textContent())[3]).toMatchObject({
+      type: 'JS_LET', value: 'let', location: { byte_begin: 23, line_begin: 3 },
+    });
+  });
+}
