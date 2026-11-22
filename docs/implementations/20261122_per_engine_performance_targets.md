@@ -1,0 +1,45 @@
+# Set performance targets per Ruby engine
+
+## Context
+
+[20260810_measured_performance_floor.md](20260810_measured_performance_floor.md) established a measured release
+floor for the pure-Ruby lexer. The [engine matrix](../perf-log.md#2026-11-20)
+shows that interpreter, YJIT, and ZJIT results differ substantially. Generated
+mode can also be slower than runtime mode on the same engine and input.
+
+## Decision
+
+Measure each engine in a separate Ruby process with the same input and lexer.
+Verify equivalent token sequences and record the Ruby version, machine,
+workload, and sample size with the throughput and allocation results.
+
+| Engine | JSON throughput relative to handwritten |
+|---|---|
+| Interpreter | Keep the `0.18x` local release floor and target `0.30x`. |
+| YJIT | Target `0.50x`, with a stretch target of `0.70x`. |
+| ZJIT | Track throughput and allocations, and investigate reproducible regressions. |
+
+On the reference JSON workload, target a generated/runtime throughput ratio
+of at least `1.0` on each engine and at most 3.4 allocations per emitted token
+in runtime mode. Measure other lexer workloads individually. Run timing
+comparisons on a fixed reference machine and keep the portable CI gate from
+[20260810_measured_performance_floor.md](20260810_measured_performance_floor.md).
+
+On the reference machine, run
+`FLEXR_BENCHMARK_CHECK_MATRIX=1 FLEXR_BENCHMARK_ITERATIONS=10 bundle exec rake bench:matrix`.
+The check keeps all three ratio samples for each engine and uses their median.
+An unavailable engine or a median below `1.0` fails the check.
+
+For simple scanners on frozen input with scanning guards inactive, generated
+`accel :auto` uses the same DFA-only policy as the interpreter fast path. This
+avoids lazy region-cache writes in the generated scan loop. The region path
+remains available for streaming, guarded input, and explicit `:strscan`.
+
+Whole-token native scans require explicit `accel :strscan`. The
+[whole-token measurement](../perf-log.md#2026-11-22-whole-token-selection-by-engine-and-workload)
+found substantial gains on long whitespace runs and generated GraphQL,
+alongside YJIT regressions on compact JSON, TOML, SQL, and the Ruby subset
+even with the DFA fallback. The DFA is the portable default. Any automatic
+choice needs an eligibility check tied to the rule and input shape.
+Measure the cost of that check and verify identical token sequences in the
+selected path and fallback.

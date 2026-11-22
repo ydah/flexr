@@ -66,7 +66,7 @@ updates and a way to distinguish and choose competing subgroup paths. re2c
 provides separate leftmost-greedy and POSIX policies.
 [re2c manual, Submatch extraction](https://re2c.org/manual/manual_c.html#submatch-extraction)
 
-Keep lazy replay as described in [ADR 0038](adr/0038-replay-named-regexp-captures.md).
+Keep lazy replay as described in the [capture replay implementation record](implementations/20261122_replay_named_regexp_captures.md).
 Before replacing it, compare subgroup values and byte ranges against Ruby for
 ambiguous alternatives, empty and optional groups, repetitions, and Unicode.
 Then check trailing context, streaming, delegation, and generated artifacts.
@@ -219,7 +219,7 @@ This sample is above the v1.0 measured regression floor of 0.18x, but below the
 0.7x handwritten stretch target. The measured ratios are recorded explicitly
 rather than presented as a claim that the stretch target has been reached.
 Runtime is 1.042x generated in this sample, above the 0.2x runtime-mode risk
-threshold. See ADR 0019 for the target revision.
+threshold. The [measured performance floor record](implementations/20260810_measured_performance_floor.md) explains the target revision.
 
 ### Byte/token cost estimate
 

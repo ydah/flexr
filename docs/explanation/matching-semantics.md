@@ -1,13 +1,12 @@
 # Matching semantics
 
-flexr implements leftmost-longest matching. At the current byte position, the
-automaton records every accepting rule reached while scanning forward. The
-last accepting position is the candidate token end. The rule with the smallest
-source index wins when several candidates end at that position.
+flexr ranks candidates at the current position by their total matched byte
+length, including any `followed_by:` context. When lengths tie, the highest
+`priority:` wins. Equal priorities use source order. The scanner consumes
+only the winning rule body.
 
-This is why `==` beats `=` regardless of which rule is written first, while two
-same-length alternatives use definition order. A rule's `followed_by:` context
-extends the selection end without extending the consumed token end.
+This is why `==` beats `=` when both rules have no trailing context,
+regardless of which rule is written first.
 
 The matcher is byte-oriented so binary input and invalid UTF-8 have deterministic
 behavior. UTF-8 patterns still require valid codepoint boundaries before a
@@ -16,7 +15,6 @@ vendored UCD into this same model rather than matched by a separate host-regexp
 path. The runtime and generated scanner share the compiled model; acceleration
 may skip self-loop bytes but cannot change the winner.
 
-`firstmatch` is intentionally separate. It picks the first rule that has a
-matching alternative and therefore is useful only for compatibility migrations
-that accept the semantic difference. It is experimental and guarded by a
-differential check during generation.
+Use `backend :firstmatch` for specifications that depend on source order.
+It selects the first matching rule and preserves Ruby regexp alternative order
+within that rule. See the [first-match compatibility record](../adr/20261122_stable_explicit_firstmatch.md#%E6%B1%BA%E5%AE%9A).

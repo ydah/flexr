@@ -25,7 +25,7 @@ Stable compatibility behavior selected explicitly with `backend :firstmatch`.
 Runtime and generated lexers select the first matching rule in source order,
 even when a later rule could consume more text. `FLEXR-W010` reports potential
 differences from longest-match backends. See
-[ADR 0023](../adr/0023-stable-explicit-firstmatch.md) for the decision.
+the [first-match compatibility record](../adr/20261122_stable_explicit_firstmatch.md#%E6%B1%BA%E5%AE%9A) for the decision.
 
 ## Acceleration and packing
 

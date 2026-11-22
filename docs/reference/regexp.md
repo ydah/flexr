@@ -76,7 +76,7 @@ All backends support non-nullable absence expressions in `followed_by:`
 because trailing context is evaluated by a DFA. Extended `(?~|...)`
 forms report `FLEXR-E014`. Anchors inside `X` report `FLEXR-E009`.
 
-See [ADR 0028](../adr/0028-dfa-absence-groups.md) for the compilation strategy.
+See the [absence implementation record](../implementations/20261122_dfa_absence_groups.md) for the compilation strategy.
 
 ## Captures
 
@@ -105,4 +105,4 @@ affect matching and produce no entries in `captures`.
 
 Unnamed groups are treated as grouping syntax and produce `FLEXR-W013`.
 Backreferences and calls to capture groups still report `FLEXR-E014`.
-See [ADR 0038](../adr/0038-replay-named-regexp-captures.md) for the extraction strategy.
+See the [capture replay implementation record](../implementations/20261122_replay_named_regexp_captures.md) for the extraction strategy.

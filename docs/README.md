@@ -62,6 +62,7 @@ pages explain how to use those specifications.
 - [Unicode and encoding](explanation/unicode-and-encoding.md)
 - [Security model](explanation/security-model.md)
 
-The [performance log](perf-log.md), [architecture decisions](adr/),
+The [performance log](perf-log.md), [architecture decisions](adr/README.md),
+[implementation records](implementations/README.md),
 [internals notes](internals/README.md), and [release procedure](RELEASING.md)
 are maintainer-facing documents.

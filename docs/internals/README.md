@@ -2,8 +2,9 @@
 
 This is maintainer-facing material. The public contract is in
 [reference/public-api.md](../reference/public-api.md); implementation choices
-are explained in the [architecture decisions](../adr/) and
-[explanation pages](../explanation/).
+are described in [implementation records](../implementations/README.md) and
+[explanation pages](../explanation/). See the [architecture decisions](../adr/README.md)
+for the contracts and trade-offs that shape these choices.
 
 Both runtime and generated modes compile the same byte-oriented model: regexp
 AST, Thompson NFA, byte-class DFA, deterministic minimization, and last-accept

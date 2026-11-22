@@ -120,7 +120,7 @@ For an overlapping terminator such as `"aba"`, `upto("aba")` consumes
 three bytes from `"ababa"`. Further rules can consume the remaining text.
 
 See [pattern diagnostics](diagnostics.md#pattern-operations) and
-[ADR 0029](../adr/0029-pattern-algebra.md).
+the [pattern algebra decision](../adr/20261122_pattern_algebra.md#%E6%B1%BA%E5%AE%9A).
 
 `channel:` accepts a symbol. The default is `:default`; other named
 channels preserve tokens as trivia for `tokens(channels: :all)`.
@@ -195,8 +195,8 @@ match the full body of a default-channel rule with the base type, or compilation
 `FLEXR-E028`. A competing rule may win on the same spelling by priority or
 source order. The compiler reports `FLEXR-W022` when the DFA can prove
 that the spelling always reaches the competing rule.
-See [ADR 0030](../adr/0030-classify-keywords-after-matching.md) for the decision
-to keep keyword spellings out of the DFA.
+See the [keyword classification decision](../adr/20261122_classify_keywords_after_matching.md#%E6%B1%BA%E5%AE%9A)
+for the reason to keep keyword spellings out of the DFA.
 
 ## `indentation(newline:, indent:, dedent:, brackets: [], tab_width: 8)`
 
