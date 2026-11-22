@@ -5,7 +5,7 @@ module Flexr
     BACKENDS = %i[table direct firstmatch auto].freeze
     TOKEN_KINDS = %i[array struct yield].freeze
     ACCELERATORS = %i[auto strscan regexp none].freeze
-    BOOLEAN_OPTIONS = %i[unicode eager_columns allow_empty_match experimental standalone].freeze
+    BOOLEAN_OPTIONS = %i[unicode eager_columns allow_empty_match experimental standalone dynamic_delimiters].freeze
 
     module_function
 

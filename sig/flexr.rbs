@@ -104,6 +104,8 @@ module Flexr
     alias state= begin_state
     def less: (Integer) -> nil
     def more: () -> true
+    def scan_until: (String) -> String?
+    def scan_until_line: (String) -> String?
   end
 
   module Runtime

@@ -100,7 +100,6 @@ module Flexr
           return nil
         end
 
-        @active_rule = nil
         match = if @generated_scanner
           scan_one
         else
@@ -132,13 +131,17 @@ module Flexr
         @position = match.end_pos
         empty_match = match.end_pos == match.start_pos
         @active_rule = match.rule
-        execute(match.rule)
-        finalize_more
-        ensure_progress!(match, scan_state, empty_match: empty_match) unless
-          @position > match.start_pos && @non_progress_signatures.empty?
-        ensure_token_size! if @token_limit_required
-        update_position
-        discard_consumed_input! unless @retain_input
+        begin
+          execute(match.rule)
+          finalize_more
+          ensure_progress!(match, scan_state, empty_match: empty_match) unless
+            @position > match.start_pos && @non_progress_signatures.empty?
+          ensure_token_size! if @token_limit_required
+          update_position
+          discard_consumed_input! unless @retain_input
+        ensure
+          @active_rule = nil
+        end
         token = @pending
         @pending = nil
         return token if token

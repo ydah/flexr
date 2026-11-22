@@ -41,6 +41,8 @@ reserved = Flexr::Lexer.pattern(%w[if end])
 named_word = (word - reserved) & Flexr::Lexer.pattern(/.{1,8}/)
 Flexr::Lexer.rule(named_word | ".")
 Flexr::Lexer.rule(Flexr::Lexer.pattern("<") + Flexr::Lexer.upto(">"), skip: true)
+Flexr::Lexer.rule("<<") { emit :INLINE, scan_until(">>") }
+Flexr::Lexer.rule("<<TAG\n") { emit :HEREDOC, scan_until_line("TAG") }
 
 lexer = Flexr::Lexer.new("12", filename: "input.txt", max_steps: 1000)
 Flexr::Lexer.new("12", cancellation: -> { false })

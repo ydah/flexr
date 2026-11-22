@@ -24,7 +24,7 @@ module Flexr
     CHECKPOINT_FIELDS = %i[
       @position @line @column @bol @state @state_stack @pending @matched @match_start @match_end
       @text_start @text_line @text_column @more_start @more_line @more_column @more_requested
-      @non_progress_signatures @active_rule @eof_fired_states @halted @__flexr_leading_trivia
+      @non_progress_signatures @eof_fired_states @halted @__flexr_leading_trivia
     ].freeze
     private_constant :CHECKPOINT_FIELDS
 
