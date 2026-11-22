@@ -3,6 +3,11 @@
 require "flexr"
 
 module PublicApiTypecheck
+  module SharedRules
+    extend Flexr::Rules
+    rule(/#[^\n]*/, channel: :comment)
+  end
+
   class Cancellation
     def call
       false
@@ -36,6 +41,7 @@ Flexr::Lexer.state(:quoted) { rule(/x/, emit: :X) }
 Flexr::Lexer.all_states { rule(/ /, skip: true) }
 Flexr::Lexer.on_eof { skip }
 Flexr::Lexer.emits(:INTEGER, :X)
+Flexr::Lexer.use(PublicApiTypecheck::SharedRules)
 Flexr::Lexer.rule(/[a-z]+/, emit: :IDENT)
 Flexr::Lexer.keywords(%w[if else], among: :IDENT)
 Flexr::Lexer.keywords({ "yes" => :TRUE, "true" => :TRUE }, among: :IDENT)

@@ -29,6 +29,42 @@ See [parser token expectations](runtime.md#parser-token-expectations).
 participates in rule selection while leaving the lookahead for the next token.
 The method returns `nil`. Rules are numbered in source order starting at zero.
 
+## `use(rule_set)`
+
+Extend a module with `Flexr::Rules` and declare ordinary rules in it. A lexer
+inserts copies of those rules where it calls `use`.
+
+```ruby
+module CommonTokens
+  extend Flexr::Rules
+
+  rule(/[ \t]+/, channel: :whitespace)
+  rule(/#[^\n]*/, channel: :comment)
+end
+
+class Lexer < Flexr::Lexer
+  use CommonTokens
+  rule(/[a-z]+/, emit: :NAME)
+end
+```
+
+Rules introduced by `use` participate in the same longest-match and priority
+rules as direct declarations. Equal-length matches at the same priority
+follow the expanded source order. A `use` inside `state` or `all_states`
+adds the rules to the active states. Action blocks retain the module's
+lexical variables and constants and run on the consuming lexer instance.
+
+At runtime, each call takes a snapshot of the rule declarations. Subclasses
+start with their own rules and call `use` where they want the shared rules.
+
+For static generation, define each rule set in a named module in the same
+file before its first use. Use nested module declarations for namespaces
+and pass the rule set as a constant. Write its `rule` calls directly in
+the module body. Write state selection, EOF,
+keywords, and other lexer configuration in the consuming lexer. The
+generated file checks the number of declarations when it loads, so a
+dynamic rule addition produces an error.
+
 ## `pattern(*values)`
 
 Builds an immutable, Ractor-shareable `Flexr::Pattern` from regexps, literal

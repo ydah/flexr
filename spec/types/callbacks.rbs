@@ -1,4 +1,8 @@
 module PublicApiTypecheck
+  module SharedRules
+    extend Flexr::Rules
+  end
+
   class Cancellation
     def call: () -> bool
   end

@@ -6,6 +6,7 @@ else may change between releases without a deprecation cycle.
 ## Public and stable
 
 - `Flexr::Lexer` and the DSL methods in [dsl.md](dsl.md).
+- `Flexr::Rules` modules and [explicit rule reuse](dsl.md#userule_set).
 - `Flexr::Pattern` values and the [pattern algebra](dsl.md#patternvalues).
 - Runtime consumption: `initialize`, `next_token`, `tokens`, `each_token`, and
   `racc_next_token`. See [parser token expectations](runtime.md#parser-token-expectations)

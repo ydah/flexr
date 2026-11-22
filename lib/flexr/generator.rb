@@ -268,9 +268,10 @@ module Flexr
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
-      sources << "runtime/channels.rb" if parsed.rules.any?(&:channel) || uses_delegation?(parsed)
+      sources << "runtime/channels.rb" if parsed.uses_rule_sets || parsed.rules.any?(&:channel) || uses_delegation?(parsed)
       sources << "runtime/captures.rb" if compiled.rules.any?(&:capture_patterns)
       sources << "runtime/delegation.rb" if uses_delegation?(parsed)
+      sources << "rules.rb" if parsed.uses_rule_sets
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
