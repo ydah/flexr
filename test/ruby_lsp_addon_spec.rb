@@ -58,6 +58,24 @@ RSpec.describe "Ruby LSP flexr add-on" do
     end
   end
 
+  it "offers the CLI capture edit through textDocument/codeAction" do
+    source = "class EditorLexer < Flexr::Lexer\r\n  rule(/😀(a)/, emit: :A)\r\nend\r\n"
+    open_server(source) do |server, uri|
+      diagnostic = diagnostics(server, uri).find { |item| item.code == "FLEXR-W013" }
+      expect(diagnostic).not_to be_nil
+      position = { line: 1, character: 11 }
+      server.process_message(id: 2, method: "textDocument/codeAction", params: {
+        textDocument: { uri: uri }, range: { start: position, end: position },
+        context: { diagnostics: [JSON.parse(diagnostic.to_json, symbolize_names: true)] }
+      })
+      action = pop_result(server).response.find { |entry| entry[:kind] == "quickfix" }
+      expect(action).to include(
+        title: "Use non-capturing groups",
+        edit: { changes: { uri.to_s.to_sym => [{ range: { start: position, end: position }, newText: "?:" }] } }
+      )
+    end
+  end
+
   it "refreshes errors after unsaved edits and clears them when fixed" do
     source = "class EditorLexer < Flexr::Lexer\n  rule(/a(?=b)/, skip: true)\nend\n"
     open_server(source) do |server, uri|

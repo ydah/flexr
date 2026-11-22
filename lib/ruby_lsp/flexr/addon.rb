@@ -2,6 +2,7 @@
 
 require "ruby_lsp/addon"
 require "flexr/cli"
+require "flexr/source/fixes"
 
 RubyLsp::Addon.depend_on_ruby_lsp!("~> 0.26.11")
 
@@ -12,10 +13,12 @@ module RubyLsp
         return @diagnostics if @source == source
 
         @channels = {}
+        @capture_edits = []
         diagnostics = begin
           parsed = ::Flexr::Source::PrismReader.new(source).read
           parsed.rules.each { |rule| @channels[rule.span.first] = rule.channel if rule.channel }
           compiled = ::Flexr::CLI.compile(parsed, overrides: { warn_level: :all })
+          @capture_edits = ::Flexr::Source::Fixes.capture_edits(parsed, compiled.diagnostics)
           compiled.diagnostics.reject { |diagnostic| diagnostic.code == "FLEXR-W016" }
         rescue ::Flexr::Error => e
           e.diagnostic ? [e.diagnostic] : []
@@ -28,6 +31,13 @@ module RubyLsp
 
       def channel_at(offset)
         @channels[offset]
+      end
+
+      def capture_edits(diagnostic)
+        return [] unless diagnostic.code == "FLEXR-W013" && diagnostic.location
+
+        first, last = diagnostic.location
+        @capture_edits.select { |edit| edit.range.begin.between?(first, last) }
       end
 
       def message(diagnostic)
@@ -51,13 +61,32 @@ module RubyLsp
           severity = { error: Constant::DiagnosticSeverity::ERROR, warning: Constant::DiagnosticSeverity::WARNING,
                        info: Constant::DiagnosticSeverity::INFORMATION }.fetch(diagnostic.severity)
           Interface::Diagnostic.new(
-            range: Interface::Range.new(start: position(source, first), end: position(source, last)),
-            message: @analysis.message(diagnostic), code: diagnostic.code, severity: severity, source: "flexr"
+            range: range(source, first, last),
+            message: @analysis.message(diagnostic), code: diagnostic.code, severity: severity, source: "flexr",
+            data: code_action_data(uri, source, diagnostic)
           )
         end
       end
 
       private
+
+      def code_action_data(uri, source, diagnostic)
+        edits = @analysis.capture_edits(diagnostic)
+        return if edits.empty?
+
+        changes = edits.map do |edit|
+          Interface::TextEdit.new(range: range(source, edit.range.begin, edit.range.end), new_text: edit.replacement)
+        end
+        action = Interface::CodeAction.new(
+          title: "Use non-capturing groups", kind: Constant::CodeActionKind::QUICK_FIX,
+          edit: Interface::WorkspaceEdit.new(changes: { uri.to_s => changes })
+        )
+        { code_actions: [action] }
+      end
+
+      def range(source, first, last)
+        Interface::Range.new(start: position(source, first), end: position(source, last))
+      end
 
       def position(source, offset)
         prefix = source.byteslice(0, [offset, source.bytesize].min)
