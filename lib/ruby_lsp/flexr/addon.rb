@@ -3,6 +3,8 @@
 require "ruby_lsp/addon"
 require "flexr/cli"
 require "flexr/source/fixes"
+require_relative "ranges"
+require_relative "navigation"
 
 RubyLsp::Addon.depend_on_ruby_lsp!("~> 0.26.11")
 
@@ -60,27 +62,27 @@ module RubyLsp
         return [] unless uri.path&.end_with?(".flexr.rb")
 
         source = document.source
+        ranges = Ranges.new(source, @encoding)
         @analysis.diagnostics(source).map do |diagnostic|
           first, last = diagnostic.location || [0, 0]
           severity = { error: Constant::DiagnosticSeverity::ERROR, warning: Constant::DiagnosticSeverity::WARNING,
                        info: Constant::DiagnosticSeverity::INFORMATION }.fetch(diagnostic.severity)
           Interface::Diagnostic.new(
-            range: range(source, first, last),
+            range: ranges.range(first, last),
             message: @analysis.message(diagnostic), code: diagnostic.code, severity: severity, source: "flexr",
-            data: code_action_data(uri, document, diagnostic)
+            data: code_action_data(uri, document, diagnostic, ranges)
           )
         end
       end
 
       private
 
-      def code_action_data(uri, document, diagnostic)
+      def code_action_data(uri, document, diagnostic, ranges)
         edits = @analysis.edits(diagnostic)
         return if edits.empty?
 
-        source = document.source
         changes = edits.map do |edit|
-          Interface::TextEdit.new(range: range(source, edit.range.begin, edit.range.end), new_text: edit.replacement)
+          Interface::TextEdit.new(range: ranges.range(edit.range.begin, edit.range.end), new_text: edit.replacement)
         end
         versioned_document = Interface::OptionalVersionedTextDocumentIdentifier.new(uri: uri.to_s, version: document.version)
         document_edit = Interface::TextDocumentEdit.new(text_document: versioned_document, edits: changes)
@@ -89,22 +91,6 @@ module RubyLsp
           edit: Interface::WorkspaceEdit.new(document_changes: [document_edit])
         )
         { code_actions: [action] }
-      end
-
-      def range(source, first, last)
-        Interface::Range.new(start: position(source, first), end: position(source, last))
-      end
-
-      def position(source, offset)
-        prefix = source.byteslice(0, [offset, source.bytesize].min)
-        line = prefix.count("\n")
-        column = prefix.byteslice(((prefix.b.rindex("\n") || -1) + 1)..).delete_suffix("\r")
-        character = case @encoding
-        when Encoding::UTF_8 then column.bytesize
-        when Encoding::UTF_16LE then column.encode(Encoding::UTF_16LE).bytesize / 2
-        else column.length
-        end
-        Interface::Position.new(line: line, character: character)
       end
     end
 
@@ -153,11 +139,14 @@ module RubyLsp
     class Addon < ::RubyLsp::Addon
       def activate(global_state, _message_queue)
         @analysis = Analysis.new
-        global_state.register_formatter("flexr", Diagnostics.new(@analysis, global_state.encoding))
+        @encoding = global_state.encoding
+        @outline_builders = ObjectSpace::WeakKeyMap.new
+        global_state.register_formatter("flexr", Diagnostics.new(@analysis, @encoding))
       end
 
       def deactivate
         @analysis = nil
+        @outline_builders = nil
       end
 
       def name
@@ -170,6 +159,56 @@ module RubyLsp
 
       def create_hover_listener(response_builder, _node_context, dispatcher)
         Hover.new(response_builder, @analysis, dispatcher)
+      end
+
+      def create_definition_listener(builder, uri, context, _dispatcher)
+        return unless specification_uri?(uri) && context.node && context.call_node && !context.surrounding_method
+
+        source = context.node.location.source_lines.join
+        specification = Navigation.specification_at(context.node, source)
+        locations = specification&.state_definitions(context.node, context.call_node)
+        return if locations.nil? || locations.empty?
+
+        ranges = Ranges.new(source, @encoding)
+        locations.each do |location|
+          builder << Interface::Location.new(uri: uri.to_s, range: ranges.location(location))
+        end
+      end
+
+      def create_completion_listener(builder, context, _dispatcher, uri)
+        return unless specification_uri?(uri) && context.node && context.call_node && !context.surrounding_method
+
+        source = context.node.location.source_lines.join
+        specification = Navigation.specification_at(context.node, source)
+        site = specification&.completion_site(
+          context.node, context.call_node, source: source, recover_utf8: @encoding == Encoding::UTF_8
+        )
+        return unless site
+
+        range = Ranges.new(source, @encoding).location(site.location)
+        specification.token_names(excluding: site).each do |name|
+          next unless name.start_with?(site.prefix)
+
+          label = name.to_sym.inspect
+          edit = Interface::TextEdit.new(range: range, new_text: label)
+          builder << Interface::CompletionItem.new(label: label, kind: Constant::CompletionItemKind::ENUM_MEMBER, text_edit: edit)
+        end
+      end
+
+      def create_document_symbol_listener(builder, dispatcher)
+        @outline_builders[dispatcher] = builder
+      end
+
+      def create_code_lens_listener(_builder, uri, dispatcher)
+        # Ruby LSP uses one dispatcher for these requests and passes the URI to the code lens hook.
+        builder = @outline_builders.delete(dispatcher)
+        Navigation::Outline.new(builder, dispatcher, @encoding) if builder && specification_uri?(uri)
+      end
+
+      private
+
+      def specification_uri?(uri)
+        uri.path&.end_with?(".flexr.rb")
       end
     end
   end
