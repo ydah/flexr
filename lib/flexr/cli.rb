@@ -197,6 +197,7 @@ module Flexr
         options.warn_level == :all ||
           (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
       end
+      diagnostics.concat(emit_shorthand_suggestions(parsed)) if parsed && options.warn_level == :all
       if parsed && options.overrides.fetch(:backend, parsed.config[:backend]) != :firstmatch && options.warn_level != :none
         tables = parsed.config.dig(:options, :keyword_tables)
         diagnostics.concat(Automaton::KeywordTables.grouping_suggestions(compiled, tables))
@@ -213,6 +214,18 @@ module Flexr
       return EXIT_FAILURE if options.warn_as_error && diagnostics.any?(&:warning?)
 
       EXIT_OK
+    end
+
+    def emit_shorthand_suggestions(parsed)
+      parsed.rules.filter_map do |rule|
+        token = rule.emit_shorthand
+        next unless token
+
+        Diagnostics.info(
+          "FLEXR-I004", "rule emits #{token.inspect} with unchanged matched text",
+          location: rule.span, help: "use emit: #{token.inspect} on the rule"
+        )
+      end
     end
 
     def print_stats(spec, options, out)

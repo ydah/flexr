@@ -406,3 +406,10 @@ This analysis covers `table`, `direct`, `auto`, and `firstmatch` states.
 `--warn-as-error` does not turn informational diagnostics into failures.
 Generation with `--warn all` also preserves the information in generated and
 standalone artifacts.
+
+### Emit shorthand
+
+`flexr check SPEC --warn all` reports `FLEXR-I004` for action blocks consisting
+solely of `emit :TOKEN` or `emit :TOKEN, text`. Use `emit: :TOKEN` on the rule
+to take the shorthand emission path. Actions that transform the value or perform
+other work stay as blocks.
