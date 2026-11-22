@@ -72,6 +72,9 @@ module Flexr
     def each_token: () -> Enumerator[token, self]
                   | () { (untyped, ?untyped) -> untyped } -> self
     def racc_next_token: () -> [untyped, untyped]
+    def checkpoint: () -> Runtime::Checkpoint
+    def restore: (Runtime::Checkpoint) -> self
+    def seek: (Integer) -> self
 
     attr_reader filename: String?
     attr_reader error_mode: Symbol
@@ -104,6 +107,9 @@ module Flexr
   end
 
   module Runtime
+    class Checkpoint
+    end
+
     class Token < ::Data
       def self.new: (?type: untyped, ?value: untyped, ?location: Location?) -> instance
       attr_reader type: untyped
