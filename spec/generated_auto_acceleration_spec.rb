@@ -15,6 +15,7 @@ RSpec.describe "generated automatic region acceleration" do
           accel :#{accel}
           rule(/[a-z]+/, emit: :WORD)
           rule("!", emit: :PUNCTUATION)
+          rule(/\\x00/, emit: :NUL)
         end
       RUBY
       scope = Module.new
@@ -28,6 +29,12 @@ RSpec.describe "generated automatic region acceleration" do
 
     expect(lexer).not_to receive(:__flexr_generated_acceleration_region)
     expect(lexer.tokens).to eq(tokens)
+  end
+
+  it "emits a NUL byte at the end of frozen input" do
+    lexer = generated_lexer(:auto).new("a\0")
+
+    expect(lexer.tokens).to eq([[:WORD, "a"], [:NUL, "\0"]])
   end
 
   it "keeps the auto region path available with streaming or runtime limits" do

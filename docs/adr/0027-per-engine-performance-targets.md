@@ -34,3 +34,12 @@ For simple scanners on frozen input with scanning guards inactive, generated
 `accel :auto` uses the same DFA-only policy as the interpreter fast path. This
 avoids lazy region-cache writes in the generated scan loop. The region path
 remains available for streaming, guarded input, and explicit `:strscan`.
+
+Whole-token native scans require explicit `accel :strscan`. The
+[whole-token measurement](../perf-log.md#2026-11-22-whole-token-selection-by-engine-and-workload)
+found substantial gains on long whitespace runs and generated GraphQL,
+alongside YJIT regressions on compact JSON, TOML, SQL, and the Ruby subset
+even with the DFA fallback. The DFA is the portable default. Any automatic
+choice needs an eligibility check tied to the rule and input shape.
+Measure the cost of that check and verify identical token sequences in the
+selected path and fallback.

@@ -92,8 +92,7 @@ module ToyLang
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
-        while cursor < source.bytesize
-          byte = source.getbyte(cursor)
+        while (byte = source.getbyte(cursor))
           if direct_nxt
             current = direct_nxt[(current * direct_classes) + ec[byte]]
             break if current < 0
