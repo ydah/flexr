@@ -25,6 +25,11 @@ in runtime mode. Measure other lexer workloads individually. Run timing
 comparisons on a fixed reference machine and keep the portable CI gate from
 [ADR 0019](0019-measured-performance-floor.md).
 
+On the reference machine, run
+`FLEXR_BENCHMARK_CHECK_MATRIX=1 FLEXR_BENCHMARK_ITERATIONS=10 bundle exec rake bench:matrix`.
+The check keeps all three ratio samples for each engine and uses their median.
+An unavailable engine or a median below `1.0` fails the check.
+
 For simple scanners on frozen input with scanning guards inactive, generated
 `accel :auto` uses the same DFA-only policy as the interpreter fast path. This
 avoids lazy region-cache writes in the generated scan loop. The region path
