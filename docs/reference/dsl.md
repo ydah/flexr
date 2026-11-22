@@ -4,7 +4,7 @@ The DSL is extended onto a subclass of `Flexr::Lexer`. Class bodies are normal
 Ruby and may contain constants, methods, requires, comments, and ordinary
 expressions.
 
-## `rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, priority: 0, &action)`
+## `rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, priority: 0, emits: nil, &action)`
 
 Registers one rule. `pattern` is a `Regexp`, `String`, `Flexr::Pattern`, or an
 array containing those values. A string is matched literally. Array members
@@ -18,6 +18,12 @@ if no block is given, the default action emits `[nil, text]`.
 Prefer `emit:` when the value is the unchanged matched text, such as
 `rule(/\+/, emit: :PLUS)`. This avoids executing a Ruby action block for each
 token. Use a block when converting a value or changing lexer state.
+
+For parser-driven lexing, `emits:` declares which token types an action can
+return. Pass one Symbol or a nonempty array of Symbols. Use `emit:` alone
+when the rule already declares its token and emits the matched text. The
+class-level `emits` method continues to declare the grammar's token list.
+See [parser token expectations](runtime.md#parser-token-expectations).
 
 `followed_by:` accepts a `Regexp`, `String`, or `Flexr::Pattern`. It
 participates in rule selection while leaving the lookahead for the next token.

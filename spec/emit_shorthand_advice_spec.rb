@@ -12,6 +12,7 @@ RSpec.describe "emit shorthand advice" do
         rule("c") { emit(:C, text.upcase) }
         rule("d", skip: true) { emit :D }
         rule("e") { puts(text); emit :E }
+        rule("f", emits: %i[F G]) { emit :F }
       end
     RUBY
     Dir.mktmpdir do |directory|

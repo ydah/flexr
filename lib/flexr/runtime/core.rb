@@ -74,7 +74,13 @@ module Flexr
       @buffer.source
     end
 
-    def next_token
+    def next_token(expect: nil)
+      unless expect.nil?
+        raise ArgumentError, "expect: must be an Array of token Symbols" unless expect.is_a?(Array) && expect.all?(Symbol)
+
+        expected = expect.to_h { |type| [type, true] }
+      end
+
       until @halted
         consume_step! if scan_steps_guarded?
 
@@ -98,10 +104,10 @@ module Flexr
         end
 
         @active_rule = nil
-        match = if @generated_scanner
+        match = if @generated_scanner && !expected
           scan_one
         else
-          (@interpreter ||= Runtime::Interpreter.new(self)).scan
+          (@interpreter ||= Runtime::Interpreter.new(self)).scan(expected)
         end
         unless match
           unless eof?
@@ -170,8 +176,8 @@ module Flexr
       result
     end
 
-    def racc_next_token
-      token = next_token
+    def racc_next_token(expect: nil)
+      token = expect.nil? ? next_token : next_token(expect: expect)
       token ? [token[0], token[1]] : [false, "$end"]
     end
 

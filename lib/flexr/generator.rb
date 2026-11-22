@@ -105,11 +105,12 @@ module Flexr
         end
         priority = ("priority: #{rule.priority}, " unless rule.priority.to_i.zero?)
         channel = "channel: #{ruby_literal(rule.channel)}, " if rule.channel
+        emits = "emits: #{ruby_literal(rule.emits)}, " if rule.emits
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
           "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
           "#{priority}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
-          "#{channel}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
+          "#{channel}#{emits}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
       "{ artifact: #{ruby_literal(artifact_metadata)}, rules: [#{definitions.join(', ')}], " \
         "backend: #{ruby_literal(effective_backend(parsed))}, " \
@@ -135,7 +136,7 @@ module Flexr
       rules = parsed.rules.map do |rule|
         IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),
                      action: rule.action, states: rule.states, bol_only: rule.bol_only,
-                     end_anchor: rule.end_anchor, location: rule.span, channel: rule.channel, priority: rule.priority)
+                     end_anchor: rule.end_anchor, location: rule.span, channel: rule.channel, priority: rule.priority, emits: rule.emits)
       rescue CompileError => e
         e.diagnostic.location ||= rule.span if e.diagnostic
         raise
@@ -424,6 +425,7 @@ module Flexr
         runtime_rule = runtime_rules.fetch(rule.index)
         rule.patterns = runtime_rule.patterns
         rule.trailing = runtime_rule.trailing
+        rule.emits = runtime_rule.emits
         rule.priority = runtime_rule.priority
         next unless rule.dynamic_channel || rule.channel || runtime_rule.channel
 
