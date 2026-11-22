@@ -102,18 +102,25 @@ RSpec.describe "named regexp captures" do
     expect(outcomes(source, "ab", requests: [[:KEEP]])).to all(eq([["KEEP", { "later" => "a" }]]))
   end
 
-  it "clears cached captures when entering a state with only plain rules" do
-    lexer = Class.new(Flexr::Lexer) do
-      rule(/(?<part>a)/) do
-        push(:inside)
-        emit :CAPTURE, captures
+  it "clears captures and restores the direct scanner layout across state changes" do
+    source = <<~RUBY
+      require "flexr"
+      class NamedCaptureLexer < Flexr::Lexer
+        rule(/(?<part>a)/) do
+          push(:inside)
+          emit :CAPTURE, captures
+        end
+        state(:inside) do
+          rule("b") do
+            pop
+            emit :PLAIN, captures
+          end
+        end
       end
-      state(:inside) do
-        rule("b") { emit :PLAIN, captures }
-      end
-    end
+    RUBY
 
-    expect(lexer.new("ab").tokens).to eq([[:CAPTURE, { part: "a" }], [:PLAIN, {}]])
+    expected = [["CAPTURE", { "part" => "a" }], ["PLAIN", {}]] * 2
+    expect(outcomes(source, "abab", backend: :direct)).to all(eq(expected))
   end
 
   it "preserves captures for a rule that would otherwise use a whole-token plan" do

@@ -29,17 +29,19 @@ module Flexr
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         captures = compiled.rules.any?(&:capture_patterns)
+        scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
+        fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
         lines << "#{indent}def scan_one"
         lines << "#{indent}  if @__flexr_generated_scan_state != @state"
         lines << "#{indent}    machine = self.class.__flexr_compiled.machines.fetch(@state)"
         lines << "#{indent}    @__flexr_generated_scan_state = @state"
         lines << "#{indent}    @__flexr_generated_scan_dfa = machine.dfa"
         lines << "#{indent}    @__flexr_generated_whole_tokens = machine.respond_to?(:whole_tokens) ? machine.whole_tokens : nil" if whole_tokens
-        lines << "#{indent}    @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)"
+        lines << "#{indent}    #{scan_cache} = #{fast_path}(@__flexr_generated_scan_dfa)"
         lines << "#{indent}    @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)"
         lines << "#{indent}  end"
         lines << "#{indent}  dfa = @__flexr_generated_scan_dfa"
-        lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast"
+        lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless #{scan_cache}"
         lines << "#{indent}  position = byte_pos"
         lines << "#{indent}  return nil unless valid_utf8_at?(position)"
         if whole_tokens
@@ -95,13 +97,17 @@ module Flexr
         lines << "#{indent}  best"
         lines << "#{indent}end"
         lines << "#{indent}def __flexr_generated_scan_simple(dfa, position)"
-        lines << "#{indent}  current = dfa.start"
-        lines << "#{indent}  direct = dfa.direct"
-        lines << "#{indent}  direct_nxt = direct&.fetch(:nxt)"
-        lines << "#{indent}  direct_classes = direct&.fetch(:classes)"
-        lines << "#{indent}  ec = dfa.ec"
-        lines << "#{indent}  accepts = dfa.accepts"
-        lines << "#{indent}  rules = self.class.__flexr_rules"
+        if direct
+          lines << "#{indent}  current, direct_nxt, direct_classes, ec, accepts, rules = #{scan_cache}"
+        else
+          lines << "#{indent}  current = dfa.start"
+          lines << "#{indent}  direct = dfa.direct"
+          lines << "#{indent}  direct_nxt = direct&.fetch(:nxt)"
+          lines << "#{indent}  direct_classes = direct&.fetch(:classes)"
+          lines << "#{indent}  ec = dfa.ec"
+          lines << "#{indent}  accepts = dfa.accepts"
+          lines << "#{indent}  rules = self.class.__flexr_rules"
+        end
         lines << "#{indent}  source = buffer.stable_source"
         lines << "#{indent}  guarded_steps = scan_steps_guarded?"
         lines << "#{indent}  check_token_limit = token_limit_required?"
@@ -231,12 +237,22 @@ module Flexr
         lines << "#{indent}  @__flexr_generated_disabled_auto_accel ||= {}"
         lines << "#{indent}  @__flexr_generated_disabled_auto_accel[region] = true"
         lines << "#{indent}end"
-        lines << "#{indent}def __flexr_generated_fast_path?(dfa)"
+        lines << "#{indent}def #{fast_path}(dfa)"
         lines << "#{indent}  @__flexr_generated_fast_paths ||= {}"
         lines << "#{indent}  return @__flexr_generated_fast_paths[dfa] if @__flexr_generated_fast_paths.key?(dfa)"
-        lines << "#{indent}  rules = dfa.rule_ids.map { |rule_index| self.class.__flexr_rules.fetch(rule_index) }"
-        lines << "#{indent}  @__flexr_generated_fast_paths[dfa] = self.class.__flexr_config.backend != :firstmatch &&"
-        lines << "#{indent}    self.class.__flexr_config.options[:allow_empty_match] != true && rules.none?(&:trailing)"
+        if direct
+          lines << "#{indent}  rules = self.class.__flexr_rules"
+          lines << "#{indent}  active_rules = dfa.rule_ids.map { |rule_index| rules.fetch(rule_index) }"
+          lines << "#{indent}  @__flexr_generated_fast_paths[dfa] = if self.class.__flexr_config.backend != :firstmatch &&"
+          lines << "#{indent}      self.class.__flexr_config.options[:allow_empty_match] != true && active_rules.none?(&:trailing)"
+          lines << "#{indent}    direct = dfa.direct"
+          lines << "#{indent}    [dfa.start, direct.fetch(:nxt), direct.fetch(:classes), dfa.ec, dfa.accepts, rules].freeze"
+          lines << "#{indent}  end"
+        else
+          lines << "#{indent}  rules = dfa.rule_ids.map { |rule_index| self.class.__flexr_rules.fetch(rule_index) }"
+          lines << "#{indent}  @__flexr_generated_fast_paths[dfa] = self.class.__flexr_config.backend != :firstmatch &&"
+          lines << "#{indent}    self.class.__flexr_config.options[:allow_empty_match] != true && rules.none?(&:trailing)"
+        end
         lines << "#{indent}end"
         lines << "#{indent}def __flexr_generated_simple_fast_path?(dfa)"
         lines << "#{indent}  @__flexr_generated_simple_fast_paths ||= {}"
