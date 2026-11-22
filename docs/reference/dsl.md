@@ -205,8 +205,10 @@ model is valid.
 Adds boolean options to the specification. Stable options include
 `:unicode`, `:eager_columns`, and `:allow_empty_match`. `:experimental` remains
 accepted for compatibility; it is no longer required by `:firstmatch`.
-`:standalone` is build metadata used by standalone generation. Unknown option
-names raise immediately so misspellings cannot silently change behavior.
+`:standalone` is build metadata used by standalone generation. `:input_stack`
+includes support for external callers of `push_input` in a standalone lexer.
+Unknown option names raise immediately so misspellings cannot silently change
+behavior.
 
 ## `accel(value)`
 

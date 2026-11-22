@@ -46,7 +46,11 @@ module Flexr
           token = expect.nil? ? super() : super(expect: expect)
           unless token
             finish_indentation
-            return @__flexr_indent_queue.shift
+            return @__flexr_indent_queue.shift unless @__flexr_indent_queue.empty?
+            return unless @__flexr_input_frames && !@halted && eof?
+
+            resume_suspended_input
+            next
           end
           return token if @__flexr_token_channel
 
@@ -104,6 +108,13 @@ module Flexr
       end
 
       private
+
+      def defer_input_resume? = !@__flexr_indentation.nil?
+
+      def reset_input_cursor(...)
+        super
+        reset_indentation if @__flexr_indentation
+      end
 
       def reset_indentation
         @__flexr_indent_levels = [0]

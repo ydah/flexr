@@ -12,6 +12,7 @@ else may change between releases without a deprecation cycle.
   for the `expect:` keyword.
 - [Runtime positioning](runtime.md#checkpoint-and-seek): `checkpoint`,
   `restore`, `seek`, and the opaque `Flexr::Runtime::Checkpoint`.
+- `push_input` for [included inputs](runtime.md#input-stack).
 - `Flexr::Lexer.recognizer` and `Flexr::Recognizer#match` for
   [action-free matching](runtime.md#action-free-recognition).
 - Action context methods in [actions.md](actions.md).

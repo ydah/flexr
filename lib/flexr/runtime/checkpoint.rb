@@ -3,9 +3,10 @@
 module Flexr
   module Runtime
     class Checkpoint
-      def initialize(owner, lexer_id, state)
+      def initialize(owner, lexer_id, input, state)
         @owner = owner
         @lexer_id = lexer_id
+        @input = input
         @state = state.freeze
         freeze
       end
@@ -14,10 +15,11 @@ module Flexr
 
       def inspect = "#<#{self.class}>"
 
-      def __flexr_state(owner, lexer_id)
-        return @state if @owner.equal?(owner) && @lexer_id == lexer_id
+      def __flexr_state(owner, lexer_id, input)
+        raise ArgumentError, "checkpoint belongs to a different lexer" unless @owner.equal?(owner) && @lexer_id == lexer_id
+        raise ArgumentError, "checkpoint belongs to a different input" unless @input.equal?(input)
 
-        raise ArgumentError, "checkpoint belongs to a different lexer"
+        @state
       end
     end
 
@@ -34,13 +36,13 @@ module Flexr
       state = CHECKPOINT_FIELDS.to_h do |field|
         [field, copy_cursor_value(instance_variable_get(field))]
       end
-      Checkpoint.send(:new, @__flexr_checkpoint_owner, object_id, state)
+      Checkpoint.send(:new, @__flexr_checkpoint_owner, object_id, @__flexr_input_id, state)
     end
 
     def restore(checkpoint)
       raise ArgumentError, "expected a lexer checkpoint" unless checkpoint.instance_of?(Checkpoint)
 
-      state = checkpoint.__flexr_state(@__flexr_checkpoint_owner, object_id)
+      state = checkpoint.__flexr_state(@__flexr_checkpoint_owner, object_id, @__flexr_input_id)
       check_cursor_range!(state[:@more_start] || state.fetch(:@position))
       check_cursor_range!(state.fetch(:@position))
       state.each { |field, value| instance_variable_set(field, copy_cursor_value(value, freeze_copy: false)) }

@@ -9,7 +9,7 @@ module Flexr
     )
       SpecSource = Struct.new(
         :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
-      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, keyword_init: true
+      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, :uses_input_stack, keyword_init: true
     )
 
     class PrismReader
@@ -58,13 +58,18 @@ module Flexr
         first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
         uses_patterns = false
+        uses_input_stack = false
         each_node(prism.value) do |node|
-          uses_patterns ||= node.is_a?(::Prism::CallNode) && %i[pattern upto].include?(node.name)
+          next unless node.is_a?(::Prism::CallNode)
+
+          uses_patterns ||= %i[pattern upto].include?(node.name)
+          uses_input_stack ||= node.name == :push_input
         end
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq(&:first),
                        first_dsl_offset: first_dsl_offset, constants: @constants, states: @states,
-                       flexr_require_spans: require_spans, dsl_edits: @edits, uses_patterns: uses_patterns)
+                       flexr_require_spans: require_spans, dsl_edits: @edits, uses_patterns: uses_patterns,
+                       uses_input_stack: uses_input_stack)
       end
 
       private

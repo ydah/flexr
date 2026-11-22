@@ -30,6 +30,10 @@ instance as `self`.
 `more` makes the span include all joined matches.
 See [named captures](regexp.md#captures) for group values and match bounds.
 
+`push_input(input, filename: nil)` queues another source for the next token
+boundary. The current action keeps its match text and location. See
+[input stack](runtime.md#input-stack) for EOF and location behavior.
+
 ## State methods
 
 | Method | Contract |

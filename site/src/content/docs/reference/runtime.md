@@ -37,5 +37,6 @@ LayoutLexer.new("root\n  child\nend").tokens.map(&:type)
 Blank and comment-only lines do not affect layout.
 Newlines inside brackets are suppressed.
 Structured layout tokens have a zero-width location at the next content token or at EOF.
+Included inputs have their own indentation levels and emit final dedents before the parent input resumes.
 
 See the repository's [runtime reference](https://github.com/ydah/flexr/blob/main/docs/reference/runtime.md) for constructor options, `less`, `more`, `echo`, state transitions, and error hooks.

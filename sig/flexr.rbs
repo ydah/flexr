@@ -76,6 +76,7 @@ module Flexr
     def checkpoint: () -> Runtime::Checkpoint
     def restore: (Runtime::Checkpoint) -> self
     def seek: (Integer) -> self
+    def push_input: (String | _Input, ?filename: String?) -> nil
 
     attr_reader filename: String?
     attr_reader error_mode: Symbol

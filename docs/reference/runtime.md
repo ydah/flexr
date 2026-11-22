@@ -127,6 +127,10 @@ is the current cursor, the beginning of the input when retained, or the start
 of retained `more` text. Seek raises `RangeError` outside that range and
 `ArgumentError` at an interior UTF-8 byte or a buffered edge with an
 incomplete scalar. A bookmark from another lexer also raises `ArgumentError`.
+On a lexer with an input stack, `seek` addresses the active input. A bookmark
+can be restored only while its original input is active. It records the cursor
+and playback state for that input.
+
 An indentation lexer includes pending layout tokens and levels in its
 checkpoint. `seek(0)` clears that layout state. Use a checkpoint to restore
 another offset because its layout depends on preceding tokens.
@@ -188,3 +192,37 @@ match; `input` and `binary_input` then expose only the retained window.
 oversized match. `max_lookahead_size` separately bounds trailing context, and
 `max_buffer_size` bounds bytes retained at one time. `max_steps` and
 `cancellation` bound CPU work cooperatively.
+
+## Input stack
+
+`push_input(input, filename: nil)` accepts a `String` or an object responding
+to `read`. The lexer enters it at the next token boundary. A rule action can
+queue an input and still emit a token using the current source and location.
+
+```ruby
+rule("@defaults") do
+  push_input("enabled = true\n", filename: "defaults")
+end
+```
+
+Each included input starts in `:initial` with an empty lexical state stack,
+byte offset 0, and line and column 1. The given filename appears in its
+token locations and lexical errors. Its normal `on_eof` action can emit
+a token. Once that action finishes, the lexer resumes the suspended input
+position, lexical stack, and accumulated text. If several inputs are queued
+for the same boundary, the last one pushed is read first.
+
+With indentation enabled, each input starts with a fresh layout stack.
+A child emits its final dedents at its own EOF, before the lexer restores
+the parent's indentation levels and bracket state. Any explicit child
+EOF token follows the child's dedents, just as it does at root EOF.
+
+Buffer and token limits apply to each input, and the work budget and error
+policy are shared by the lexer. Invalid inputs and oversized strings fail
+when pushed. IO is read lazily, so leave it open until the lexer has consumed
+it. The caller owns the IO. A read error propagates while the failed input
+is active.
+
+Standalone generation embeds the input stack if the lexer source calls
+`push_input`. Add `option :input_stack` when only external code or an
+indirect call pushes inputs.
