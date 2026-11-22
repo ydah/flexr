@@ -233,7 +233,7 @@ module Flexr
       sources = RUNTIME_SOURCES.dup
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.map do |relative|
-        File.binread(File.expand_path(relative, __dir__))
+        File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
     end
 
