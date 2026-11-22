@@ -61,6 +61,80 @@ RSpec.describe "lexer delegation" do
     expect(scanner.state).to eq(:initial)
   end
 
+  it "replays queued delegated tokens after restore and clears them on seek" do
+    child = Class.new(Flexr::Lexer) { rule(/[a-z]/, emit: :LETTER) }
+    parent = Class.new(Flexr::Lexer) do
+      rule(/\[(?<code>[a-z]+)\]/) { delegate child, capture: :code }
+      rule("!", emit: :TAIL)
+    end
+    scanner = parent.new("[ab]!")
+
+    expect(scanner.next_token).to eq([:LETTER, "a"])
+    mark = scanner.checkpoint
+    expect(scanner.next_token).to eq([:LETTER, "b"])
+    scanner.restore(mark)
+    expect(scanner.next_token).to eq([:LETTER, "b"])
+    scanner.restore(mark).seek(4)
+    expect(scanner.tokens).to eq([[:TAIL, "!"]])
+  end
+
+  it "drains delegated tokens in their input frame before returning to the parent" do
+    child = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      rule(/[a-z]/, emit: :LETTER)
+    end
+    host = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      rule("+") { push_input("[ab]", filename: "nested.html") }
+      rule(/\[(?<code>[a-z]+)\]/) { delegate child, capture: :code }
+      rule("!", emit: :TAIL)
+    end
+    scanner = host.new("+!", filename: "outer.html")
+
+    expect(scanner.next_token.location).to have_attributes(filename: "nested.html", byte_begin: 1)
+    nested = scanner.checkpoint
+    expect(scanner.next_token.location).to have_attributes(filename: "nested.html", byte_begin: 2)
+    scanner.restore(nested)
+    expect(scanner.next_token.value).to eq("b")
+    expect(scanner.next_token.location).to have_attributes(filename: "outer.html", byte_begin: 1)
+    expect { scanner.restore(nested) }.to raise_error(ArgumentError, /different input/)
+  end
+
+  it "accounts for the host indentation once and leaves the child newline in order" do
+    child = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      rule("!\n", emit: :NL)
+      rule("text", emit: :CODE)
+    end
+    host = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      indentation newline: :NL, indent: :IN, dedent: :OUT
+      rule(/ +/, skip: true)
+      rule(/\n/, emit: :NL)
+      rule(/[a-z]+/, emit: :WORD)
+      rule(/<(?<code>!\ntext)>/) { delegate child, capture: :code }
+    end
+    scanner = host.new(StringIO.new("root\n  <!\ntext>\nnext"), chunk_size: 1, retain_input: false)
+
+    expect([scanner.next_token.type, scanner.next_token.type]).to eq(%i[WORD NL])
+    indent = scanner.next_token
+    expect(indent.type).to eq(:IN)
+    expect(indent.location).to have_attributes(byte_begin: 7, byte_end: 7, line_begin: 2, column_begin: 3)
+    expect(scanner.tokens.map(&:type)).to eq(%i[NL CODE NL OUT WORD])
+  end
+
+  it "prevents a delegated lexer from switching to an input outside its capture" do
+    child = Class.new(Flexr::Lexer) do
+      rule("a") { push_input("b", filename: "other.js") }
+      rule("b", emit: :OTHER)
+    end
+    host = Class.new(Flexr::Lexer) do
+      rule(/<(?<code>a)>/) { delegate child, capture: :code }
+    end
+
+    expect { host.new("<a>").next_token }.to raise_error(ArgumentError, /captured input/)
+  end
+
   it "lets optional captures stay absent and processes explicit child EOF for an empty capture" do
     child = Class.new(Flexr::Lexer) do
       token_kind :struct

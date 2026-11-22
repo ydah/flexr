@@ -2,7 +2,7 @@
 
 module Flexr
   module DSL
-    DSL_METHODS = %i[rule pattern upto state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
+    DSL_METHODS = %i[rule pattern upto state all_states on_eof emits keywords indentation backend token_kind encoding option accel].freeze
     def inherited(child)
       super
       child.__flexr_reset!
@@ -25,7 +25,7 @@ module Flexr
       @__flexr_compile_mutex = Monitor.new
     end
 
-    def rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, &action)
+    def rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, priority: 0, emits: nil, &action)
       __flexr_mutate! do
         patterns = normalize_patterns(pattern)
         channel = Configuration.rule_channel!(channel)
@@ -37,7 +37,9 @@ module Flexr
         states = @__flexr_state_stack.empty? ? [:initial] : @__flexr_state_stack.dup
         @__flexr_rules << IR::Rule.new(
           index: @__flexr_rules.length, patterns: patterns, trailing: normalize_trailing(followed_by),
-          action: rule_action, states: states, bol_only: false, end_anchor: nil, channel: channel
+          action: rule_action, states: states, bol_only: false, end_anchor: nil, channel: channel,
+          priority: Configuration.rule_priority!(priority),
+          emits: Configuration.rule_emits!(emits, emit: emit)
         )
         include Runtime::Channels if channel
       end
@@ -137,6 +139,14 @@ module Flexr
     def dfa
       compile!
       __flexr_compiled
+    end
+
+    def recognizer(state: :initial)
+      raise ArgumentError, "recognizer requires a longest-match backend; firstmatch uses Ruby regexp order" if
+        @__flexr_config.backend == :firstmatch
+      raise ArgumentError, "undefined lexer state #{state.inspect}" unless @__flexr_states.key?(state)
+
+      Recognizer.new(compile!, @__flexr_config, state)
     end
 
     def __flexr_spec

@@ -5,7 +5,7 @@ module Flexr
     class Buffer
       DEFAULT_CHUNK_SIZE = 64 * 1024
 
-      attr_reader :base_offset, :max_buffer_size
+      attr_reader :base_offset, :chunk_size, :max_buffer_size
 
       def initialize(input, chunk_size: DEFAULT_CHUNK_SIZE, max_buffer_size: 64 * 1024 * 1024,
                      retain_input: true, filename: nil)

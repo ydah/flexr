@@ -27,7 +27,7 @@ module Flexr
         @__flexr_all_channels = previous
       end
 
-      def next_token
+      def next_token(...)
         loop do
           @__flexr_token_channel = nil
           @__flexr_recovery_token = nil

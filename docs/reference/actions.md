@@ -30,6 +30,10 @@ instance as `self`.
 `more` makes the span include all joined matches.
 See [named captures](regexp.md#captures) for group values and match bounds.
 
+`push_input(input, filename: nil)` queues another source for the next token
+boundary. The current action keeps its match text and location. See
+[input stack](runtime.md#input-stack) for EOF and location behavior.
+
 ## Delegate a capture to another lexer
 
 `delegate(ChildLexer, capture: :name)` scans the exact byte range of a named
@@ -42,12 +46,14 @@ The child starts in its initial state. Its default-channel tokens are
 inserted in order before any ordinary token emitted by the parent action.
 The parent keeps its lexical state and original match. If the action uses
 `less`, the delegated range must fit inside the final match.
+An indentation-aware parent treats the delegating rule as one content match.
 
 Both lexers need the same encoding. A parent with `token_kind :struct`
 requires a structured child. Child token locations, attached trivia, and
 lexical errors use the original byte offsets and coordinates in the parent
 file. The child reads only the capture. Its beginning of line and EOF
-conditions are relative to that input. Parent array and yield modes return
+conditions are relative to that input. Attempts to switch to another input
+with `push_input` raise `ArgumentError`. Parent array and yield modes return
 their usual token pairs.
 
 A child uses the parent's error mode and scan limits. Delegated work counts

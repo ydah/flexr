@@ -131,9 +131,10 @@ RSpec.describe "generated artifact safety" do
         generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
         expect(generated.bytesize).to be < 100_000
-        expect(generated).not_to include("\r\n", "module Keywords", "module DelegatedTokens")
+        expect(generated).not_to include("\r\n", "module Keywords", "module Firstmatch", "def push_input(", "module Indentation", "module Captures", "module DelegatedTokens")
         expect(generated).not_to include(
-          "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis"
+          "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis",
+          "class ReferenceDFA"
         )
         script = <<~RUBY
           load ARGV.fetch(0)
@@ -151,6 +152,7 @@ RSpec.describe "generated artifact safety" do
       class GeneratorSafetyFirstmatchLexer < Flexr::Lexer
         backend :firstmatch
         option :experimental
+        rule(/a|ab/, emit: :ALTERNATIVE)
         rule(/\\p{L}+/) { emit :WORD }
       end
     RUBY
@@ -161,12 +163,17 @@ RSpec.describe "generated artifact safety" do
       File.binwrite(path, source)
       generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
-      expect(generated).to include("class Parser", "module Data")
+      expect(generated).to include("class Parser", "module Data", "module Firstmatch", "class ReferenceDFA")
       expect(generated).not_to include("class Compiler", "class NFABuilder", "class BackendCostModel")
-      script = <<~RUBY
+      script = <<~'RUBY'
+        require "stringio"
         load ARGV.fetch(0)
         abort "wrong tokens" unless
           GeneratorSafetyFirstmatchLexer.new("日本語").tokens == [[:WORD, "日本語"]]
+        abort "wrong alternative order" unless
+          GeneratorSafetyFirstmatchLexer.new(StringIO.new("ab"), chunk_size: 1).tokens ==
+            [[:ALTERNATIVE, "a"], [:WORD, "b"]]
+        abort "reference matcher unavailable" unless Flexr::Automaton::ReferenceDFA.new(/\p{L}/).accept?("日")
       RUBY
       _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, output)
       expect(status).to be_success, stderr

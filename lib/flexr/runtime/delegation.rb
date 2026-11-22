@@ -4,7 +4,7 @@ module Flexr
   module Runtime
     module DelegatedTokens
       def next_token(...)
-        return super if @halted || !@__flexr_delegated_queue
+        return super if @halted || !@__flexr_delegated_queue || (@__flexr_indent_queue && !@__flexr_indent_queue.empty?)
 
         token = @__flexr_delegated_queue.shift
         @__flexr_delegated_queue = nil if @__flexr_delegated_queue.empty?
@@ -112,6 +112,7 @@ module Flexr
       return if @halted || tokens.empty?
 
       tokens << @pending if @pending
+      @__flexr_delegated_location = last_location if @__flexr_indentation
       @pending = tokens.shift
       return if tokens.empty?
 
