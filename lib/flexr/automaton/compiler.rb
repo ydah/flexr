@@ -692,12 +692,13 @@ module Flexr
       end
 
       def capture_rules
-        @spec.rules.select do |rule|
-          rule.patterns.any? do |pattern|
-            source = pattern.respond_to?(:source) ? pattern.source : pattern.to_s
-            capturing_group?(source)
-          end
-        end
+        @spec.rules.select { |rule| rule.patterns.any? { |pattern| pattern_capture?(pattern) } }
+      end
+
+      def pattern_capture?(pattern)
+        return pattern.operands.any? { |operand| pattern_capture?(operand) } if pattern.is_a?(Pattern)
+
+        pattern.is_a?(::Regexp) && capturing_group?(pattern.source)
       end
 
       def capturing_group?(source)
@@ -748,11 +749,37 @@ module Flexr
       end
 
       def variable_pattern?(pattern)
+        return variable_algebra?(pattern) if pattern.is_a?(Pattern)
+        return false unless pattern.is_a?(::Regexp)
         return true if Regexp::AST.absence?(@regexp_asts[pattern])
 
-        source = pattern.respond_to?(:source) ? pattern.source : pattern.to_s
-        source = source.gsub(/\\./, "")
+        source = pattern.source.gsub(/\\./, "")
         source.match?(/[+*]|\{\d+,\d*\}/)
+      end
+
+      def variable_algebra?(pattern)
+        operands = pattern.operands
+        case pattern.operation
+        when :literal, :+
+          operands.any? { |operand| variable_pattern?(operand) }
+        when :|
+          operands.any? { |operand| variable_pattern?(operand) } ||
+            operands.filter_map { |operand| literal_width(operand) }.uniq.length > 1
+        when :&
+          operands.all? { |operand| variable_pattern?(operand) }
+        when :-
+          variable_pattern?(operands.first)
+        else
+          true
+        end
+      end
+
+      def literal_width(pattern)
+        return pattern.bytesize if pattern.is_a?(String)
+        return unless pattern.is_a?(Pattern) && %i[literal +].include?(pattern.operation)
+
+        widths = pattern.operands.map { |operand| literal_width(operand) }
+        widths.sum unless widths.include?(nil)
       end
     end
   end

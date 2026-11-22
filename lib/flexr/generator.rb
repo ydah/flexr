@@ -235,7 +235,7 @@ module Flexr
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
       sources.map do |relative|
-        File.binread(File.expand_path(relative, __dir__))
+        File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
     end
 

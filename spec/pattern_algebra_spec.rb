@@ -3,6 +3,30 @@
 require "stringio"
 
 RSpec.describe "pattern algebra" do
+  it "distinguishes fixed concatenation from repetition in trailing diagnostics" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/x+/, followed_by: pattern("a") + pattern("b"), emit: :FIXED)
+      rule(/y+/, followed_by: pattern(/a+/) + pattern("b"), emit: :VARIABLE)
+    end
+    warnings = lexer.compile!.diagnostics.select { |diagnostic| diagnostic.code == "FLEXR-W003" }
+
+    expect(warnings.map(&:message)).to contain_exactly(a_string_including("/y+/"))
+  end
+
+  it "warns about actual regexp captures without treating algebra as capture syntax" do
+    source = <<~RUBY
+      class AlgebraCaptureLexer < Flexr::Lexer
+        CAPTURED = pattern(/(a)/)
+        rule(CAPTURED | "b", emit: :CAPTURED)
+        rule(pattern("x") | "y", emit: :LITERAL)
+      end
+    RUBY
+    parsed = Flexr::Source::PrismReader.new(source).read
+    warnings = Flexr::CLI.compile(parsed).diagnostics.select { |diagnostic| diagnostic.code == "FLEXR-W013" }
+
+    expect(warnings.map(&:message)).to contain_exactly(a_string_including("CAPTURED"))
+  end
+
   let(:dsl) { Class.new(Flexr::Lexer) }
 
   it "copies literal input and builds immutable, Ractor-shareable values" do
