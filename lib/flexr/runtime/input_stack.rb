@@ -30,6 +30,8 @@ module Flexr
       clear_input_scanners
     end
 
+    def defer_input_resume? = false
+
     def resume_suspended_input
       frame = @__flexr_input_frames.pop
       @__flexr_input_frames = nil if @__flexr_input_frames.empty?

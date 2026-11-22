@@ -31,8 +31,9 @@ must be positive.
 
 | Method | Result |
 |---|---|
-| `next_token` | One token, or `nil` at EOF |
-| `tokens` | Array containing every token until EOF |
+| `next_token` | One default-channel token, or `nil` at EOF |
+| `tokens(channels: :default)` | Array containing the remaining default-channel tokens |
+| `tokens(channels: :all)` | Array containing the remaining tokens from every channel in input order |
 | `each_token` | Enumerator without a block; otherwise yields tokens and returns `self` |
 | `racc_next_token` | `[type, value]`, or `[false, "$end"]` at EOF |
 | `input` | The currently retained input string |
@@ -45,6 +46,31 @@ must be positive.
 
 `each_token` yields two arguments instead of one when `token_kind :yield` is
 selected. `tokens` always returns an array of token values.
+With trivia channels, `each_token` and `racc_next_token` expose the default
+channel just like `next_token`. Collect all channels from a fresh lexer to
+preserve the full stream. A lexer instance advances as tokens are consumed.
+
+## Indentation tokens
+
+Use [`indentation`](dsl.md) to insert layout tokens as the lexer reads the
+first visible token of each line. Spaces and tabs establish an indentation
+width even when their rules skip them or send them to a trivia channel. The
+first line starts at width zero and can introduce an indent. A dedent must
+return to a previous width, or the lexer raises `Flexr::LexError` at the
+first visible token of the line.
+
+Blank lines, comment-only lines, and newlines inside configured brackets
+yield no newline or layout tokens. A matching closing bracket resumes
+layout processing on the next line. Trivia attached to a suppressed newline
+carries forward to the next visible token. With `tokens(channels: :all)`,
+trivia tokens remain visible and layout still uses the default-channel stream.
+
+Layout tokens have a `nil` value. With `token_kind :struct`, they have a
+zero-width location at the first visible token of the line. The lexer reads
+that token before returning the layout tokens. At EOF, outstanding dedents
+have a zero-width location at the end of the input and precede ordinary
+tokens emitted by an `on_eof` action. An EOF action can emit the configured
+newline to close the last line before the dedents. EOF adds no implicit newline.
 
 ## Checkpoint and seek
 
@@ -78,6 +104,10 @@ incomplete scalar. A bookmark from another lexer also raises `ArgumentError`.
 On a lexer with an input stack, `seek` addresses the active input. A bookmark
 can be restored only while its original input is active. It records the cursor
 and playback state for that input.
+
+An indentation lexer includes pending layout tokens and levels in its
+checkpoint. `seek(0)` clears that layout state. Use a checkpoint to restore
+another offset because its layout depends on preceding tokens.
 
 ## Action-free recognition
 
@@ -155,6 +185,11 @@ token locations and lexical errors. Its normal `on_eof` action can emit
 a token. Once that action finishes, the lexer resumes the suspended input
 position, lexical stack, and accumulated text. If several inputs are queued
 for the same boundary, the last one pushed is read first.
+
+With indentation enabled, each input starts with a fresh layout stack.
+A child emits its final dedents at its own EOF, before the lexer restores
+the parent's indentation levels and bracket state. Any explicit child
+EOF token follows the child's dedents, just as it does at root EOF.
 
 Buffer and token limits apply to each input, and the work budget and error
 policy are shared by the lexer. Invalid inputs and oversized strings fail

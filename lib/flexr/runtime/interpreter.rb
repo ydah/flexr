@@ -106,7 +106,7 @@ module Flexr
             next unless acceptance
 
             rule = rules.fetch(acceptance.rule_index)
-            next if best && cursor == best.total_end_pos && rule.index > best.rule.index
+            next if best && cursor == best.total_end_pos && rule.loses_priority_tie?(best.rule)
 
             best ||= (@match ||= Match.new)
             best.rule = rule
@@ -138,7 +138,7 @@ module Flexr
           next unless acceptance
 
           rule = rules.fetch(acceptance.rule_index)
-          next if best && cursor == best.total_end_pos && rule.index > best.rule.index
+          next if best && cursor == best.total_end_pos && rule.loses_priority_tie?(best.rule)
 
           best ||= (@match ||= Match.new)
           best.rule = rule
@@ -209,7 +209,7 @@ module Flexr
 
           total_end = cursor + (trailing_size || 0)
           next if best && total_end < best.total_end_pos
-          next if best && total_end == best.total_end_pos && acceptance.rule_index > best.rule.index
+          next if best && total_end == best.total_end_pos && candidate.loses_priority_tie?(best.rule)
 
           ensure_token_size!(cursor, position, rule: candidate)
           best = @match ||= Match.new

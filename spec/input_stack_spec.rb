@@ -176,6 +176,114 @@ RSpec.describe "lexer input stacks" do
     end
   end
 
+  it "drains nested source layout and restores its checkpoints across all scanner modes" do
+    Dir.mktmpdir("flexr-input-layout-") do |dir|
+      source = File.join(dir, "lexer.flexr.rb")
+      generated = File.join(dir, "lexer.generated.rb")
+      standalone = File.join(dir, "lexer.standalone.rb")
+      File.write(source, <<~'RUBY')
+        require "flexr"
+        require "stringio"
+        class NestedLayoutFixture < Flexr::Lexer
+          token_kind :struct
+          indentation newline: :NL, indent: :IN, dedent: :OUT
+          rule(/ +/, channel: :space)
+          rule(/#[^\n]*/, channel: :comment)
+          rule(/\n/, emit: :NL)
+          rule("@") do
+            if filename == "root.lex"
+              push_input(StringIO.new("  child\n    @\n    peer"), filename: "child.lex")
+            else
+              push_input(StringIO.new("leaf\n    deep # tail"), filename: "leaf.lex")
+            end
+            emit :INCLUDE, filename
+          end
+          rule(/[a-z]+/, emit: :WORD)
+          on_eof { emit :END, filename unless filename == "leaf.lex" }
+        end
+      RUBY
+      Flexr::Generator.new(source, output: generated, options: { backend: :direct }).generate
+      Flexr::Generator.new(source, output: standalone, options: { standalone: true }).generate
+      script = <<~'RUBY'
+        require "json"
+        load ARGV.fetch(0)
+        source = "root\n  before\n  @\n  after\nend"
+        lexer = NestedLayoutFixture.new(StringIO.new(source), filename: "root.lex", chunk_size: 1)
+        tokens = []
+        loop do
+          token = lexer.next_token
+          abort "parent include token was not emitted" unless token
+
+          tokens << token
+          break if token.type == :INCLUDE
+        end
+        parent = lexer.checkpoint
+        tokens << lexer.next_token
+        child = lexer.checkpoint
+        first = lexer.next_token
+        tokens << lexer.restore(child).next_token
+        abort "child checkpoint did not restore its queued word" unless first == tokens.last
+        tokens.concat(lexer.tokens)
+        resumed = lexer.restore(parent).tokens
+        all = NestedLayoutFixture.new(StringIO.new(source), filename: "root.lex", chunk_size: 1, retain_input: false)
+          .tokens(channels: :all)
+        encode = ->(token) {
+          [token.type, token.value, token.location.filename, token.location.byte_begin,
+           token.leading_trivia.map(&:value)]
+        }
+        visible = all.select { |token| token.channel == :default }
+        abort "all channels changed the layout stream" unless visible.map(&encode) == tokens.map(&encode)
+        puts JSON.generate([tokens.map(&encode), resumed.map(&encode), all.select { |token| token.channel == :comment }.map(&encode)])
+      RUBY
+      parent_head = [
+        ["WORD", "root", "root.lex", 0, []], ["NL", "\n", "root.lex", 4, []], ["IN", nil, "root.lex", 7, []],
+        ["WORD", "before", "root.lex", 7, ["  "]], ["NL", "\n", "root.lex", 13, []],
+        ["INCLUDE", "root.lex", "root.lex", 16, ["  "]]
+      ]
+      child = [
+        ["IN", nil, "child.lex", 2, []], ["WORD", "child", "child.lex", 2, ["  "]],
+        ["NL", "\n", "child.lex", 7, []], ["IN", nil, "child.lex", 12, []],
+        ["INCLUDE", "child.lex", "child.lex", 12, ["    "]]
+      ]
+      leaf = [
+        ["WORD", "leaf", "leaf.lex", 0, []], ["NL", "\n", "leaf.lex", 4, []], ["IN", nil, "leaf.lex", 9, []],
+        ["WORD", "deep", "leaf.lex", 9, ["    "]], ["OUT", nil, "leaf.lex", 20, []]
+      ]
+      child_tail = [
+        ["NL", "\n", "child.lex", 13, []], ["WORD", "peer", "child.lex", 18, ["    "]],
+        ["OUT", nil, "child.lex", 22, []], ["OUT", nil, "child.lex", 22, []], ["END", "child.lex", "child.lex", 22, []]
+      ]
+      parent_tail = [
+        ["NL", "\n", "root.lex", 17, []], ["WORD", "after", "root.lex", 20, ["  "]], ["NL", "\n", "root.lex", 25, []],
+        ["OUT", nil, "root.lex", 26, []], ["WORD", "end", "root.lex", 26, []], ["END", "root.lex", "root.lex", 29, []]
+      ]
+      expected = [parent_head + child + leaf + child_tail + parent_tail, parent_tail, [["comment", "# tail", "leaf.lex", 14, []]]]
+      [source, generated, standalone].each do |path|
+        command = [RbConfig.ruby]
+        command << "-Ilib" unless path == standalone
+        stdout, stderr, status = Open3.capture3(*command, "-e", script, path)
+        expect(status).to be_success, stderr
+        expect(JSON.parse(stdout)).to eq(expected)
+      end
+    end
+  end
+
+  it "keeps bracket suppression local to the suspended input" do
+    lexer = Class.new(Flexr::Lexer) do
+      indentation newline: :NL, indent: :IN, dedent: :OUT, brackets: ["()"]
+      rule(/ +/, skip: true)
+      rule(/\n/, emit: :NL)
+      rule(/[()]/, emit: :BRACKET)
+      rule("!") do
+        push_input("x\n  y", filename: "child.lex")
+        emit :INCLUDE
+      end
+      rule(/[a-z]+/, emit: :WORD)
+    end.new("a(\n  !\n b)\nc")
+
+    expect(lexer.tokens.map(&:first)).to eq(%i[WORD BRACKET INCLUDE WORD NL IN WORD OUT WORD BRACKET NL WORD])
+  end
+
   it "embeds the optional runtime when a caller outside a standalone grammar pushes input" do
     Dir.mktmpdir("flexr-input-stack-option") do |dir|
       source = File.join(dir, "lexer.flexr.rb")

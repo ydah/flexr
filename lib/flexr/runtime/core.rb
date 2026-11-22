@@ -46,10 +46,7 @@ module Flexr
     end
 
     def next_token
-      return nil if @halted
-
-      loop do
-        return nil if @halted
+      until @halted
         activate_pending_inputs if @__flexr_pending_inputs
         consume_step! if scan_steps_guarded?
 
@@ -70,6 +67,8 @@ module Flexr
             next
           end
           if @__flexr_input_frames
+            return nil if defer_input_resume?
+
             resume_suspended_input
             next
           end
@@ -119,6 +118,8 @@ module Flexr
         @pending = nil
         return token if token
       end
+    rescue StopIteration => e
+      e.result
     end
 
     def each_token
@@ -137,7 +138,9 @@ module Flexr
       self
     end
 
-    def tokens
+    def tokens(channels: :default)
+      raise ArgumentError, "channels must be :default or :all" unless %i[default all].include?(channels)
+
       result = []
       while (token = next_token)
         result << token

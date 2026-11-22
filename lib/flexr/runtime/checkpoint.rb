@@ -27,6 +27,7 @@ module Flexr
       @position @line @column @bol @state @state_stack @pending @matched @match_start @match_end
       @text_start @text_line @text_column @more_start @more_line @more_column @more_requested
       @non_progress_signatures @active_rule @eof_fired_states @halted @__flexr_leading_trivia
+      @__flexr_indent_levels @__flexr_indent_brackets @__flexr_indent_queue @__flexr_indent_candidate @__flexr_indent_counting
     ].freeze
     private_constant :CHECKPOINT_FIELDS
 
