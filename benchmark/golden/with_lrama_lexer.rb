@@ -91,14 +91,13 @@ module WithLrama
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
         while cursor < source.bytesize
           byte = source.getbyte(cursor)
-          current = if direct_nxt
-            class_id = ec[byte]
-            value = direct_nxt[(current * direct_classes) + class_id]
-            value >= 0 ? value : nil
+          if direct_nxt
+            current = direct_nxt[(current * direct_classes) + ec[byte]]
+            break if current < 0
           else
-            dfa.transition(current, byte)
+            current = dfa.transition(current, byte)
+            break unless current
           end
-          break unless current
           cursor += 1
           acceptance = accepts[current].first
           next unless acceptance
