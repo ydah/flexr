@@ -196,7 +196,7 @@ module Flexr
       when :dot
         print_dot(spec, options, out)
       when :explain
-        print_explanation(spec, rule_number, out)
+        print_explanation(spec, options, rule_number, out)
       when :trace
         if command_args.key?(:input) || command_args[:input_file]
           print_input_trace(spec, options, command_args, out)
@@ -329,6 +329,7 @@ module Flexr
       compiled = compile(parsed, overrides: options.overrides)
       out.puts "digraph flexr {"
       labels = keyword_table_labels(parsed.config)
+      labels.concat(backup_labels(compiled)) if dfa_backend?(parsed, options)
       out.puts "  graph [label=#{dot_quote(labels.join("\n"))}];" unless labels.empty?
       compiled.machines.each do |state_name, machine|
         dfa = machine.dfa
@@ -386,6 +387,7 @@ module Flexr
       parsed = read_spec(spec)
       compiled = compile(parsed, overrides: options.overrides)
       out.puts keyword_table_labels(parsed.config)
+      out.puts backup_labels(compiled) if dfa_backend?(parsed, options)
       compiled.machines.each do |state_name, machine|
         dfa = machine.dfa
         out.puts "state #{state_name} start=#{dfa.start} classes=#{dfa.class_count}"
@@ -407,7 +409,7 @@ module Flexr
       EXIT_OK
     end
 
-    def print_explanation(spec, rule_number, out)
+    def print_explanation(spec, options, rule_number, out)
       parsed = read_spec(spec)
       rules = parsed.rules
       rules = rules.select { |rule| rule.index == rule_number } if rule_number
@@ -418,7 +420,27 @@ module Flexr
         rule.action[1] if !rule.channel && rule.action.is_a?(Array) && rule.action.first == :emit
       end
       out.puts keyword_table_labels(parsed.config, among: emitted)
+      return EXIT_OK if rule_number || !dfa_backend?(parsed, options)
+
+      out.puts backup_labels(compile(parsed, overrides: options.overrides))
       EXIT_OK
+    end
+
+    def dfa_backend?(parsed, options)
+      options.overrides.fetch(:backend, parsed.config[:backend]) != :firstmatch
+    end
+
+    def backup_labels(compiled)
+      compiled.machines.map do |state, machine|
+        backup = Automaton::Analysis.backup(machine.dfa)
+        bytes = backup.maximum_bytes
+        length = if bytes
+          "#{bytes} #{bytes == 1 ? 'byte' : 'bytes'}"
+        else
+          "unbounded"
+        end
+        "state #{state.inspect}: maximum DFA backup: #{length}"
+      end
     end
 
     def channel_label(rule)
