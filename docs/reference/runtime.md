@@ -46,6 +46,28 @@ must be positive.
 `each_token` yields two arguments instead of one when `token_kind :yield` is
 selected. `tokens` always returns an array of token values.
 
+## Indentation tokens
+
+Use [`indentation`](dsl.md) to insert layout tokens as the lexer reads the
+first visible token of each line. Spaces and tabs establish an indentation
+width even when their rules skip them or send them to a trivia channel. The
+first line starts at width zero and can introduce an indent. A dedent must
+return to a previous width, or the lexer raises `Flexr::LexError` at the
+first visible token of the line.
+
+Blank lines, comment-only lines, and newlines inside configured brackets
+yield no newline or layout tokens. A matching closing bracket resumes
+layout processing on the next line. Trivia attached to a suppressed newline
+carries forward to the next visible token. With `tokens(channels: :all)`,
+trivia tokens remain visible and layout still uses the default-channel stream.
+
+Layout tokens have a `nil` value. With `token_kind :struct`, they have a
+zero-width location at the first visible token of the line. The lexer reads
+that token before returning the layout tokens. At EOF, outstanding dedents
+have a zero-width location at the end of the input and precede ordinary
+tokens emitted by an `on_eof` action. An EOF action can emit the configured
+newline to close the last line before the dedents. EOF adds no implicit newline.
+
 ## Checkpoint and seek
 
 Use these methods between token reads.
@@ -75,6 +97,9 @@ is the current cursor, the beginning of the input when retained, or the start
 of retained `more` text. Seek raises `RangeError` outside that range and
 `ArgumentError` at an interior UTF-8 byte or a buffered edge with an
 incomplete scalar. A bookmark from another lexer also raises `ArgumentError`.
+An indentation lexer includes pending layout tokens and levels in its
+checkpoint. `seek(0)` clears that layout state. Use a checkpoint to restore
+another offset because its layout depends on preceding tokens.
 
 ## Action-free recognition
 

@@ -2,7 +2,7 @@
 
 module Flexr
   module DSL
-    DSL_METHODS = %i[rule pattern upto state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
+    DSL_METHODS = %i[rule pattern upto state all_states on_eof emits keywords indentation backend token_kind encoding option accel].freeze
     def inherited(child)
       super
       child.__flexr_reset!

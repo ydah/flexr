@@ -13,7 +13,7 @@ module Flexr
     )
 
     class PrismReader
-      DSL_NAMES = %i[rule state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
+      DSL_NAMES = %i[rule state all_states on_eof emits keywords indentation backend token_kind encoding option accel].freeze
 
       def initialize(source, path: nil)
         @source = source
@@ -207,6 +207,8 @@ module Flexr
           @config[:declared_tokens].concat(values.map(&:to_sym))
         when :keywords
           collect_keywords(node)
+        when :indentation
+          collect_indentation(node)
         when :backend
           @config[:backend] = Configuration.backend!(static(positional(node).first))
         when :token_kind
@@ -236,6 +238,16 @@ module Flexr
         return if @allow_dynamic && (words.nil? || type.nil?)
 
         Keywords.add!(@config[:options] ||= {}, @config[:declared_tokens], words, among: type, location: location)
+      end
+
+      def collect_indentation(node)
+        validate_keywords!(node, %i[newline indent dedent brackets tab_width])
+        unsupported_static!("indentation requires keyword arguments", node) unless positional(node).empty? && !node.block
+
+        options = keywords(node).transform_values { |value| static(value, scope: @lexer_scope) }
+        return if @allow_dynamic && options.value?(nil)
+
+        (@config[:options] ||= {})[:indentation] = Runtime::Indentation.configuration(**options)
       end
 
       def collect_state(node, parent_states)

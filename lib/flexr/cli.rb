@@ -384,6 +384,7 @@ module Flexr
       if (tables = config_options[:keyword_tables])
         klass.__flexr_config.options[:keyword_tables] = tables
       end
+      klass.indentation(**config_options[:indentation]) if config_options[:indentation]
       config_options.slice(*Configuration::BOOLEAN_OPTIONS).each do |name, value|
         klass.option(name) if value
       end
