@@ -5,7 +5,7 @@ module Flexr
     BACKENDS = %i[table direct firstmatch auto].freeze
     TOKEN_KINDS = %i[array struct yield].freeze
     ACCELERATORS = %i[auto strscan regexp none].freeze
-    BOOLEAN_OPTIONS = %i[unicode eager_columns allow_empty_match experimental standalone].freeze
+    BOOLEAN_OPTIONS = %i[unicode eager_columns allow_empty_match experimental standalone input_stack delegation dynamic_delimiters].freeze
 
     module_function
 
@@ -45,6 +45,23 @@ module Flexr
 
       diagnostic = Diagnostics.error("FLEXR-E018", "rule channel must be a Symbol other than :all")
       raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+    end
+
+    def rule_emits!(value, emit: nil, location: nil)
+      return if value.nil?
+
+      types = value.is_a?(Symbol) ? [value] : value
+      return types.uniq.freeze if !emit && types.is_a?(Array) && !types.empty? && types.all?(Symbol)
+
+      message = emit ? "emits: cannot be combined with emit:" : "emits: requires a Symbol or a nonempty Array of Symbols"
+      diagnostic = Diagnostics.error("FLEXR-E018", message, location: location)
+      raise CompileError.new(message, diagnostic: diagnostic)
+    end
+
+    def expected_tokens!(value)
+      return value if value.is_a?(Array) && value.all?(Symbol)
+
+      raise ArgumentError, "expect: must be an Array of token Symbols"
     end
 
     def validated_symbol!(value, allowed, name)

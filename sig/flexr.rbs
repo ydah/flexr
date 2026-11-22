@@ -4,6 +4,7 @@ module Flexr
   type pattern = String | ::Regexp | Pattern
   type pattern_operand = pattern | Array[pattern_operand]
   type token = [untyped, untyped] | Runtime::Token
+  type rule_identity = Symbol | Integer
   type source_location = [Integer, Integer]
   type cancellation = (^() -> untyped) | (^(Lexer) -> untyped) | _Cancellation | _ContextCancellation
   type recovery_action = :skip | :raise | :token | :halt
@@ -45,13 +46,18 @@ module Flexr
       def use: (::Module) -> nil
     end
 
-    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer) ?{ () [self: Lexer] -> untyped } -> nil
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer, ?emits: (Symbol | Array[Symbol])?) ?{ () [self: Lexer] -> untyped } -> nil
     def pattern: (*pattern_operand) -> Pattern
     def upto: (pattern_operand) -> Pattern
   end
 
+  class Recognizer
+    def match: (String, Integer) -> [rule_identity, Integer]?
+             | [Result] (String, Integer) { (rule_identity, Integer) -> Result } -> Result?
+  end
+
   module DSL
-    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer) ?{ () [self: Lexer] -> untyped } -> nil
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer, ?emits: (Symbol | Array[Symbol])?) ?{ () [self: Lexer] -> untyped } -> nil
     def pattern: (*pattern_operand) -> Pattern
     def upto: (pattern_operand) -> Pattern
     def state: (*(Symbol | String), ?inclusive: bool) { () [self: singleton(Lexer)] -> untyped } -> void
@@ -59,11 +65,13 @@ module Flexr
     def on_eof: () { () [self: Lexer] -> untyped } -> void
     def emits: (*untyped) -> void
     def keywords: (Array[String] | Hash[String, Symbol], among: Symbol) -> nil
+    def indentation: (newline: Symbol, indent: Symbol, dedent: Symbol, ?brackets: Array[String], ?tab_width: Integer) -> nil
     def backend: (:table | :direct | :auto | :firstmatch | String) -> void
     def token_kind: (:array | :struct | :yield | String) -> void
     def encoding: (Encoding | String) -> void
     def option: (*(Symbol | String)) -> void
     def accel: (:auto | :strscan | :regexp | :none | String) -> void
+    def recognizer: (?state: Symbol) -> Recognizer
   end
 
   class Lexer
@@ -71,11 +79,15 @@ module Flexr
     extend Rules::Use
 
     def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?chunk_size: Integer) -> void
-    def next_token: () -> token?
+    def next_token: (?expect: Array[Symbol]?) -> token?
     def tokens: (?channels: (:default | :all)) -> Array[token]
     def each_token: () -> Enumerator[token, self]
                   | () { (untyped, ?untyped) -> untyped } -> self
-    def racc_next_token: () -> [untyped, untyped]
+    def racc_next_token: (?expect: Array[Symbol]?) -> [untyped, untyped]
+    def checkpoint: () -> Runtime::Checkpoint
+    def restore: (Runtime::Checkpoint) -> self
+    def seek: (Integer) -> self
+    def push_input: (String | _Input, ?filename: String?) -> nil
 
     attr_reader filename: String?
     attr_reader error_mode: Symbol
@@ -85,6 +97,8 @@ module Flexr
     attr_writer on_error: error_handler?
     def input: () -> String
     def text: () -> String
+    def captures: () -> Hash[Symbol, String?]
+    def delegate: (singleton(Lexer), capture: Symbol) -> nil
     def text_bytesize: () -> Integer
     def last_location: () -> Runtime::Location
     def byte_pos: () -> Integer
@@ -105,9 +119,14 @@ module Flexr
     alias state= begin_state
     def less: (Integer) -> nil
     def more: () -> true
+    def scan_until: (String) -> String?
+    def scan_until_line: (String) -> String?
   end
 
   module Runtime
+    class Checkpoint
+    end
+
     class Token < ::Data
       def self.new: (?type: untyped, ?value: untyped, ?location: Location?) -> instance
       attr_reader type: untyped

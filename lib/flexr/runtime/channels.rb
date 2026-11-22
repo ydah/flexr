@@ -27,7 +27,7 @@ module Flexr
         @__flexr_all_channels = previous
       end
 
-      def next_token
+      def next_token(...)
         loop do
           @__flexr_token_channel = nil
           @__flexr_recovery_token = nil
@@ -48,6 +48,7 @@ module Flexr
 
             trivia = @__flexr_leading_trivia
             @__flexr_leading_trivia = nil
+            trivia.concat(token.leading_trivia)
             return ChannelToken.new(**token.to_h, leading_trivia: trivia)
           end
         end

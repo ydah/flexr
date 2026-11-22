@@ -59,6 +59,48 @@ RSpec.describe "reusable lexer rules" do
     end
   end
 
+  it "uses shared emits annotations for parser expectations in every mode" do
+    source = <<~RUBY
+      require "flexr"
+
+      module AnnotatedRules
+        extend Flexr::Rules
+        TYPES = %i[LONG]
+        prefix = "shared "
+        rule("ab", emits: TYPES) { emit :LONG, prefix + text }
+      end
+
+      class AnnotatedRuleSetLexer < Flexr::Lexer
+        TYPES = %i[SHORT]
+        use AnnotatedRules
+        rule("a", emit: :SHORT)
+      end
+    RUBY
+    script = <<~RUBY
+      require "json"
+      load ARGV.fetch(0)
+      short = AnnotatedRuleSetLexer.new("ab").next_token(expect: [:SHORT])
+      long = AnnotatedRuleSetLexer.new("ab").next_token(expect: [:LONG])
+      puts JSON.generate([short, long])
+    RUBY
+
+    Dir.mktmpdir("flexr-rule-set-annotations") do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      generated = File.join(directory, "generated.rb")
+      standalone = File.join(directory, "standalone.rb")
+      File.write(path, source)
+      Flexr::Generator.new(path, output: generated).generate
+      Flexr::Generator.new(path, output: standalone, options: { standalone: true }).generate
+
+      [path, generated, standalone].each do |file|
+        load_path = file == standalone ? [] : ["-I", File.expand_path("../lib", __dir__)]
+        stdout, stderr, status = Open3.capture3(RbConfig.ruby, *load_path, "-e", script, file)
+        expect(status).to be_success, stderr
+        expect(JSON.parse(stdout)).to eq([%w[SHORT a], ["LONG", "shared ab"]])
+      end
+    end
+  end
+
   it "takes a snapshot at use and requires subclasses to import rules explicitly" do
     rules = Module.new do
       extend Flexr::Rules

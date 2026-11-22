@@ -4,16 +4,17 @@ module Flexr
   module Source
       RuleDefinition = Struct.new(
       :index, :patterns, :trailing, :action_source, :action, :states, :bol_only, :end_anchor,
-      :pattern_conditions, :bind_action, :reads_locals, :channel, :dynamic_channel, :priority,
+      :pattern_conditions, :bind_action, :reads_locals, :channel, :dynamic_channel, :priority, :emit_shorthand, :emits,
       :span, keyword_init: true
     )
       SpecSource = Struct.new(
         :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
-      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, :uses_rule_sets, keyword_init: true
+      :states, :flexr_require_spans, :dsl_edits, :uses_patterns, :uses_rule_sets, :uses_input_stack, :uses_delegation,
+      :uses_dynamic_delimiters, keyword_init: true
     )
 
     class PrismReader
-      DSL_NAMES = %i[rule use state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
+      DSL_NAMES = %i[rule use state all_states on_eof emits keywords indentation backend token_kind encoding option accel].freeze
 
       def initialize(source, path: nil)
         @source = source
@@ -63,15 +64,25 @@ module Flexr
         @config[:eof_rules] = @eof_rules
         uses_patterns = false
         uses_rule_sets = false
+        uses_delegation = false
+        uses_input_stack = false
+        uses_dynamic_delimiters = false
         each_node(prism.value) do |node|
-          uses_patterns ||= node.is_a?(::Prism::CallNode) && %i[pattern upto].include?(node.name)
+          next unless node.is_a?(::Prism::CallNode)
+
+          uses_patterns ||= %i[pattern upto].include?(node.name)
           uses_rule_sets ||= rule_set_extension?(node)
+          uses_delegation ||= node.name == :delegate
+          uses_input_stack ||= node.name == :push_input
+          uses_dynamic_delimiters ||= %i[scan_until scan_until_line].include?(node.name)
         end
         SpecSource.new(source: @source, path: @path, class_name: class_name, rules: @rules,
                        config: @config, dsl_spans: @spans.uniq(&:first),
                        first_dsl_offset: first_dsl_offset, constants: @constants, states: @states,
                        flexr_require_spans: require_spans, dsl_edits: @edits, uses_patterns: uses_patterns,
-                       uses_rule_sets: uses_rule_sets)
+                       uses_rule_sets: uses_rule_sets,
+                       uses_input_stack: uses_input_stack, uses_delegation: uses_delegation,
+                       uses_dynamic_delimiters: uses_dynamic_delimiters)
       end
 
       private
@@ -218,6 +229,8 @@ module Flexr
           @config[:declared_tokens].concat(values.map(&:to_sym))
         when :keywords
           collect_keywords(node)
+        when :indentation
+          collect_indentation(node)
         when :backend
           @config[:backend] = Configuration.backend!(static(positional(node).first))
         when :token_kind
@@ -367,6 +380,16 @@ module Flexr
         Keywords.add!(@config[:options] ||= {}, @config[:declared_tokens], words, among: type, location: location)
       end
 
+      def collect_indentation(node)
+        validate_keywords!(node, %i[newline indent dedent brackets tab_width])
+        unsupported_static!("indentation requires keyword arguments", node) unless positional(node).empty? && !node.block
+
+        options = keywords(node).transform_values { |value| static(value, scope: @lexer_scope) }
+        return if @allow_dynamic && options.value?(nil)
+
+        (@config[:options] ||= {})[:indentation] = Runtime::Indentation.configuration(**options)
+      end
+
       def collect_state(node, parent_states)
         block = node.block
         raise ArgumentError, "state requires a block" unless block
@@ -408,7 +431,7 @@ module Flexr
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
         options = keywords(node)
-        validate_keywords!(node, %i[skip emit followed_by channel priority])
+        validate_keywords!(node, %i[skip emit followed_by channel priority emits])
         action_source = node.block && source_slice(node.block)
         if action_source && reject_action?(node.block)
           diagnostic = Diagnostics.error(
@@ -422,6 +445,10 @@ module Flexr
         end
         skip = options.key?(:skip) ? static(options[:skip], scope: scope) : false
         emit = options.key?(:emit) ? static(options[:emit], scope: scope) : nil
+        emits = options[:emits] && Configuration.rule_emits!(
+          static(options[:emits], scope: scope), emit: emit,
+          location: [options[:emits].location.start_offset, options[:emits].location.end_offset]
+        )
         priority = options.key?(:priority) ? static(options[:priority], scope: scope) : 0
         Configuration.rule_priority!(priority) unless @allow_dynamic && priority.nil?
         channel = options.key?(:channel) ? static(options[:channel], scope: scope) : :default
@@ -450,9 +477,26 @@ module Flexr
           index: rule_index, patterns: patterns,
           trailing: options[:followed_by] && static(options[:followed_by], scope: scope),
           action_source: action_source, action: action, states: states.dup, channel: channel, dynamic_channel: dynamic_channel,
-          bol_only: false, end_anchor: nil, priority: priority,
+          emits: emits,
+          bol_only: false, end_anchor: nil, priority: priority, emit_shorthand: bind_action && !emits && emit_shorthand(node.block),
           span: [node.location.start_offset, node.location.end_offset], bind_action: bind_action, reads_locals: reads_locals
         )
+      end
+
+      def emit_shorthand(block)
+        return if block.parameters || !block.body.is_a?(Prism::StatementsNode) || !block.body.body.one?
+
+        call = block.body.body.first
+        return unless call.is_a?(Prism::CallNode) && call.name == :emit && call.receiver.nil? && call.block.nil?
+
+        arguments = Array(call.arguments&.arguments)
+        return unless (1..2).cover?(arguments.length) && arguments.first.is_a?(Prism::SymbolNode)
+
+        value = arguments[1]
+        return unless value.nil? || (value.is_a?(Prism::CallNode) && value.name == :text &&
+          value.receiver.nil? && value.arguments.nil? && value.block.nil?)
+
+        arguments.first.value.to_sym
       end
 
       def static(node, scope: @lexer_scope)

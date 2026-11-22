@@ -14,4 +14,7 @@ module PublicApiTypecheck
   class ErrorHandler
     def call: (Flexr::LexError) -> (:skip | :token)
   end
+
+  class EmbeddedLexer < Flexr::Lexer
+  end
 end

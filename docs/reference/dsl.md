@@ -4,7 +4,7 @@ The DSL is extended onto a subclass of `Flexr::Lexer`. Class bodies are normal
 Ruby and may contain constants, methods, requires, comments, and ordinary
 expressions.
 
-## `rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, priority: 0, &action)`
+## `rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, priority: 0, emits: nil, &action)`
 
 Registers one rule. `pattern` is a `Regexp`, `String`, `Flexr::Pattern`, or an
 array containing those values. A string is matched literally. Array members
@@ -18,6 +18,12 @@ if no block is given, the default action emits `[nil, text]`.
 Prefer `emit:` when the value is the unchanged matched text, such as
 `rule(/\+/, emit: :PLUS)`. This avoids executing a Ruby action block for each
 token. Use a block when converting a value or changing lexer state.
+
+For parser-driven lexing, `emits:` declares which token types an action can
+return. Pass one Symbol or a nonempty array of Symbols. Use `emit:` alone
+when the rule already declares its token and emits the matched text. The
+class-level `emits` method continues to declare the grammar's token list.
+See [parser token expectations](runtime.md#parser-token-expectations).
 
 `followed_by:` accepts a `Regexp`, `String`, or `Flexr::Pattern`. It
 participates in rule selection while leaving the lookahead for the next token.
@@ -192,6 +198,22 @@ that the spelling always reaches the competing rule.
 See [ADR 0030](../adr/0030-classify-keywords-after-matching.md) for the decision
 to keep keyword spellings out of the DFA.
 
+## `indentation(newline:, indent:, dedent:, brackets: [], tab_width: 8)`
+
+Configure layout processing with three distinct token Symbols. Emit the
+configured `newline` for LF or CRLF. A newline rule may also consume the
+following spaces and tabs. Skip ordinary whitespace and comments, or send
+them to trivia channels. Keep each layout-significant line break visible as
+the configured newline token.
+
+`brackets` contains two-character strings, each with an opening and a
+closing character. Each character can appear in one pair. A recognized
+bracket token is identified by its original matched character. Set
+`tab_width` to a positive integer. A tab advances to the next tab stop.
+
+See [indentation tokens](runtime.md#indentation-tokens) for the output order
+and positions.
+
 ## `backend(name)`
 
 Selects `:table`, `:direct`, `:auto`, or `:firstmatch`
@@ -219,8 +241,13 @@ model is valid.
 Adds boolean options to the specification. Stable options include
 `:unicode`, `:eager_columns`, and `:allow_empty_match`. `:experimental` remains
 accepted for compatibility; it is no longer required by `:firstmatch`.
-`:standalone` is build metadata used by standalone generation. Unknown option
-names raise immediately so misspellings cannot silently change behavior.
+`:standalone` is build metadata used by standalone generation. `:input_stack`
+includes support for external callers of `push_input` in a standalone lexer.
+`:delegation` adds the [delegation helper](actions.md#delegate-a-capture-to-another-lexer)
+for indirect calls. `:dynamic_delimiters` includes the
+[delimiter helpers](actions.md#dynamic-delimiters) in a standalone lexer for
+indirect calls. Unknown option names raise immediately so misspellings
+cannot silently change behavior.
 
 ## `accel(value)`
 
