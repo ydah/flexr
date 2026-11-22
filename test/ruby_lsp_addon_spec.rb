@@ -106,6 +106,17 @@ RSpec.describe "Ruby LSP flexr add-on" do
     end
   end
 
+  it "explains an empty absence language in the rule hover" do
+    source = "class EditorLexer < Flexr::Lexer\n  rule(/(?~a?)/, skip: true)\nend\n"
+    open_server(source) do |server, uri|
+      server.process_message(id: 1, method: "textDocument/hover", params: {
+        textDocument: { uri: uri }, position: { line: 1, character: 3 }
+      })
+      hover = pop_result(server).response
+      expect(hover.contents.value).to include("FLEXR-W001", "language is empty")
+    end
+  end
+
   it "does not diagnose ordinary Ruby files or execute specification code" do
     source = "raise 'must not execute'\nclass EditorLexer < Flexr::Lexer\n  rule(/a(?=b)/, skip: true)\nend\n"
     open_server(source, path: "ordinary.rb") do |server, uri|

@@ -163,6 +163,24 @@ RSpec.describe Flexr::CLI do
     FileUtils.rm_f(path)
   end
 
+  it "retains an absence group in an imported Ruby regexp" do
+    Dir.mktmpdir("flexr-absence-import") do |directory|
+      input = File.join(directory, "lexer.rex")
+      spec = File.join(directory, "lexer.flexr.rb")
+      File.write(input, <<~REX)
+        rule
+          /x(?~ab)/ { return ABSENT; }
+        end
+      REX
+
+      status, _, warnings = run_cli("import", input, "-o", spec)
+      expect(status).to eq(0), warnings
+      expect(File.read(spec)).to include('Regexp.new("x(?~ab)")')
+      status, _, errors = run_cli("check", spec)
+      expect(status).to eq(0), errors
+    end
+  end
+
   it "finds Rexical counterexamples beyond the literal candidate bound" do
     path = File.join(Dir.tmpdir, "flexr-rexical-long-counterexample-#{Process.pid}.rex")
     File.write(path, <<~REX)

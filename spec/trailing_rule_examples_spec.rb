@@ -55,6 +55,30 @@ RSpec.describe "trailing context rule examples" do
     expect(lexer.new("ab").next_token).to eq([:CONTEXT, "a"])
   end
 
+  it "keeps the unreachable warning when trailing absence requires a line start" do
+    lexer = lexer_class do
+      rule("x", emit: :PLAIN)
+      rule("x", followed_by: /^y(?~ab)ab/, emit: :ANCHOR)
+    end
+
+    expect(warnings(lexer).first.message).to include("is unreachable")
+    expect(lexer.new("xyab").next_token).to eq([:PLAIN, "x"])
+  end
+
+  it "ignores a trailing example that would end inside a UTF-8 scalar" do
+    lexer = lexer_class do
+      rule("x", followed_by: /y(?~ab)\xC3/n, emit: :PARTIAL)
+    end
+    compiled = lexer.compile!
+    target = compiled.rules.first
+    example = Flexr::Automaton::Analysis.trailing_example(
+      compiled.machines.fetch(:initial).dfa, compiled.rules, target, "xyé", { 0 => target.trailing_dfa },
+      encoding: Encoding::UTF_8, unicode: false, firstmatch: false
+    )
+
+    expect(example).to be_nil
+  end
+
   it "keeps firstmatch priority even when a later rule has longer trailing context" do
     lexer = lexer_class(:firstmatch) do
       rule(/a/, emit: :PLAIN)

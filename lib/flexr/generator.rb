@@ -94,7 +94,7 @@ module Flexr
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
-          "#{trailing_dfa_expression(rule, parsed)}" \
+          "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
           "bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
@@ -180,11 +180,11 @@ module Flexr
         "stats: #{ruby_literal(compiled.stats)}, diagnostics: #{ruby_literal(diagnostics)} }"
     end
 
-    def trailing_dfa_expression(rule, parsed)
+    def trailing_dfa_expression(rule, parsed, dfa)
       return "" unless rule.trailing
 
-      dfa = Flexr.compile_pattern(normalize_trailing(rule.trailing), encoding: parsed.config[:encoding],
-                                  options: { unicode: effective_options(parsed)[:unicode] == true })
+      dfa ||= Flexr.compile_pattern(normalize_trailing(rule.trailing), encoding: parsed.config[:encoding],
+                                   options: { unicode: effective_options(parsed)[:unicode] == true })
       "trailing_dfa: #{ruby_literal(dfa_data(dfa, compression: table_compression(parsed)))}, "
     rescue CompileError => e
       e.diagnostic.location ||= rule.span if e.diagnostic

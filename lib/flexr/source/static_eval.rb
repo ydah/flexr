@@ -129,6 +129,11 @@ module Flexr
       def evaluate_call(node)
         return evaluate(node.receiver).freeze if node.receiver && node.name == :freeze
         return ::Regexp.union(positional_arguments(node).map { |argument| evaluate(argument) }) if node.receiver && node.name == :union && constant_name(node.receiver) == "Regexp"
+        if node.receiver && node.name == :new && source_slice(node.receiver) == "::Regexp"
+          arguments = Array(node.arguments&.arguments)
+          return ::Regexp.new(arguments.first.unescaped) if !node.block && arguments.one? && arguments.first.is_a?(::Prism::StringNode)
+        end
+
         raise_resolution("method call #{node.name} is not statically supported")
       end
 

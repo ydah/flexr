@@ -249,7 +249,7 @@ module Flexr
         dfa = rule.trailing_dfa || trailing_dfa(rule.trailing)
         state = dfa.start
         cursor = position
-        longest = 0 if trailing_accept?(dfa, state, buffer, cursor)
+        longest = 0 if trailing_accept?(dfa, state, buffer, cursor, position)
         while buffer.ensure_available?(cursor + 1)
           state = dfa.transition(state, buffer.getbyte(cursor))
           break unless state
@@ -258,14 +258,18 @@ module Flexr
           @lexer.consume_step!
           size = cursor - position
           @lexer.ensure_lookahead_size!(size, rule: rule)
-          longest = size if trailing_accept?(dfa, state, buffer, cursor)
+          longest = size if trailing_accept?(dfa, state, buffer, cursor, position)
         end
         longest
       end
 
-      def trailing_accept?(dfa, state, buffer, position)
+      def trailing_accept?(dfa, state, buffer, ending, starting)
         acceptance = dfa.accepts[state].first
-        acceptance && (!acceptance.end_anchor || end_anchor_match?(buffer, position))
+        return false unless acceptance
+        return false if acceptance.bol_only && !@lexer.__flexr_beginning_of_line_at?(starting, @lexer.byte_pos)
+        return false unless @lexer.utf8_boundary?(ending)
+
+        !acceptance.end_anchor || end_anchor_match?(buffer, ending)
       end
 
       def trailing_dfa(pattern)
