@@ -28,6 +28,10 @@ instance as `self`.
 `text` is memoized for the current action. `last_location` uses the same span;
 `more` makes the span include all joined matches.
 
+`push_input(input, filename: nil)` queues another source for the next token
+boundary. The current action keeps its match text and location. See
+[input stack](runtime.md#input-stack) for EOF and location behavior.
+
 ## State methods
 
 | Method | Contract |

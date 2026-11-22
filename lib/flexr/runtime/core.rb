@@ -20,48 +20,19 @@ module Flexr
         input, chunk_size: chunk_size, max_buffer_size: max_buffer_size,
         retain_input: retain_input, filename: filename
       )
-      @string_input = input.is_a?(String)
-      @stable_input_end = input.bytesize if @string_input && input.frozen?
-      @valid_utf8_input = @string_input && input.frozen? && (config.encoding != Encoding::UTF_8 || begin
-        bytes = input.encoding == Encoding::UTF_8 ? input : input.dup.force_encoding(Encoding::UTF_8)
-        bytes.valid_encoding?
-      end)
-      @simple_location_input = @string_input && input.frozen? && retain_input &&
-        input.ascii_only? && !input.include?("\n")
       @retain_input = retain_input
       @filename = filename
       @error_mode = error_mode
       @token_kind = config.token_kind
       @accel_mode = config.options.fetch(:accel, :auto)
       @max_token_size = max_token_size.to_i
-      @token_limit_required = !@string_input || !input.frozen? || input.bytesize > @max_token_size
       @max_lookahead_size = (max_lookahead_size || max_token_size).to_i
       @max_state_stack = max_state_stack.to_i
       @max_steps = max_steps&.to_i
       @cancellation = cancellation.respond_to?(:arity) ? cancellation : cancellation&.method(:call)
       @steps = 0
-      @position = 0
-      @line = 1
-      @column = 1
-      @state = :initial
-      @state_stack = []
-      @pending = nil
-      @matched = nil
-      @match_start = 0
-      @match_end = 0
-      @text_start = 0
-      @text_line = 1
-      @text_column = 1
-      @bol = true
-      @more_start = nil
-      @more_line = nil
-      @more_column = nil
-      @more_requested = false
-      @non_progress_signatures = {}
-      @active_rule = nil
-      @eof_fired_states = {}
+      reset_input_cursor(input, config.encoding)
       @on_error = nil
-      @halted = false
       @interpreter = nil
       @generated_scanner = generated_runtime? && respond_to?(:scan_one, true)
     end
@@ -79,6 +50,7 @@ module Flexr
 
       loop do
         return nil if @halted
+        activate_pending_inputs if @__flexr_pending_inputs
         consume_step! if scan_steps_guarded?
 
         if eof? && @pending.nil?
@@ -95,6 +67,10 @@ module Flexr
             token = @pending
             @pending = nil
             return token if token
+            next
+          end
+          if @__flexr_input_frames
+            resume_suspended_input
             next
           end
           return nil
@@ -408,6 +384,27 @@ module Flexr
     end
 
     private
+
+    def reset_input_cursor(input, encoding)
+      @string_input = input.is_a?(String)
+      @stable_input_end = @string_input && input.frozen? ? input.bytesize : nil
+      @valid_utf8_input = @stable_input_end && (encoding != Encoding::UTF_8 || begin
+        bytes = input.encoding == Encoding::UTF_8 ? input : input.dup.force_encoding(Encoding::UTF_8)
+        bytes.valid_encoding?
+      end)
+      @simple_location_input = @stable_input_end && @retain_input && input.ascii_only? && !input.include?("\n")
+      @token_limit_required = !@stable_input_end || @stable_input_end > @max_token_size
+      @position = @match_start = @match_end = @text_start = 0
+      @line = @column = @text_line = @text_column = 1
+      @state = :initial
+      @state_stack = []
+      @pending = @matched = @active_rule = @__flexr_leading_trivia = nil
+      @bol = true
+      @more_start = @more_line = @more_column = nil
+      @more_requested = @halted = false
+      @non_progress_signatures = {}
+      @eof_fired_states = {}
+    end
 
     def execute(rule)
       return __flexr_generated_execute(rule) if generated_runtime? && respond_to?(:__flexr_generated_execute, true)
