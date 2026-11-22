@@ -29,6 +29,8 @@ produces them, including the Ruby distribution's license and notice.
 The first Run lazily creates a worker and downloads the runtime. Every run starts
 a new Ruby VM, loads the specification, compiles with flexr, executes its actions,
 and returns tokens, real diagnostics, DOT, trace steps, and generated Ruby.
+When the worker loads flexr, the version label shows the value that the gemspec
+uses for the bundled source.
 Prism 1.7.0 is available in the pinned Ruby 4.0.0 WASM build, so both runtime and
 generated execution are tested. The static DSL restrictions of `flexr check` and
 the generator apply. Specifications must be self-contained or use the bundled

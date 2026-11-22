@@ -15,7 +15,7 @@ export async function createRuntime(binary, assets) {
       validateState(request);
       const start = performance.now();
       const { vm } = await DefaultRubyVM(module, { consolePrint: false });
-      vm.eval(`require "json"; require "fileutils"
+      const flexrVersion = vm.eval(`require "json"; require "fileutils"
         ${rubyData(assets.files)}.each do |path, source|
           FileUtils.mkdir_p(File.dirname(path))
           File.write(path, source)
@@ -24,9 +24,10 @@ export async function createRuntime(binary, assets) {
         require "flexr/cli"
         require "flexr/trace"
         load "/app/playground.rb"
-      `);
+        Flexr::VERSION
+      `).toString();
       const startupMs = performance.now() - start;
-      ready(startupMs);
+      ready(startupMs, flexrVersion);
       const result = JSON.parse(vm.eval(`FlexrPlayground.run(${rubyData(request)})`).toString());
       return { ...result, startup_ms: startupMs };
     },
