@@ -572,3 +572,67 @@ The medians of three fresh processes passed on all engines.
 
 Runtime remained at 2.600 allocations per emitted token. Both JIT ratios have
 limited headroom, and the interpreter remains below the 0.30x target.
+
+## 2026-11-22: cache the direct scan layout per DFA
+
+The generated direct scanner gathers the start state, transition table,
+byte classes, acceptances, and rule array in its existing per-DFA cache.
+The scanner reuses that layout when it returns to a lexical state.
+The simple scan reads the cached layout instead of repeating the DFA
+lookups for every token.
+
+The comparison uses Ruby 4.0.9 on arm64-darwin25 and the 140,000-byte
+reference JSON workload, which emits 50,000 tokens. Baseline `e6dd953`
+and the updated scanner ran in alternating order. Each row reports medians
+from three runs with ten warmup and ten timed scans per engine.
+
+| Engine | Generated MB/s before → after | Generated/runtime before → after | Generated/handwritten before → after |
+|---|---:|---:|---:|
+| Interpreter | 2.265 → 2.422 | 1.115x → 1.184x | 0.286x → 0.315x |
+| YJIT | 7.424 → 8.149 | 1.144x → 1.198x | 0.753x → 0.868x |
+| ZJIT | 2.453 → 2.524 | 1.042x → 1.084x | 0.271x → 0.270x |
+
+The separate reference run used the same gate as the previous comparison.
+
+```sh
+FLEXR_BENCHMARK_CHECK_MATRIX=1 FLEXR_BENCHMARK_ITERATIONS=15 bundle exec rake bench:matrix
+```
+
+| Engine | Generated/runtime samples | Median | Generated/handwritten at the median |
+|---|---:|---:|---:|
+| Interpreter | 1.177x, 1.180x, 1.165x | 1.177x | 0.307x |
+| YJIT | 1.062x, 1.064x, 1.073x | 1.064x | 0.763x |
+| ZJIT | 1.034x, 1.068x, 1.060x | 1.060x | 0.274x |
+
+The interpreter crossed the 0.30x handwritten target in the reference
+run and all three paired samples. The reference matrix passed on all
+three engines. Runtime and generated allocations stayed at 2.600 and
+2.200 per emitted token.
+
+A separate interpreter screening run tested a preselected winning rule,
+early exit from a terminal accepting state, and their combination.
+The baseline measured 2.300 MB/s generated. The three variants measured
+2.304, 2.308, and 2.303 MB/s, respectively.
+
+A one-rule direct standalone sample measured 99,698 bytes before and
+99,760 bytes after. The ordinary standalone size checks passed for LF and
+CRLF source files.
+
+TOML, GraphQL, and SQL were also measured on temporary copies with
+`backend :direct`. The table reports generated MB/s before and after the
+change. Each measurement used five warmup and five timed scans.
+
+| Workload | Interpreter | YJIT | ZJIT |
+|---|---:|---:|---:|
+| TOML | 2.701 → 2.924 | 8.418 → 9.561 | 2.890 → 2.982 |
+| GraphQL | 1.655 → 1.791 | 5.244 → 5.899 | 1.784 → 1.871 |
+| SQL | 2.190 → 2.372 | 6.351 → 6.634 | 2.295 → 2.335 |
+
+SQL on ZJIT is the median of three follow-up runs with seven warmup and
+seven timed scans, alternating the two revisions. The initial pair
+slowed both runtime and generated scanners in the candidate process.
+In the follow-up, the generated/runtime medians were 1.024x and 1.035x.
+
+Runtime, generated, and standalone produced identical frozen-input
+token sequences on all three engines for the five stock workloads
+and the three direct variants.
