@@ -391,6 +391,10 @@ textarea {
 .graph-output svg { min-width: 20rem; max-width: none; }
 .back-link { display: inline-flex; margin-bottom: 1.5rem; color: var(--flexr-green); font-family: var(--sl-font-mono); font-size: 0.72rem; }
 
+.sidebar-pane a[aria-current="page"] {
+  color: var(--sl-color-text-invert);
+}
+
 .sl-markdown-content a,
 .sl-link-card a {
   color: var(--flexr-green);
