@@ -237,7 +237,9 @@ module Flexr
           node_name = "#{state_name}_#{state}"
           node = dot_quote(node_name)
           accepting = !dfa.accepts[state].empty?
-          label = dfa.accepts[state].map(&:rule_index).uniq.join(",")
+          label = dfa.accepts[state].map(&:rule_index).uniq.map do |index|
+            "#{index}#{channel_label(compiled.rules.fetch(index))}"
+          end.join(",")
           label = "#{node_name}\naccept=#{label}" unless label.empty?
           attributes = dot_node_attributes(label, accepting: accepting, accelerated: accelerated_states[state])
           out.puts "  #{node} [#{attributes}];"
@@ -289,7 +291,12 @@ module Flexr
           transitions = dfa.transitions[state].each_with_index.filter_map do |destination, class_id|
             destination && [class_id, destination]
           end
-          out.puts "  #{state}: accepts=#{accepts.inspect} transitions=#{transitions.inspect}"
+          channels = dfa.accepts[state].map(&:rule_index).uniq.filter_map do |index|
+            channel = channel_label(compiled.rules.fetch(index))
+            "#{index}#{channel}" if channel
+          end
+          labels = " channels=[#{channels.join(', ')}]" unless channels.empty?
+          out.puts "  #{state}: accepts=#{accepts.inspect} transitions=#{transitions.inspect}#{labels}"
         end
       end
       EXIT_OK
@@ -300,8 +307,12 @@ module Flexr
       rules = rules.select { |rule| rule.index == rule_number } if rule_number
       raise ArgumentError, "rule not found: #{rule_number}" if rules.empty? && rule_number
 
-      out.puts(rules.map { |rule| "rule #{rule.index}: #{rule.patterns.inspect}" })
+      out.puts(rules.map { |rule| "rule #{rule.index}#{channel_label(rule)}: #{rule.patterns.inspect}" })
       EXIT_OK
+    end
+
+    def channel_label(rule)
+      " channel=#{rule.channel.inspect}" if rule.channel
     end
 
     def print_input_trace(spec, options, trace_args, out)

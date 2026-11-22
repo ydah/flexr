@@ -161,7 +161,9 @@ module Flexr
       self
     end
 
-    def tokens
+    def tokens(channels: :default)
+      raise ArgumentError, "channels must be :default or :all" unless %i[default all].include?(channels)
+
       result = []
       while (token = next_token)
         result << token

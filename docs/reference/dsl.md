@@ -4,7 +4,7 @@ The DSL is extended onto a subclass of `Flexr::Lexer`. Class bodies are normal
 Ruby and may contain constants, methods, requires, comments, and ordinary
 expressions.
 
-## `rule(pattern, skip: false, emit: nil, followed_by: nil, &action)`
+## `rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, &action)`
 
 Registers one rule. `pattern` is a `Regexp`, `String`, or an array containing
 those values. A string is matched literally. Array members are alternatives of
@@ -22,6 +22,16 @@ token. Use a block when converting a value or changing lexer state.
 `followed_by:` accepts a `Regexp` or `String`. It participates in rule
 selection but is not consumed. The method returns `nil`. Rules are numbered in
 source order starting at zero.
+
+`channel:` accepts a symbol. The default is `:default`; other named
+channels preserve tokens as trivia for `tokens(channels: :all)`.
+`channel: :skip` is equivalent to `skip: true`, which discards the match
+in every consumer. `:all` selects channels when collecting tokens.
+With a trivia channel and no explicit action or `emit:`, the channel name
+becomes the token type and the matched text becomes the value.
+Static generation requires a symbol literal or a statically resolvable
+symbol constant for the channel name. With `--eval`, a Ruby expression can
+compute that symbol.
 
 ## `state(*names, inclusive: false, &block)`
 
@@ -47,7 +57,7 @@ state, or do nothing. It runs at most once per state for a lexer instance.
 
 ## `emits(*tokens)`
 
-Declares token names for diagnostics and parser integration. Arguments are
+Declares default-channel token names for diagnostics and parser integration. Arguments are
 flattened and converted to symbols. Duplicate names are removed. The method
 does not restrict `emit` at runtime.
 

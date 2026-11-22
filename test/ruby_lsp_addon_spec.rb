@@ -117,6 +117,22 @@ RSpec.describe "Ruby LSP flexr add-on" do
     end
   end
 
+  it "explains hidden token channels in rule hover without warnings" do
+    source = <<~RUBY
+      class EditorLexer < Flexr::Lexer
+        CHANNEL = :comment
+        rule(/#[^\\n]*/, channel: CHANNEL)
+      end
+    RUBY
+    open_server(source) do |server, uri|
+      server.process_message(id: 1, method: "textDocument/hover", params: {
+        textDocument: { uri: uri }, position: { line: 2, character: 3 }
+      })
+      hover = pop_result(server).response
+      expect(hover&.contents&.value).to include(":comment", "trivia")
+    end
+  end
+
   it "does not diagnose ordinary Ruby files or execute specification code" do
     source = "raise 'must not execute'\nclass EditorLexer < Flexr::Lexer\n  rule(/a(?=b)/, skip: true)\nend\n"
     open_server(source, path: "ordinary.rb") do |server, uri|
