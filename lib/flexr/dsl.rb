@@ -25,17 +25,22 @@ module Flexr
       @__flexr_compile_mutex = Monitor.new
     end
 
-    def rule(pattern, skip: false, emit: nil, followed_by: nil, &action)
+    def rule(pattern, skip: false, emit: nil, followed_by: nil, channel: :default, priority: 0, &action)
       __flexr_mutate! do
         patterns = normalize_patterns(pattern)
+        channel = Configuration.rule_channel!(channel)
+        skip ||= channel == :skip
+        channel = nil if skip || channel == :default
         rule_action = ActionResolver.resolve(
-          skip: skip, emit: emit, block: action, default: proc { emit(nil, text) }
+          skip: skip, emit: emit, block: action, default: channel ? [:emit, channel] : proc { emit(nil, text) }
         )
         states = @__flexr_state_stack.empty? ? [:initial] : @__flexr_state_stack.dup
         @__flexr_rules << IR::Rule.new(
           index: @__flexr_rules.length, patterns: patterns, trailing: normalize_trailing(followed_by),
-          action: rule_action, states: states, bol_only: false, end_anchor: nil
+          action: rule_action, states: states, bol_only: false, end_anchor: nil, channel: channel,
+          priority: Configuration.rule_priority!(priority)
         )
+        include Runtime::Channels if channel
       end
       nil
     end
