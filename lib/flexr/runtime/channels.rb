@@ -48,6 +48,7 @@ module Flexr
 
             trivia = @__flexr_leading_trivia
             @__flexr_leading_trivia = nil
+            trivia.concat(token.leading_trivia)
             return ChannelToken.new(**token.to_h, leading_trivia: trivia)
           end
         end

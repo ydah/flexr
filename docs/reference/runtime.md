@@ -49,6 +49,8 @@ selected. `tokens` always returns an array of token values.
 With trivia channels, `each_token` and `racc_next_token` expose the default
 channel just like `next_token`. Collect all channels from a fresh lexer to
 preserve the full stream. A lexer instance advances as tokens are consumed.
+When a rule delegates, its child contributes the default-channel token stream.
+Structured delegated tokens preserve the child's attached trivia.
 
 ## State and action context
 
