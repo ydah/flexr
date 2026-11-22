@@ -14,23 +14,28 @@ module Flexr
         nil
       end
 
-      def compiled(pattern, encoding:, options: nil, unicode: false)
+      def compiled(pattern, encoding:, options: nil, unicode: false, anchored: false)
         effective_options = options.nil? ? pattern.options : options
-        key = [pattern.source, effective_options, encoding, unicode]
+        key = [pattern.source, effective_options, encoding, unicode, anchored]
         return CACHE[key] if CACHE.key?(key)
 
-        parser = Regexp::Parser.new(pattern.source, options: effective_options, encoding: encoding, unicode: unicode)
-        source = source_for(parser.parse)
+        captures = !pattern.names.empty?
+        binary = captures && encoding == Encoding::BINARY
+        parser = Regexp::Parser.new(pattern.source, options: effective_options, encoding: encoding, unicode: unicode,
+                                   preserve_captures: captures)
+        source = source_for(parser.parse, binary: binary)
+        source = "\\A(?:#{source})\\z" if anchored
         regexp_options = effective_options & ~::Regexp::IGNORECASE
+        regexp_options |= ::Regexp::NOENCODING if binary
         CACHE[key] = ::Regexp.new(source, regexp_options).freeze
       end
 
-      def source_for(node)
+      def source_for(node, binary: false)
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor then ""
         when Regexp::AST::Fail then "(?!)"
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
-        when Regexp::AST::CodepointRange then codepoint_class([[node.lo, node.hi]])
+        when Regexp::AST::CodepointRange then character_class([[node.lo, node.hi]], binary: binary)
         when Regexp::AST::CharClass
           ranges = node.ranges.flat_map do |range|
             if range.first == Regexp::AST::Property
@@ -42,17 +47,30 @@ module Flexr
             end
           end
           ranges = complement(ranges) if node.negated
-          codepoint_class(ranges)
-        when Regexp::AST::Seq then node.children.map { |child| source_for(child) }.join
+          character_class(ranges, binary: binary)
+        when Regexp::AST::Seq then node.children.map { |child| source_for(child, binary: binary) }.join
         when Regexp::AST::Alt
-          "(?:#{node.children.map { |child| source_for(child) }.join('|')})"
-        when Regexp::AST::Star then "(?:#{source_for(node.child)})*"
+          "(?:#{node.children.map { |child| source_for(child, binary: binary) }.join('|')})"
+        when Regexp::AST::Star then "(?:#{source_for(node.child, binary: binary)})*"
         when Regexp::AST::Repeat
           maximum = node.maximum.nil? ? "" : node.maximum
-          "(?:#{source_for(node.child)}){#{node.minimum},#{maximum}}"
+          "(?:#{source_for(node.child, binary: binary)}){#{node.minimum},#{maximum}}"
+        when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, binary: binary)})"
+        when Regexp::AST::Absence
+          child = source_for(node.child, binary: binary)
+          return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child)
+
+          "(?~(?:#{child}))"
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"
         end
+      end
+
+      def character_class(ranges, binary:)
+        return codepoint_class(ranges) unless binary
+
+        bytes = ranges.filter_map { |lo, hi| [lo, [hi, 255].min] if lo <= 255 }
+        bytes.empty? ? "(?!)" : byte_class(bytes)
       end
 
       def byte_class(ranges)

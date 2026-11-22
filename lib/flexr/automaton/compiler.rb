@@ -390,6 +390,7 @@ module Flexr
             next unless regexp.is_a?(::Regexp)
 
             ast = parse_regexp(regexp)
+            prepare_capture_pattern(rule, index, regexp) unless regexp.names.empty?
             has_absence = Regexp::AST.absence?(ast)
             if has_absence && @spec.backend == :firstmatch
               diagnostic = Diagnostics.error("FLEXR-E014", "absence groups in rule patterns require a longest-match backend",
@@ -405,6 +406,20 @@ module Flexr
           e.diagnostic.location ||= rule.location if e.diagnostic
           raise
         end
+      end
+
+      def prepare_capture_pattern(rule, index, regexp)
+        encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
+        pattern = if @spec.backend == :firstmatch
+          regexp
+        else
+          Unicode::ReferenceRegexp.compiled(regexp, encoding: encoding, unicode: @spec.options[:unicode] == true, anchored: true)
+        end
+        (rule.capture_patterns ||= [])[index] = pattern
+      rescue RegexpError, EncodingError => e
+        diagnostic = Diagnostics.error("FLEXR-E014", "cannot replay named captures with Ruby",
+                                       note: e.message, help: "split the rule or use non-capturing groups")
+        raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
       end
 
       def validate_pattern_body(pattern, rule, index)

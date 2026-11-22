@@ -125,6 +125,59 @@ RSpec.describe "lexer indentation" do
     end
   end
 
+  it "keeps structural tokens eligible under parser expectations in every scanner mode" do
+    Dir.mktmpdir("flexr-layout-expectations") do |dir|
+      source = File.join(dir, "lexer.flexr.rb")
+      generated = File.join(dir, "lexer.generated.rb")
+      standalone = File.join(dir, "lexer.standalone.rb")
+      File.write(source, <<~'RUBY')
+        require "flexr"
+        class LayoutExpectationsFixture < Flexr::Lexer
+          indentation newline: :NL, indent: :IN, dedent: :OUT, brackets: ["()"]
+          rule(/ +/, channel: :space)
+          rule(/\n/, emits: :NL) { emit :NL }
+          rule(/[a-z]+/, emit: :WORD)
+          rule(%r{/[a-z]+/}, emit: :REGEXP)
+          rule("/", emit: :DIV)
+          rule(/[()]/, emit: :BRACKET)
+        end
+      RUBY
+      Flexr::Generator.new(source, output: generated, options: { backend: :direct }).generate
+      Flexr::Generator.new(source, output: standalone, options: { backend: :firstmatch, standalone: true }).generate
+      runner = <<~'RUBY'
+        require "json"
+        require "stringio"
+        load ARGV.fetch(0)
+        layout = LayoutExpectationsFixture.new(StringIO.new("a\n  b /x/\nc"), chunk_size: 1, retain_input: false)
+        requests = %i[WORD IN IN WORD DIV WORD DIV OUT OUT WORD]
+        outputs = requests.map do |type|
+          if type == :WORD && layout.byte_pos == 5
+            begin
+              layout.next_token(expect: "invalid")
+              abort "invalid expectations drained a layout token"
+            rescue ArgumentError => error
+              raise unless error.message.include?("expect:")
+            end
+          end
+          layout.next_token(expect: [type])
+        end
+        brackets = LayoutExpectationsFixture.new(StringIO.new("(\na\n)\nb"), chunk_size: 1, retain_input: false)
+        puts JSON.generate([outputs, Array.new(5) { brackets.next_token(expect: [:WORD]) }])
+      RUBY
+      expected = [
+        [%w[WORD a], ["NL", "\n"], ["IN", nil], %w[WORD b], %w[DIV /], %w[WORD x], %w[DIV /], ["NL", "\n"], ["OUT", nil], %w[WORD c]],
+        [["BRACKET", "("], %w[WORD a], ["BRACKET", ")"], ["NL", "\n"], %w[WORD b]]
+      ]
+      [source, generated, standalone].each do |path|
+        command = [RbConfig.ruby]
+        command << "-Ilib" unless path == standalone
+        stdout, stderr, status = Open3.capture3(*command, "-e", runner, path)
+        expect(status).to be_success, stderr
+        expect(JSON.parse(stdout)).to eq(expected)
+      end
+    end
+  end
+
   it "matches layout with CRLF and newline tokens that consume indentation in runtime, generated, and standalone lexers" do
     Dir.mktmpdir("flexr-indentation") do |dir|
       source = File.join(dir, "lexer.flexr.rb")

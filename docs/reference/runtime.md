@@ -31,11 +31,11 @@ must be positive.
 
 | Method | Result |
 |---|---|
-| `next_token` | One default-channel token, or `nil` at EOF |
+| `next_token(expect: nil)` | One default-channel token, or `nil` at EOF |
 | `tokens(channels: :default)` | Array containing the remaining default-channel tokens |
 | `tokens(channels: :all)` | Array containing the remaining tokens from every channel in input order |
 | `each_token` | Enumerator without a block; otherwise yields tokens and returns `self` |
-| `racc_next_token` | `[type, value]`, or `[false, "$end"]` at EOF |
+| `racc_next_token(expect: nil)` | `[type, value]`, or `[false, "$end"]` at EOF |
 | `input` | The currently retained input string |
 | `buffer` | Internal buffered input object; use only for integrations that need it |
 | `filename` | The configured filename |
@@ -49,6 +49,32 @@ selected. `tokens` always returns an array of token values.
 With trivia channels, `each_token` and `racc_next_token` expose the default
 channel just like `next_token`. Collect all channels from a fresh lexer to
 preserve the full stream. A lexer instance advances as tokens are consumed.
+
+## Parser token expectations
+
+Pass an array of token Symbols as `expect:` to select rules for one token
+request. A rule with `emit:` is eligible when its type is expected. For a
+keyword-table rule, flexr checks the exact spelling at each candidate's end
+and uses the resulting type. A rule with `emits:` is eligible when any of its
+declared types is expected. Skip and trivia rules and action blocks without
+annotations remain eligible. Use `nil` to make every rule eligible.
+
+Flexr applies the backend's usual ordering to eligible matches. For a
+longest-match lexer this includes trailing context and the usual tie
+breakers. A `firstmatch` lexer retains Ruby regexp alternative order and rule
+order. If no eligible rule matches input, normal error recovery applies.
+EOF actions also retain their normal behavior.
+
+Expectations restrict rule selection. A dynamic action can still emit any
+type it chooses, and a parser can validate the returned token in its current
+state. An empty array leaves skip, trivia, and unannotated rules eligible.
+
+In an indentation lexer, newline rules and configured bracket lexemes
+remain eligible. When the parser requests an indent or dedent, the lexer
+can use ordinary rule selection for the first content token of the line.
+That token stays queued while the lexer returns the layout tokens. A later
+expectation applies when the lexer scans new input.
+See [Ruby slash and JavaScript template examples](../how-to/parser-driven-lexing.md).
 
 ## Indentation tokens
 

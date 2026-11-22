@@ -9,24 +9,27 @@ module Flexr
         Regexp::Matcher.reference?(pattern, encoding: @config.encoding, unicode: @config.options[:unicode] == true)
       end
 
-      def scan_firstmatch(position)
+      def scan_firstmatch(position, expected)
         buffer = @lexer.buffer
         @rules.sort_by(&:index).each do |rule|
           next unless rule_active?(rule)
+          next if expected && !expected_rule?(rule, expected, buffer, position)
 
           matches = rule.patterns.each_with_index.filter_map do |pattern, pattern_index|
             condition = rule.pattern_conditions.fetch(pattern_index)
             next if condition.bol_only && !@lexer.beginning_of_line?
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            streamed_match(
+            match = streamed_match(
               regexp, buffer, position, reference: reference_pattern?(regexp),
               limit: :token, rule: rule
             )
-              &.then { |match| [match, condition] }
+            next unless match&.begin(0)&.zero?
+            next if expected && !expected_rule?(rule, expected, buffer, position, position + match[0].bytesize)
+
+            [match, condition]
           end
-          match, condition = matches.select { |candidate| candidate[0].begin(0).zero? }
-            .max_by { |candidate| candidate[0][0].bytesize }
+          match, condition = matches.max_by { |candidate| candidate[0][0].bytesize }
           next unless match
 
           end_position = position + match[0].bytesize
@@ -36,7 +39,9 @@ module Flexr
           next if rule.trailing && trailing.nil?
 
           ensure_token_size!(end_position, position, rule: rule)
-          return reusable_match(rule, position, end_position, end_position + (trailing || 0))
+          result = reusable_match(rule, position, end_position, end_position + (trailing || 0))
+          result.capture = rule.capture_patterns&.[](condition.pattern_index) && match
+          return result
         end
         nil
       end
