@@ -143,7 +143,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E013` | `reject` is not supported | Use states and `less` |
 | `FLEXR-E014` | Regexp construct is not DFA-compatible | Follow the diagnostic alternative |
 | `FLEXR-E017` | Pattern is not statically resolvable | Rewrite as a static expression or use trusted `--eval` |
-| `FLEXR-E018` | Rule pattern or trailing context has an invalid type | Use a regexp, string, or valid array |
+| `FLEXR-E018` | Rule pattern or trailing context has an invalid type | Use a regexp, string, pattern value, or valid array |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
 | `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
 | `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |
@@ -154,6 +154,19 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E026` | A cancellation callback stopped lexing | Resume with a new lexer when ready |
 | `FLEXR-E027` | An error callback returned an unknown action | Return `:skip`, `:raise`, `:token`, or `:halt` |
 | `FLEXR-E028` | A keyword spelling or declaration is invalid, or the base rule cannot consume the full spelling | Correct the spelling or widen a rule declared with the base `emit:` type |
+| `FLEXR-E029` | A pattern operation has an empty language | Review the operands or the terminator |
+
+### Pattern operations
+
+An empty intersection or difference reports `FLEXR-E029` at the rule.
+The diagnostic gives examples from the operand languages when they have
+matches. A difference between disjoint operands reports `FLEXR-W021`
+with an example accepted by the right operand.
+
+`flexr stats` includes each evaluated DFA operation and its operand,
+product, and result state counts. `FLEXR-W011` identifies a product that
+visits at least 16 states and more than doubles the larger operand. The
+`max_dfa_states` limit applies to operands, products, and the final DFA.
 
 ### Regexp rewrite help
 

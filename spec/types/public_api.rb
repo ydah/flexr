@@ -35,6 +35,12 @@ Flexr::Lexer.token_kind(:array)
 Flexr::Lexer.encoding(Encoding::UTF_8)
 Flexr::Lexer.option(:unicode)
 Flexr::Lexer.accel(:none)
+word = Flexr::Lexer.pattern(/[a-z]+/)
+reserved = Flexr::Lexer.pattern(%w[if end])
+# @type var named_word: Flexr::Pattern
+named_word = (word - reserved) & Flexr::Lexer.pattern(/.{1,8}/)
+Flexr::Lexer.rule(named_word | ".")
+Flexr::Lexer.rule(Flexr::Lexer.pattern("<") + Flexr::Lexer.upto(">"), skip: true)
 
 lexer = Flexr::Lexer.new("12", filename: "input.txt", max_steps: 1000)
 Flexr::Lexer.new("12", cancellation: -> { false })

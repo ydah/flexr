@@ -1,10 +1,12 @@
 import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { readStableFile, stableFiles } from './stable-release.mjs';
 
 const site = fileURLToPath(new URL('..', import.meta.url));
 const root = path.dirname(site);
 const output = path.join(site, 'public/playground-runtime');
+const useStable = process.env.FLEXR_PLAYGROUND_STABLE === '1';
 const files = {};
 async function collect(directory) {
   for (const entry of await readdir(path.join(root, directory), { withFileTypes: true })) {
@@ -13,7 +15,13 @@ async function collect(directory) {
     else if (entry.name.endsWith('.rb')) files[`/app/${relative}`] = await readFile(path.join(root, relative), 'utf8');
   }
 }
-await collect('lib');
+if (useStable) {
+  for (const filename of stableFiles('lib').filter(filename => filename.endsWith('.rb'))) {
+    files[`/app/${filename}`] = readStableFile(filename);
+  }
+} else {
+  await collect('lib');
+}
 files['/app/playground.rb'] = await readFile(path.join(site, 'ruby/playground.rb'), 'utf8');
 await mkdir(output, { recursive: true });
 const payload = JSON.stringify({ files });
@@ -25,7 +33,21 @@ const inputs = {
 };
 const presets = {};
 for (const [name, input] of Object.entries(inputs)) {
-  presets[name] = { source: await readFile(path.join(root, `examples/${name}/lexer.flexr.rb`), 'utf8'), input };
+  const filename = `examples/${name}/lexer.flexr.rb`;
+  const source = useStable ? readStableFile(filename) : await readFile(path.join(root, filename), 'utf8');
+  presets[name] = { source, input };
+}
+const updatedPresets = {
+  absence: '/* 前 */first /* another comment */second',
+  pattern: 'if ifx [[ababa end',
+  keywords: 'if iffy else end',
+};
+const releasedPresets = useStable ? stableFiles('site/ruby/presets') : null;
+for (const [name, input] of Object.entries(updatedPresets)) {
+  const filename = `site/ruby/presets/${name}.flexr.rb`;
+  if (releasedPresets && !releasedPresets.includes(filename)) continue;
+  const source = useStable ? readStableFile(filename) : await readFile(path.join(root, filename), 'utf8');
+  presets[name] = { source, input };
 }
 await writeFile(path.join(output, 'presets.json'), JSON.stringify(presets));
 const wasm = path.join(site, 'node_modules/@ruby/4.0-wasm-wasi/dist');

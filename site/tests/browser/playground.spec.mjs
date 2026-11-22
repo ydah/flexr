@@ -97,3 +97,17 @@ test('executes literal Unicode action values in runtime and generated modes', as
     expect(JSON.parse(await page.locator('#tokens').textContent())).toEqual([['TEXT', '前あ']]);
   }
 });
+
+test('offers the absence preset from the packaged lexer examples', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  await page.getByRole('combobox', { name: 'Choose a playground preset' }).selectOption('absence');
+  await expect(page.locator('#spec')).toHaveValue(/\(\?~/);
+  await expect(page.locator('#input')).toHaveValue(/first.*second/);
+});
+
+test('loads the keyword table preset from the packaged lexer examples', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  await page.getByRole('combobox', { name: 'Choose a playground preset' }).selectOption('keywords');
+  await expect(page.locator('#spec')).toHaveValue(/keywords %w\[if else end\]/);
+  await expect(page.locator('#input')).toHaveValue('if iffy else end');
+});

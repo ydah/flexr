@@ -32,6 +32,16 @@ RSpec.describe "keyword tables" do
     [Flexr::CLI.run(argv, out: out, err: err), out.string, err.string]
   end
 
+  def standalone_tokens(path, directory, input)
+    lexer = File.join(directory, "standalone.rb")
+    File.binwrite(lexer, Flexr::Generator.new(path, options: { standalone: true }).generate)
+    runner = File.join(directory, "run.rb")
+    File.binwrite(runner, "require_relative 'standalone'\nputs JSON.generate(KeywordLexer.new(ARGV.fetch(0)).tokens)\n")
+    out, err, result = Open3.capture3(RbConfig.ruby, "--disable-gems", runner, input)
+    expect(result).to be_success, err
+    JSON.parse(out)
+  end
+
   it "remaps exact accepted lexemes and preserves their values across execution modes" do
     input = "if ifx else élève :: yes true"
     expected = [[:IF, "if"], [:IDENT, "ifx"], [:ELSE, "else"], [:ÉLÈVE, "élève"], [:SCOPE, "::"],
@@ -47,13 +57,7 @@ RSpec.describe "keyword tables" do
       generated.module_eval(Flexr::Generator.new(path).generate, path)
       expect(generated::KeywordLexer.new(input).tokens).to eq(expected)
 
-      standalone = File.join(directory, "standalone.rb")
-      File.binwrite(standalone, Flexr::Generator.new(path, options: { standalone: true }).generate)
-      runner = File.join(directory, "run.rb")
-      File.binwrite(runner, "require_relative 'standalone'\nputs JSON.generate(KeywordLexer.new(ARGV.fetch(0)).tokens)\n")
-      out, err, result = Open3.capture3(RbConfig.ruby, "--disable-gems", runner, input)
-      expect(result).to be_success, err
-      expect(JSON.parse(out)).to eq(expected.map { |type, value| [type.to_s, value] })
+      expect(standalone_tokens(path, directory, input)).to eq(expected.map { |type, value| [type.to_s, value] })
     end
   end
 
@@ -137,6 +141,37 @@ RSpec.describe "keyword tables" do
       expect(scope::KeywordEvalLexer.new("if").tokens).to eq([[:IF, "if"]])
     ensure
       Object.send(:remove_const, :KeywordEvalLexer) if Object.const_defined?(:KeywordEvalLexer, false)
+    end
+  end
+
+  it "matches a named pattern before remapping keywords in runtime and static generation" do
+    code = <<~'RUBY'
+      class KeywordLexer < Flexr::Lexer
+        NAME = pattern(/[a-z]+/) - pattern("reserved")
+        rule(/\s+/, skip: true)
+        rule("reserved", emit: :RESERVED)
+        rule(NAME, emit: :IDENT)
+        keywords %w[if end], among: :IDENT
+        emits :RESERVED
+      end
+    RUBY
+    input = "if ifx reserved end"
+    expected = [[:IF, "if"], [:IDENT, "ifx"], [:RESERVED, "reserved"], [:END, "end"]]
+    with_spec(code) do |path, directory|
+      [code, Flexr::Generator.new(path).generate].each do |ruby|
+        scope = Module.new
+        scope.module_eval(ruby, path)
+        expect(scope::KeywordLexer.new(input).tokens).to eq(expected)
+      end
+      expect(standalone_tokens(path, directory, input)).to eq(expected.map { |type, value| [type.to_s, value] })
+      status, out, err = run_cli("check", path, "--format", "json")
+      expect(status).to eq(0), err
+      expect(JSON.parse(out)).to be_empty
+    end
+    with_spec(code.sub("%w[if end]", "%w[if reserved]")) do |path, _directory|
+      status, _out, err = run_cli("check", path, "--format", "json")
+      expect(status).to eq(1)
+      expect(JSON.parse(err).first).to include("code" => "FLEXR-E028", "note" => 'input "reserved"')
     end
   end
 
