@@ -56,6 +56,8 @@ jobs:
           ruby-version: "4.0"
       - run: bundle install
       - uses: rubygems/release-gem@5c53f5308233b7c0f47411f0471b3faae6fa57b2 # v1.4.2
+        with:
+          await-release: false
 
   github-release:
     needs: release
@@ -63,6 +65,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Confirm the gem is public on RubyGems
+        run: >-
+          curl --fail --silent --show-error --retry 8 --retry-all-errors
+          --retry-delay 5 --retry-max-time 90 --connect-timeout 5 --max-time 15
+          --output /dev/null
+          "https://rubygems.org/api/v2/rubygems/flexr/versions/${GITHUB_REF_NAME#v}.json"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
