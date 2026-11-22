@@ -3,7 +3,7 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
-## 1.2.0 (planned)
+## 1.2.0
 
 ### Upgrade to 2.0
 
