@@ -117,6 +117,22 @@ RSpec.describe "Ruby LSP flexr add-on" do
     end
   end
 
+  it "describes keyword remapping and identifies invalid spellings on keyword hover" do
+    source = <<~RUBY
+      class EditorLexer < Flexr::Lexer
+        rule(/[a-z]+/, emit: :IDENT)
+        keywords %w[if if!], among: :IDENT
+      end
+    RUBY
+    open_server(source) do |server, uri|
+      server.process_message(id: 1, method: "textDocument/hover", params: {
+        textDocument: { uri: uri }, position: { line: 2, character: 4 }
+      })
+      hover = pop_result(server).response
+      expect(hover.contents.value).to include("Keyword table", "FLEXR-E028", '"if!"')
+    end
+  end
+
   it "shows named pattern subtraction with its witness on rule hover" do
     source = <<~RUBY
       class EditorLexer < Flexr::Lexer

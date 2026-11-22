@@ -2,7 +2,7 @@
 
 module Flexr
   module DSL
-    DSL_METHODS = %i[rule pattern upto state all_states on_eof emits backend token_kind encoding option accel].freeze
+    DSL_METHODS = %i[rule pattern upto state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
     def inherited(child)
       super
       child.__flexr_reset!
@@ -121,6 +121,7 @@ module Flexr
         # The ivar is part of the generated/runtime class contract.
         @__flexr_compiled ||= begin
           compiled = Automaton::Compiler.new(__flexr_spec).compile
+          include Keywords::Emission if @__flexr_config.options[:keyword_tables]
           @__flexr_config.backend = auto_direct?(compiled) ? :direct : :table if @__flexr_config.backend == :auto
           freeze_specification!
           freeze_compiled!(compiled)
@@ -207,6 +208,16 @@ module Flexr
       @__flexr_eof_rules.freeze
       @__flexr_rules.freeze
       @__flexr_states.freeze
+      if (tables = @__flexr_config.options[:keyword_tables])
+        tables.each_value do |table|
+          table.each_value do |entry|
+            entry.last&.freeze
+            entry.freeze
+          end
+          table.freeze
+        end
+        tables.freeze
+      end
       @__flexr_config.options.freeze
       @__flexr_config.declared_tokens.freeze
       @__flexr_config.freeze

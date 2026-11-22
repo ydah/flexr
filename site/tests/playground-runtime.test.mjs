@@ -108,6 +108,18 @@ test('pattern algebra keeps overlapping delimiters and keywords distinct', async
   }
 });
 
+test('the keyword preset classifies exact identifiers in both modes', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  assert.ok(presets.keywords, 'keyword preset is packaged');
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ ...presets.keywords, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [
+      ['IF', 'if'], ['IDENT', 'iffy'], ['ELSE', 'else'], ['END', 'end'],
+    ]);
+  }
+});
+
 test('language presets use the repository examples and run in both modes', async () => {
   const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
   for (const name of ['toml', 'graphql', 'sql']) {

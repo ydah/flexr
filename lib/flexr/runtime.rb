@@ -40,6 +40,7 @@ require_relative "runtime/errors"
 require_relative "runtime/interpreter"
 require_relative "runtime/core"
 require_relative "dsl"
+require_relative "keywords"
 require_relative "lexer"
 require_relative "generated"
 

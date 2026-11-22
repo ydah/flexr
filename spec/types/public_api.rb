@@ -27,6 +27,9 @@ Flexr::Lexer.state(:quoted) { rule(/x/, emit: :X) }
 Flexr::Lexer.all_states { rule(/ /, skip: true) }
 Flexr::Lexer.on_eof { skip }
 Flexr::Lexer.emits(:INTEGER, :X)
+Flexr::Lexer.rule(/[a-z]+/, emit: :IDENT)
+Flexr::Lexer.keywords(%w[if else], among: :IDENT)
+Flexr::Lexer.keywords({ "yes" => :TRUE, "true" => :TRUE }, among: :IDENT)
 Flexr::Lexer.backend(:table)
 Flexr::Lexer.token_kind(:array)
 Flexr::Lexer.encoding(Encoding::UTF_8)

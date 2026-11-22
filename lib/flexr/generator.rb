@@ -268,6 +268,7 @@ module Flexr
 
     def generated_action_source(parsed, indent)
       lines = ["#{indent}def __flexr_generated_execute(rule)", "#{indent}  case rule.index"]
+      keyword_tables = parsed.config.dig(:options, :keyword_tables)
       parsed.rules.each do |rule|
         lines << "#{indent}  when #{rule.index}"
         body = inline_simple_action(rule.action_source) if rule.bind_action && !rule.reads_locals
@@ -275,7 +276,7 @@ module Flexr
           lines << "#{indent}    instance_exec(&self.class.__flexr_generated_actions.fetch(rule.index))"
           next
         end
-        body ||= inline_action_body(rule)
+        body ||= inline_action_body(rule, keyword_tables: keyword_tables)
         if body.nil?
           lines << "#{indent}    instance_exec(&rule.action)"
         else
@@ -289,15 +290,18 @@ module Flexr
       lines.join("\n")
     end
 
-    def inline_action_body(rule)
+    def inline_action_body(rule, keyword_tables: nil)
       action = rule.action
       case action
       when :skip
         ""
       when Array
-        return "emit(#{ruby_literal(action.fetch(1))}, text)" if action.first == :emit
+        return unless action.first == :emit
 
-        nil
+        type = action.fetch(1)
+        return keyword_action_body(type) if keyword_tables&.key?(type)
+
+        "emit(#{ruby_literal(type)}, text)"
       when String
         return inline_simple_action(rule.action_source) if rule.action_source
         return unless action.start_with?("proc")
@@ -312,6 +316,17 @@ module Flexr
 
         body.delete_prefix("do")[0...-3].strip
       end
+    end
+
+    def keyword_action_body(type)
+      literal = ruby_literal(type)
+      <<~RUBY
+        value = text
+        lexeme = @text_start == @match_start ? value : @buffer.byteslice(@match_start...@match_end)
+        lexeme = lexeme.dup.force_encoding(::Encoding::UTF_8) unless lexeme.encoding == ::Encoding::UTF_8
+        entry = self.class.__flexr_config.options.fetch(:keyword_tables).fetch(#{literal})[lexeme]
+        emit(entry ? entry.first : #{literal}, value)
+      RUBY
     end
 
     # Hash#inspect changed from hash rockets to keyword-style labels in Ruby
@@ -385,6 +400,10 @@ module Flexr
       # --eval is intentionally explicit; the generated file still contains
       # executable action source, but its metadata is deterministic for this run.
       parsed = klass.__flexr_spec
+      if (tables = parsed.options[:keyword_tables])
+        (passthrough.config[:options] ||= {})[:keyword_tables] = tables
+        passthrough.config[:declared_tokens] |= parsed.declared_tokens
+      end
       runtime_rules = parsed.rules.to_h { |rule| [rule.index, rule] }
       passthrough.rules.each do |rule|
         runtime_rule = runtime_rules.fetch(rule.index)

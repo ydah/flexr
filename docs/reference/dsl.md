@@ -108,6 +108,34 @@ Declares token names for diagnostics and parser integration. Arguments are
 flattened and converted to symbols. Duplicate names are removed. The method
 does not restrict `emit` at runtime.
 
+## `keywords(words, among:)`
+
+Remaps the token type of a winning rule declared with `emit: :TOKEN`. Pass
+the base type as `among:` and a nonempty array of exact UTF-8 spellings.
+Each spelling maps to its uppercase symbol. Use a hash of strings to symbols
+to choose names or assign the same type to several spellings.
+
+```ruby
+rule(/[a-z_][a-z0-9_]*/, emit: :IDENT)
+keywords %w[if else end], among: :IDENT
+keywords({ "yes" => :TRUE, "true" => :TRUE }, among: :IDENT)
+```
+
+`if` produces `[:IF, "if"]` and `ifx` produces `[:IDENT, "ifx"]`.
+The lookup is case-sensitive and runs after rule selection. Token text and
+locations stay the same, including text accumulated by `more`. The lookup
+uses the winning rule's own lexeme. Action blocks keep control of their
+emitted types. The table applies to matching `emit:` rules across lexical states.
+
+The base and mapped types are added to `emits` and checked by
+`check --grammar`. Multiple declarations can extend a table. A spelling
+may have only one mapped type within that table. Every spelling must
+match the full body of a rule with the base type, or compilation reports
+`FLEXR-E028`. A competing earlier rule can make a keyword unreachable,
+which is reported as `FLEXR-W022` when the DFA proves the shadowing.
+See [ADR 0030](../adr/0030-classify-keywords-after-matching.md) for the decision
+to keep keyword spellings out of the DFA.
+
 ## `backend(name)`
 
 Selects `:table`, `:direct`, `:auto`, or `:firstmatch`
