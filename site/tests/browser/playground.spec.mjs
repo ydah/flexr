@@ -66,6 +66,30 @@ test('shows source diagnostics and terminates runaway Ruby while the UI stays re
   await expect(page.getByText(`flexr ${flexrVersion}`, { exact: true })).toBeVisible();
 });
 
+test('prepares an issue draft from the run with its exact version and diagnostics', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  const prepare = page.getByRole('button', { name: 'Prepare issue draft' });
+  await expect(prepare).toBeDisabled();
+  const source = 'class ReportLexer < Flexr::Lexer\n rule(/a(?=b)/, emit: :A)\nend';
+  await page.locator('#spec').fill(source);
+  await page.locator('#input').fill('ab');
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await expect(page.locator('#diagnostics')).toContainText('FLEXR-E014', { timeout: 30_000 });
+  await page.locator('#input').fill('a later edit');
+  await prepare.click();
+  const link = page.getByRole('link', { name: 'Open GitHub issue form' });
+  const url = new URL(await link.getAttribute('href'));
+  expect(url.origin + url.pathname).toBe('https://github.com/ydah/flexr/issues/new');
+  const body = url.searchParams.get('body');
+  expect(body).toContain(`flexr ${flexrVersion}`);
+  expect(body).toContain('class ReportLexer');
+  expect(body).toContain('    ab\n');
+  expect(body).toContain('FLEXR-E014');
+  expect(body).not.toContain('a later edit');
+  await expect(page.getByRole('textbox', { name: 'Issue draft' })).toHaveValue(body);
+  await expect(page).toHaveURL(/\/flexr\/playground\/$/);
+});
+
 test('treats tokens and console text as text and disables worker network access', async ({ page }) => {
   await page.goto('/flexr/playground/');
   await page.locator('#spec').fill(`class Lexer < Flexr::Lexer

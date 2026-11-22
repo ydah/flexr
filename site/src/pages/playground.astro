@@ -52,8 +52,18 @@ const presets = JSON.parse(await readFile(new URL('../../public/playground-runti
         <pre id="tokens" class="workbench-output">Run a specification to see its token stream.</pre>
       </div>
       <div class="workbench-panel full">
-        <div class="panel-heading"><span>Diagnostics</span></div>
+        <div class="panel-heading">
+          <span>Diagnostics</span>
+          <button type="button" data-action="report" aria-expanded="false" aria-controls="issue-preview" disabled>Prepare issue draft</button>
+        </div>
         <pre id="diagnostics" class="workbench-output">Compiler warnings and source locations appear here.</pre>
+        <div id="issue-preview" hidden>
+          <label for="issue-body">Issue draft</label>
+          <textarea id="issue-body" rows="8" readonly></textarea>
+          <p>Review the source and input before opening the GitHub form.</p>
+          <p id="issue-manual-paste" hidden>Copy this draft and paste it into the GitHub form.</p>
+          <a id="issue-link" target="_blank" rel="noreferrer">Open GitHub issue form</a>
+        </div>
       </div>
       <div class="workbench-panel full">
         <div class="panel-heading"><span>Match decisions</span><span id="step-position">No scan steps.</span></div>
