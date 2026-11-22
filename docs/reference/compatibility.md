@@ -12,6 +12,12 @@
 Runtime mode does not require Prism. Generated mode uses Prism only while
 reading the source; normal generated output does not need the generator.
 
+## flexr 1.x maintenance
+
+The 1.x series receives fixes for critical bugs and security issues through
+March 31, 2027. Use the [migration guide](../migration-v2.md) to prepare an
+upgrade to 2.0. The 1.x runtime continues to support Ruby 3.1 and later.
+
 ## Matching and encoding
 
 UTF-8 and binary are the supported specification encodings. The automaton is

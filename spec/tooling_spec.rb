@@ -9,6 +9,23 @@ require_relative "../benchmark/run"
 RSpec.describe "verification tooling" do
   let(:root) { File.expand_path("..", __dir__) }
 
+  it "keeps golden verification independent of the release version" do
+    Tempfile.create(["flexr-golden-version-", ".rb"]) do |file|
+      file.binmode
+      file.write(<<~RUBY)
+        require "rake"
+        load "Rakefile"
+        Flexr.send(:remove_const, :VERSION)
+        Flexr.const_set(:VERSION, "99.0.0")
+        Rake::Task["golden:verify"].invoke
+      RUBY
+      file.flush
+      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", file.path, chdir: root)
+
+      expect(status).to be_success, stderr
+    end
+  end
+
   it "keeps golden, acceleration, and dogfood gates independent" do
     script = <<~RUBY
       require "rake"

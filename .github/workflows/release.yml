@@ -1,0 +1,93 @@
+name: Release gem
+
+on:
+  push:
+    tags:
+      - "v1.*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.1", "3.3", "4.0"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      - run: bundle install
+      - run: ruby tools/release_notes.rb "$GITHUB_REF_NAME" > /dev/null
+      - run: bundle exec rake test
+      - run: bundle exec rubocop
+        if: matrix.ruby == '4.0'
+      - name: Verify generated lexers
+        if: matrix.ruby != '3.1'
+        env:
+          FLEXR_BENCHMARK_PORTABLE: "1"
+        run: |
+          bundle exec rake docs:verify
+          bundle exec rake modes:equivalence golden:verify accel:equivalence dogfood:verify
+          bundle exec rake generated:verify unicode:verify examples:check
+          bundle exec rake test:differential fuzz
+          bundle exec rake bench:regression
+          sudo apt-get update && sudo apt-get install --yes graphviz
+          bundle exec rake dot:verify
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
+        with:
+          ruby-version: "4.0"
+      - run: bundle install
+      - uses: rubygems/release-gem@5c53f5308233b7c0f47411f0471b3faae6fa57b2 # v1.4.2
+        with:
+          await-release: false
+
+  github-release:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Confirm the gem is public on RubyGems
+        run: >-
+          curl --fail --silent --show-error --retry 8 --retry-all-errors
+          --retry-delay 5 --retry-max-time 90 --connect-timeout 5 --max-time 15
+          --output /dev/null
+          "https://rubygems.org/api/v2/rubygems/flexr/versions/${GITHUB_REF_NAME#v}.json"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
+        with:
+          ruby-version: "4.0"
+      - name: Create GitHub Release from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ruby tools/release_notes.rb "$GITHUB_REF_NAME" > "$RUNNER_TEMP/flexr-release-notes.md"
+          if [[ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null)" == false ]]; then
+            exit 0
+          fi
+          flags=()
+          if [[ ${GITHUB_REF_NAME#v} =~ [[:alpha:]] ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/flexr-release-notes.md" "${flags[@]}"
