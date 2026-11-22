@@ -8,6 +8,22 @@ const binary = await readFile(new URL('../node_modules/@ruby/4.0-wasm-wasi/dist/
 const assets = JSON.parse(await readFile(new URL('../public/playground-runtime/flexr.json', import.meta.url), 'utf8'));
 const runtime = await createRuntime(binary, assets);
 
+test('reports the loaded flexr version before a Ruby action can change it', async () => {
+  const versionSource = assets.files['/app/lib/flexr/version.rb'];
+  const expected = versionSource.match(/VERSION = "([^"]+)"/)[1];
+  const source = `class Lexer < Flexr::Lexer
+    rule(/a/) do
+      Flexr.send(:remove_const, :VERSION)
+      Flexr.const_set(:VERSION, 'edited')
+      emit :A, Flexr::VERSION
+    end
+  end`;
+  const versions = [];
+  const result = await runtime.run({ source, input: 'a', mode: 'runtime' }, (_startupMs, version) => versions.push(version));
+  assert.deepEqual(result.tokens, [['A', 'edited']]);
+  assert.deepEqual(versions, [expected]);
+});
+
 test('executes edited Ruby actions and generates a real scanner with Prism', async () => {
   const source = 'class Lexer < Flexr::Lexer\n emits :INT\n rule(/[0-9]+/) { emit :INT, text.to_i * 2 }\nend';
   const request = { source, input: '12', mode: 'runtime' };

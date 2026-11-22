@@ -7,6 +7,7 @@ const source = document.querySelector('#spec');
 const input = document.querySelector('#input');
 const mode = document.querySelector('#mode');
 const status = document.querySelector('#status');
+const versionLabel = document.querySelector('#flexr-version');
 const runButton = document.querySelector('[data-action="run"]');
 const stopButton = document.querySelector('[data-action="stop"]');
 const steps = document.querySelector('#step');
@@ -67,6 +68,7 @@ function display(result) {
 
 function run() {
   stop();
+  versionLabel.hidden = true;
   try {
     const state = validateState({ source: source.value, input: input.value, mode: mode.value });
     show('tokens', 'Running…');
@@ -97,6 +99,8 @@ function run() {
       if (data?.phase === 'ready' && !started) {
         started = true;
         clearTimeout(timer);
+        versionLabel.textContent = `flexr ${data.flexrVersion}`;
+        versionLabel.hidden = false;
         status.textContent = 'Running the specification in a worker…';
         timer = setTimeout(() => stop('Execution exceeded 5 seconds and was stopped. Reduce the specification or input.'), 5_000);
       } else if (data?.phase === 'error') {
