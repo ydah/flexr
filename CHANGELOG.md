@@ -3,6 +3,14 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## Unreleased
+
+### Added
+
+- Inspect DFA backup bounds per lexical state with `flexr explain`, `trace`,
+  and `dot`. Use `flexr check --warn all` to see a repeatable example for
+  states where the number of bytes read after an acceptance is unbounded.
+
 ## [2.2.0](https://github.com/ydah/flexr/compare/v2.1.0...v2.2.0)
 
 ### Added
