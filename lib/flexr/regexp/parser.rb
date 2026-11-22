@@ -16,11 +16,12 @@ module Flexr
 
       attr_reader :source
 
-      def initialize(source, options: 0, encoding: Encoding::UTF_8, unicode: false)
+      def initialize(source, options: 0, encoding: Encoding::UTF_8, unicode: false, capture_offsets: nil)
         @source = source
         @options = options
         @encoding = encoding
         @unicode = unicode
+        @capture_offsets = capture_offsets
         @index = 0
         @class_depth = 0
         offset = 0
@@ -136,7 +137,7 @@ module Flexr
           prefix = parse_group_prefix
           return AST::Empty.new(loc: span(starting)) if prefix == :global
         else
-          warn_capture
+          @capture_offsets&.push(@byte_offsets.fetch(starting))
         end
         node = parse_expression
         expect(")")
@@ -535,11 +536,6 @@ module Flexr
         return false unless node.respond_to?(:children)
 
         node.children.any? { |child| anchor_nested_in_alternative?(child) }
-      end
-
-      def warn_capture
-        # The parser intentionally treats captures as non-capturing. Diagnostics
-        # are exposed by the source compiler where a source location is known.
       end
 
       def reject_postfix_quantifier

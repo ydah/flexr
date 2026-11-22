@@ -15,6 +15,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | Command | Purpose | Main output |
 |---|---|---|
 | `check SPEC` | Compile and render diagnostics | Human or JSON diagnostics |
+| `fix SPEC` | Apply supported diagnostic fixes | Updated spec, or full source with `--dry-run` |
 | `stats SPEC` | Report DFA states, byte classes, and table sizes | JSON |
 | `tokens SPEC` | Print names declared by `emits` | Space-separated names |
 | `dot SPEC` | Render the DFA as Graphviz DOT | DOT on stdout |
@@ -46,6 +47,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--format FMT` | `human`, `json`, `lrama` | `lrama` is for tokens only |
 | `--grammar PATH` | Grammar path | Compare `%token` names with `emits` during check |
 | `--target 2.0` | none | Static check migration requirements and structured-token declarations |
+| `--dry-run` | Flag | Preview fixes on stdout |
 | `--rule N` | Non-negative integer | Explain |
 | `--input STRING` | Literal input, including an empty string | Trace |
 | `--input-file PATH` | Input file | Trace and bench |
@@ -56,7 +58,7 @@ The complete help output is kept as a checked snapshot:
 <!-- flexr-help:start -->
 Usage: flexr [COMMAND] SPEC.rb [options]
 
-Commands: check, stats, tokens, dot, explain, trace, bench, import
+Commands: check, fix, stats, tokens, dot, explain, trace, bench, import
 Options:
   -o, --output PATH          generated output path
   -b, --backend NAME         table | direct | firstmatch | auto
@@ -76,7 +78,18 @@ Options:
       --input-file PATH       trace or benchmark input
       --generated             trace generated scanner
       --target 2.0            report migration requirements (static check only)
+      --dry-run               print the fixed spec without writing (fix only)
 <!-- flexr-help:end -->
+
+## Automatic fixes
+
+`flexr fix lexer.flexr.rb --dry-run` prints the proposed Ruby source.
+Run `flexr fix lexer.flexr.rb` to apply it. The command validates the resulting
+specification before saving and preserves its line endings.
+
+For `FLEXR-W013`, the command replaces ordinary capturing groups in direct
+regexp rule arguments with non-capturing groups on DFA backends. It reads the
+specification statically and leaves `firstmatch` rules untouched.
 
 ## Input trace
 

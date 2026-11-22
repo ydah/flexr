@@ -5,7 +5,7 @@ require_relative "runtime" unless defined?(Flexr::Lexer)
 module Flexr
   Options = Struct.new(
     :backend, :token_kind, :accel, :standalone, :eval_mode, :table_compression,
-    :table_format, :max_dfa_states, :warn_level, :warn_as_error, :color, :format, :overrides, :grammar, :target,
+    :table_format, :max_dfa_states, :warn_level, :warn_as_error, :color, :format, :overrides, :grammar, :target, :dry_run,
     keyword_init: true
   ) do
     def self.default

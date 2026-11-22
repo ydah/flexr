@@ -9,7 +9,7 @@ require_relative "migration"
 
 module Flexr
   module CLI
-    COMMANDS = %w[check stats tokens dot explain trace bench import].freeze
+    COMMANDS = %w[check fix stats tokens dot explain trace bench import].freeze
     EXIT_OK = 0
     EXIT_FAILURE = 1
     EXIT_USAGE = 2
@@ -73,7 +73,11 @@ module Flexr
         when "--standalone"
           options.set(:standalone, true)
         when "--eval"
+          raise ArgumentError, "fix requires a statically readable spec" if command == :fix
           options.eval_mode = true
+        when "--dry-run"
+          raise ArgumentError, "--dry-run is only valid for fix" unless command == :fix
+          options.dry_run = true
         when "--table-compression"
           options.set(:table_compression, required_argument!(args, argument).to_sym)
         when "--table-format"
@@ -136,6 +140,8 @@ module Flexr
       case command
       when :check
         check(spec, options, out)
+      when :fix
+        fix(spec, options, out)
       when :stats
         print_stats(spec, options, out)
       when :tokens
@@ -177,6 +183,25 @@ module Flexr
                       options: options.generator_options).generate
         EXIT_OK
       end
+    end
+
+    def fix(spec, options, out)
+      require_relative "source/fixes"
+      path = File.realpath(spec)
+      parsed = read_spec(path)
+      diagnostics = compile(parsed, overrides: { warn_level: :all }).diagnostics
+      edits = Source::Fixes.capture_edits(parsed, diagnostics)
+      fixed = Source::Fixes.apply(parsed.source, edits)
+      compile(Source::PrismReader.new(fixed, path: path).read) unless edits.empty?
+
+      if options.dry_run
+        out.write(fixed)
+      elsif !edits.empty?
+        raise CompileError, "spec changed while preparing fixes: #{spec}" unless File.binread(path) == parsed.source.b
+
+        ArtifactWriter.write!(path, fixed)
+      end
+      EXIT_OK
     end
 
     def check(spec, options, out)
@@ -461,7 +486,7 @@ module Flexr
       out.puts <<~USAGE
         Usage: flexr [COMMAND] SPEC.rb [options]
 
-        Commands: check, stats, tokens, dot, explain, trace, bench, import
+        Commands: check, fix, stats, tokens, dot, explain, trace, bench, import
         Options:
           -o, --output PATH          generated output path
           -b, --backend NAME         table | direct | firstmatch | auto
@@ -481,6 +506,7 @@ module Flexr
               --input-file PATH       trace or benchmark input
               --generated             trace generated scanner
               --target 2.0            report migration requirements (static check only)
+              --dry-run               print the fixed spec without writing (fix only)
       USAGE
       status
     end
