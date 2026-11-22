@@ -189,8 +189,15 @@ module Flexr
       require_relative "source/fixes"
       path = File.realpath(spec)
       parsed = read_spec(path)
-      diagnostics = compile(parsed, overrides: { warn_level: :all }).diagnostics
-      edits = Source::Fixes.capture_edits(parsed, diagnostics)
+      edits = begin
+        compiled = compile(parsed, overrides: { warn_level: :all })
+        Source::Fixes.edits(parsed, compiled)
+      rescue CompileError => e
+        repairs = Source::Fixes.regexp_edits(parsed, e.diagnostic)
+        raise if repairs.empty?
+
+        repairs
+      end
       fixed = Source::Fixes.apply(parsed.source, edits)
       compile(Source::PrismReader.new(fixed, path: path).read) unless edits.empty?
 

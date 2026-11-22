@@ -13,14 +13,18 @@ module RubyLsp
         return @diagnostics if @source == source
 
         @channels = {}
-        @capture_edits = []
+        @edits = []
         diagnostics = begin
           parsed = ::Flexr::Source::PrismReader.new(source).read
           parsed.rules.each { |rule| @channels[rule.span.first] = rule.channel if rule.channel }
           compiled = ::Flexr::CLI.compile(parsed, overrides: { warn_level: :all })
-          @capture_edits = ::Flexr::Source::Fixes.capture_edits(parsed, compiled.diagnostics)
-          compiled.diagnostics.reject { |diagnostic| diagnostic.code == "FLEXR-W016" }
+          @edits = ::Flexr::Source::Fixes.edits(parsed, compiled)
+          diagnostics = compiled.diagnostics.reject { |diagnostic| diagnostic.code == "FLEXR-W016" }
+          tables = parsed.config.dig(:options, :keyword_tables)
+          diagnostics.concat(::Flexr::Automaton::KeywordTables.grouping_suggestions(compiled, tables)) if @edits.any? { |edit| edit.code == "FLEXR-I003" }
+          diagnostics
         rescue ::Flexr::Error => e
+          @edits = ::Flexr::Source::Fixes.regexp_edits(parsed, e.diagnostic)
           e.diagnostic ? [e.diagnostic] : []
         rescue ArgumentError => e
           [::Flexr::Diagnostics.error("FLEXR-E017", e.message, location: [0, 0])]
@@ -33,11 +37,11 @@ module RubyLsp
         @channels[offset]
       end
 
-      def capture_edits(diagnostic)
-        return [] unless diagnostic.code == "FLEXR-W013" && diagnostic.location
+      def edits(diagnostic)
+        return [] unless diagnostic.location
 
         first, last = diagnostic.location
-        @capture_edits.select { |edit| edit.range.begin.between?(first, last) }
+        @edits.select { |edit| edit.code == diagnostic.code && edit.range.begin.between?(first, last) }
       end
 
       def message(diagnostic)
@@ -63,23 +67,26 @@ module RubyLsp
           Interface::Diagnostic.new(
             range: range(source, first, last),
             message: @analysis.message(diagnostic), code: diagnostic.code, severity: severity, source: "flexr",
-            data: code_action_data(uri, source, diagnostic)
+            data: code_action_data(uri, document, diagnostic)
           )
         end
       end
 
       private
 
-      def code_action_data(uri, source, diagnostic)
-        edits = @analysis.capture_edits(diagnostic)
+      def code_action_data(uri, document, diagnostic)
+        edits = @analysis.edits(diagnostic)
         return if edits.empty?
 
+        source = document.source
         changes = edits.map do |edit|
           Interface::TextEdit.new(range: range(source, edit.range.begin, edit.range.end), new_text: edit.replacement)
         end
+        versioned_document = Interface::OptionalVersionedTextDocumentIdentifier.new(uri: uri.to_s, version: document.version)
+        document_edit = Interface::TextDocumentEdit.new(text_document: versioned_document, edits: changes)
         action = Interface::CodeAction.new(
-          title: "Use non-capturing groups", kind: Constant::CodeActionKind::QUICK_FIX,
-          edit: Interface::WorkspaceEdit.new(changes: { uri.to_s => changes })
+          title: ::Flexr::Source::Fixes::TITLES.fetch(diagnostic.code), kind: Constant::CodeActionKind::QUICK_FIX,
+          edit: Interface::WorkspaceEdit.new(document_changes: [document_edit])
         )
         { code_actions: [action] }
       end

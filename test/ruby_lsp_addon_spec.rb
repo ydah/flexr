@@ -71,7 +71,10 @@ RSpec.describe "Ruby LSP flexr add-on" do
       action = pop_result(server).response.find { |entry| entry[:kind] == "quickfix" }
       expect(action).to include(
         title: "Use non-capturing groups",
-        edit: { changes: { uri.to_s.to_sym => [{ range: { start: position, end: position }, newText: "?:" }] } }
+        edit: { documentChanges: [{
+          textDocument: { uri: uri.to_s, version: 1 },
+          edits: [{ range: { start: position, end: position }, newText: "?:" }]
+        }] }
       )
     end
   end

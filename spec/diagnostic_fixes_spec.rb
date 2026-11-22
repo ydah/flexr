@@ -48,4 +48,72 @@ RSpec.describe "diagnostic fixes" do
       expect(File.binread(path)).to eq(source)
     end
   end
+
+  it "groups adjacent keywords and preserves both token types and values" do
+    source = <<~RUBY
+      class GroupedKeywordLexer < Flexr::Lexer
+        rule("if", emit: :IF)
+        rule("end", emit: :END)
+        rule(/[a-z]+/, emit: :IDENT)
+        rule(" ", skip: true)
+      end
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      File.binwrite(path, source)
+      errors = StringIO.new
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      fixed = File.binread(path)
+      expect(fixed).to include('keywords ["if", "end"], among: :IDENT')
+      expect(fixed).not_to include('rule("if"', 'rule("end"')
+      [source, fixed].each do |definition|
+        lexer = Module.new.tap { |scope| scope.module_eval(definition, path) }.const_get(:GroupedKeywordLexer)
+        expect(lexer.new("if iffy end").tokens).to eq([[:IF, "if"], [:IDENT, "iffy"], [:END, "end"]])
+      end
+    end
+  end
+
+  it "exposes a shadowed literal without making the covering rule unreachable" do
+    source = <<~RUBY
+      class RepairPriorityLexer < Flexr::Lexer
+        rule(/[a-z]+/, emit: :IDENT, priority: 7)
+        rule("if", emit: :IF)
+        rule(" ", skip: true)
+      end
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      File.binwrite(path, source)
+      errors = StringIO.new
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      fixed = File.binread(path)
+      expect(fixed).to include('rule("if", emit: :IF, priority: 8)')
+      lexer = Module.new.tap { |scope| scope.module_eval(fixed, path) }.const_get(:RepairPriorityLexer)
+      expect(lexer.new("if iffy").tokens).to eq([[:IF, "if"], [:IDENT, "iffy"]])
+
+      duplicate = source.sub("/[a-z]+/", '"if"')
+      File.binwrite(path, duplicate)
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      expect(File.binread(path)).to eq(duplicate)
+    end
+  end
+
+  it "rewrites a lazy quoted pattern to stop at its first delimiter" do
+    source = <<~RUBY
+      class RepairAbsenceLexer < Flexr::Lexer
+        rule(/".*?"/m, emit: :STRING)
+        rule(" ", skip: true)
+      end
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      File.binwrite(path, source)
+      errors = StringIO.new
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      fixed = File.binread(path)
+      expect(fixed).to include('rule(/"(?~")"/m,')
+      lexer = Module.new.tap { |scope| scope.module_eval(fixed, path) }.const_get(:RepairAbsenceLexer)
+      expect(lexer.new(%("a\n" "b")).tokens).to eq([[:STRING, %("a\n")], [:STRING, '"b"']])
+    end
+  end
 end

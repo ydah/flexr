@@ -87,9 +87,17 @@ Options:
 Run `flexr fix lexer.flexr.rb` to apply it. The command validates the resulting
 specification before saving and preserves its line endings.
 
-For `FLEXR-W013`, the command replaces ordinary capturing groups in direct
-regexp rule arguments with non-capturing groups on DFA backends. It reads the
-specification statically and leaves `firstmatch` rules untouched.
+The command reads the specification statically. Ruby LSP offers the same edits
+as quick fixes for DFA backends.
+
+- `FLEXR-W013` makes ordinary groups in direct regexp rule arguments non-capturing.
+- `FLEXR-W001` raises the priority of a shadowed literal with `emit:` when the
+  DFA shows that every previous winner can still win elsewhere. After the
+  change, the literal emits its own token type on equal-length matches.
+- `FLEXR-E014` rewrites a quoted lazy dot-star to an absence group that stops
+  at the first closing quote. It preserves the regexp's newline handling.
+- `FLEXR-I003` groups adjacent literal rules into a keyword table when the
+  compiler verifies the change and there are no intervening comments.
 
 ## Input trace
 
