@@ -118,6 +118,50 @@ RSpec.describe "dynamic delimiters" do
     expect { lexer.next_token }.to raise_error(ArgumentError, /rule action/)
   end
 
+  it "keeps action scope closed after restoring a checkpoint recorded inside an action" do
+    bookmark = nil
+    lexer = Class.new(Flexr::Lexer) do
+      rule("a") do
+        bookmark = checkpoint
+        emit :A
+      end
+      rule("!", emit: :BANG)
+    end.new("a!")
+
+    expect(lexer.next_token).to eq([:A, "a"])
+    lexer.restore(bookmark)
+    expect { lexer.scan_until("!") }.to raise_error(ArgumentError, /rule action/)
+    expect(lexer.next_token).to eq([:BANG, "!"])
+  end
+
+  it "returns a missing delimiter at the active child's EOF before resuming the parent input" do
+    lexer = Class.new(Flexr::Lexer) do
+      token_kind :struct
+      rule("+") { push_input(StringIO.new("!child"), filename: "inner.lex") }
+      rule("!") { emit :BODY, scan_until("END") }
+      rule("END", emit: :PARENT)
+      rule(/[a-z]+/, emit: :WORD)
+    end.new(StringIO.new("+END"), filename: "outer.lex", chunk_size: 1, retain_input: false)
+
+    tokens = lexer.tokens
+    expect(tokens.map { |token| [token.type, token.value, token.location.filename] }).to eq(
+      [[:BODY, nil, "inner.lex"], [:WORD, "child", "inner.lex"], [:PARENT, "END", "outer.lex"]]
+    )
+  end
+
+  it "retains child token order when a capture action also scans a dynamic delimiter" do
+    child = Class.new(Flexr::Lexer) { rule(/[a-z]/, emit: :LETTER) }
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/<(?<code>[a-z]+)>/) do
+        delegate child, capture: :code
+        emit :BODY, scan_until("!")
+      end
+      rule("z", emit: :TAIL)
+    end.new(StringIO.new("<ab>tail!z"), chunk_size: 1, retain_input: false)
+
+    expect(lexer.tokens).to eq([[:LETTER, "a"], [:LETTER, "b"], [:BODY, "tail"], [:TAIL, "z"]])
+  end
+
   it "honors the token and work limits with context from the active rule" do
     lexer = Class.new(Flexr::Lexer) do
       rule("!") { emit :BODY, scan_until("END") }

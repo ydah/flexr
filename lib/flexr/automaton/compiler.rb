@@ -15,6 +15,7 @@ module Flexr
         @regexp_asts = {}
         @differences = {}
         @empty_absence_rules = {}
+        @priorities = @spec.rules.to_h { |rule| [rule.index, rule.priority] }
         @pattern_dfas = {}
         @pattern_stats = {}
         @pattern_diagnostics = []
@@ -353,7 +354,9 @@ module Flexr
         rules = each_state_id(set).with_object([]) do |state, result|
           result.concat(nfa.states[state].accepts)
         end
-        rules.uniq.sort_by { |acceptance| [acceptance.rule_index, acceptance.pattern_index] }
+        rules.uniq.sort_by do |acceptance|
+          [-@priorities.fetch(acceptance.rule_index, 0), acceptance.rule_index, acceptance.pattern_index]
+        end
       end
 
       def each_state_id(set)
@@ -370,6 +373,11 @@ module Flexr
       def validate_rules
         @spec.rules.each do |rule|
           raise CompileError, "rule #{rule.index} has no pattern" if rule.patterns.empty?
+          if @spec.backend == :firstmatch && !rule.priority.zero?
+            diagnostic = Diagnostics.error("FLEXR-E018", "explicit priority requires a longest-match backend",
+                                           help: "use backend :table, :direct, or :auto")
+            raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
+          end
           validate_trailing(rule) if rule.trailing
 
           rule.patterns.each_with_index do |pattern, index|
@@ -382,6 +390,7 @@ module Flexr
             next unless regexp.is_a?(::Regexp)
 
             ast = parse_regexp(regexp)
+            prepare_capture_pattern(rule, index, regexp) unless regexp.names.empty?
             has_absence = Regexp::AST.absence?(ast)
             if has_absence && @spec.backend == :firstmatch
               diagnostic = Diagnostics.error("FLEXR-E014", "absence groups in rule patterns require a longest-match backend",
@@ -397,6 +406,20 @@ module Flexr
           e.diagnostic.location ||= rule.location if e.diagnostic
           raise
         end
+      end
+
+      def prepare_capture_pattern(rule, index, regexp)
+        encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
+        pattern = if @spec.backend == :firstmatch
+          regexp
+        else
+          Unicode::ReferenceRegexp.compiled(regexp, encoding: encoding, unicode: @spec.options[:unicode] == true, anchored: true)
+        end
+        (rule.capture_patterns ||= [])[index] = pattern
+      rescue RegexpError, EncodingError => e
+        diagnostic = Diagnostics.error("FLEXR-E014", "cannot replay named captures with Ruby",
+                                       note: e.message, help: "split the rule or use non-capturing groups")
+        raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
       end
 
       def validate_pattern_body(pattern, rule, index)
@@ -449,7 +472,7 @@ module Flexr
       def diagnostics_for(compiled, elapsed)
         diagnostics = []
         present = compiled.machines.values.flat_map do |machine|
-          machine.dfa.accepts.filter_map { |acceptances| acceptances.min_by(&:rule_index)&.rule_index }
+          machine.dfa.accepts.filter_map { |acceptances| acceptances.first&.rule_index }
         end
         shadowers = shadowed_rules(compiled)
         rules_by_index = @spec.rules.to_h { |rule| [rule.index, rule] }
@@ -580,20 +603,27 @@ module Flexr
 
               winner, length = result
             end
-            selected = Diagnostics.rule_label(rules_by_index.fetch(winner))
+            winner_rule = rules_by_index.fetch(winner)
+            selected = Diagnostics.rule_label(winner_rule)
             state = state_name == :initial ? "" : " in state #{state_name.inspect}"
             size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
+            tie = priority_tie_reason(winner_rule, rule)
             reason = if has_trailing
-              priority = @spec.backend == :firstmatch ? "first match wins" : "same total length, earlier rule wins"
-              "#{priority}; matched #{size}, looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}"
+              selection = @spec.backend == :firstmatch ? "first match wins" : "same total length, #{tie}"
+              "#{selection}; matched #{size}, looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}"
             elsif @spec.backend == :firstmatch
               "first match wins, matched #{size}"
             else
-              "#{size}, earlier rule wins"
+              "#{size}, #{tie}"
             end
             match_size = has_trailing ? "total length" : "length"
+            help = if winner_rule.priority == rule.priority
+              "reorder the rules if the later rule should take priority"
+            else
+              "raise the losing rule's priority if it should win equal-length matches"
+            end
             Diagnostics.info("FLEXR-I001", "#{Diagnostics.rule_label(rule)} overlaps #{selected} at the same #{match_size}",
-                             location: rule.location, help: "reorder the rules if the later rule should take priority",
+                             location: rule.location, help: help,
                              note: "example: #{input.inspect} selects #{selected}#{state} (#{reason})")
           end
         end
@@ -644,19 +674,33 @@ module Flexr
             examples[index] = [input, winner, state_name, length, lookahead]
           end
         end
-        examples.transform_values do |input, winner, state_name, length, lookahead|
+        examples.to_h do |index, (input, winner, state_name, length, lookahead)|
+          winner_rule = rules_by_index.fetch(winner)
+          rule = rules_by_index.fetch(index)
           state = state_name == :initial ? "" : " in state #{state_name.inspect}"
           reason = if @spec.backend == :firstmatch
             "first match wins, matched #{length} #{length == 1 ? 'byte' : 'bytes'}"
           elsif lookahead
-            "longest total match, then rule order; matched #{length} #{length == 1 ? 'byte' : 'bytes'}"
+            size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
+            selection = if winner_rule.priority == rule.priority
+              "longest total match, then rule order"
+            else
+              "longest total match, then priority #{winner_rule.priority} and rule order"
+            end
+            "#{selection}; matched #{size}"
           else
-            "same length, earlier rule wins"
+            "same length, #{priority_tie_reason(winner_rule, rule)}"
           end
           reason += ", looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}" if lookahead
-          note = "example: #{input.inspect} selects #{Diagnostics.rule_label(rules_by_index.fetch(winner))}#{state} (#{reason})"
-          { note: note, winner: winner }
+          note = "example: #{input.inspect} selects #{Diagnostics.rule_label(winner_rule)}#{state} (#{reason})"
+          [index, { note: note, winner: winner }]
         end
+      end
+
+      def priority_tie_reason(winner, loser)
+        return "earlier rule wins" if winner.priority == loser.priority
+
+        "priority #{winner.priority} beats #{loser.priority}"
       end
 
       def diagnostic_trailing_dfas(rules)
@@ -674,7 +718,7 @@ module Flexr
         shadowers = Hash.new { |hash, key| hash[key] = [] }
         compiled.machines.each_value do |machine|
           machine.dfa.accepts.each do |acceptances|
-            winner = acceptances.min_by(&:rule_index)&.rule_index
+            winner = acceptances.first&.rule_index
             next unless winner
 
             acceptances.each do |acceptance|
@@ -729,6 +773,8 @@ module Flexr
         return {} if declared.empty?
 
         emitted = @spec.rules.each_with_object({}) do |rule, rules_by_token|
+          next if rule.channel
+
           action = rule.action
           tokens = if action.is_a?(Array) && action.first == :emit
             [action.last]

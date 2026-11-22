@@ -41,6 +41,8 @@ test('packages the released lexer and presets when building the public Playgroun
     await write('site/ruby/presets/absence.flexr.rb', '# Main absence preset\n');
     await write('site/ruby/presets/pattern.flexr.rb', '# Main pattern preset\n');
     await write('site/ruby/presets/keywords.flexr.rb', '# Main keyword preset\n');
+    await write('site/ruby/presets/trivia.flexr.rb', '# Main trivia preset\n');
+    await write('site/ruby/presets/priority.flexr.rb', '# Main priority preset\n');
     await cp(new URL('../scripts/', import.meta.url), path.join(site, 'scripts'), { recursive: true });
     for (const asset of ['ruby+stdlib.wasm', 'LICENSE', 'NOTICE']) {
       await write(`site/node_modules/@ruby/4.0-wasm-wasi/dist/${asset}`, '');
@@ -51,6 +53,8 @@ test('packages the released lexer and presets when building the public Playgroun
     assert.equal((await readAsset('presets.json')).toml.source, '# Main TOML\n');
     assert.equal((await readAsset('presets.json')).absence.source, '# Main absence preset\n');
     assert.equal((await readAsset('presets.json')).keywords.source, '# Main keyword preset\n');
+    assert.equal((await readAsset('presets.json')).trivia.source, '# Main trivia preset\n');
+    assert.equal((await readAsset('presets.json')).priority.source, '# Main priority preset\n');
     prepare(true);
     const { files } = await readAsset('flexr.json');
     assert.equal(files['/app/lib/flexr.rb'], '# Released lexer\n');
@@ -59,6 +63,8 @@ test('packages the released lexer and presets when building the public Playgroun
     assert.equal((await readAsset('presets.json')).absence, undefined);
     assert.equal((await readAsset('presets.json')).pattern, undefined);
     assert.equal((await readAsset('presets.json')).keywords, undefined);
+    assert.equal((await readAsset('presets.json')).trivia, undefined);
+    assert.equal((await readAsset('presets.json')).priority, undefined);
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
