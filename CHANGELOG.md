@@ -3,38 +3,41 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
-## Unreleased
+## 1.2.0 (planned)
 
-- Missing Prism dependency errors include the specification location and an
-  installation command.
-- Incompatible generated artifacts identify their installing file when available.
-### Added
+### Upgrade to 2.0
 
-- Optional phase profiling and isolated interpreter, YJIT, and ZJIT benchmark
-  runs, with explicit reports when an engine is unavailable.
-- Added optional RSpec and Minitest helpers for token assertions and explicit
-  token snapshot creation and comparison.
-- Compare `emits` with named grammar tokens using `check --grammar PATH`, and
-  export declarations using `tokens --format lrama`.
-- The explicit `firstmatch` backend is stable and no longer requires
-  `option :experimental`. The default still uses longest-match selection.
+- Run `flexr check SPEC --target 2.0` to identify structured-token declarations and
+  see the Ruby and generated-artifact requirements for 2.0.
+- Set `RUBYOPT=-W:deprecated` to find record mutations, unknown error modes,
+  older Ruby versions, and generated lexers that need regeneration in 2.0.
+  See the [migration guide](https://github.com/ydah/flexr/blob/v2.0.0/docs/migration-v2.md).
+- 1.2 retains Ruby 3.1 runtime support, mutable `Struct` tokens and locations,
+  and generated artifact ABI 1. The Ruby 3.3 minimum for static generation
+  stays in effect.
+
 ### Added
 
 - `trace --input` and `trace --input-file` show candidate lengths, rule
-  selection, and actions in human or JSON output for runtime and generated scanners.
-### Added
+  selection, and actions in human or JSON output for runtime and generated lexers.
+- Diagnostics identify specification locations and show examples for shadowed
+  and overlapping rules. Unsupported regexp constructs include rewrite guidance.
+- Compare `emits` with parser declarations using `check --grammar PATH` and
+  export token declarations using `tokens --format lrama`.
+- Optional Ruby LSP diagnostics and rule hovers, RSpec and Minitest token
+  assertions, and RBS signatures for the stable public API.
+- Runnable TOML, GraphQL, and SQL subset lexer examples.
 
-- An optional Ruby LSP add-on for diagnostics from unsaved `.flexr.rb` files
-  and rule hovers with counterexamples and overlap information.
-- Add documented TOML, GraphQL, and SQL subset lexers, with runtime/generated
-  parity checks and built-in benchmark inputs.
-- Added RBS signatures for the stable public API and CI checks for a typed
-  consumer example.
-### Added
+### Changed
 
-- A v2 migration guide, `check --target 2.0`, and opt-in deprecated-category
-  warnings for record mutation, unknown error modes, older Rubies, and ABI 1
-  generated artifacts.
+- The explicit `firstmatch` backend is stable and no longer requires
+  `option :experimental`. The default still selects the longest match.
+
+### Fixed
+
+- Generated lexers preserve UTF-8 action literals and surrounding source.
+- Missing Prism and incompatible generated-artifact errors identify the
+  relevant source file and show how to resolve the problem.
 
 ## [1.1.0](https://github.com/ydah/flexr/compare/v1.0.0...v1.1.0) - 2026-08-13
 

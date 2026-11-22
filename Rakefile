@@ -10,6 +10,7 @@ require "rspec/core/rake_task"
 require "tmpdir"
 require "flexr"
 require_relative "tools/regexp_tokenizer_reference"
+require_relative "tools/golden"
 
 RSpec::Core::RakeTask.new(:spec)
 task test: :spec
@@ -59,7 +60,7 @@ module FlexrVerification
   end
 
   def golden_path(spec)
-    name = "#{File.basename(File.dirname(spec))}_#{File.basename(spec, '.flexr.rb')}.sha256"
+    name = "#{File.basename(File.dirname(spec))}_#{File.basename(spec, '.flexr.rb')}.rb"
     File.join(ROOT, "benchmark/golden", name)
   end
 
@@ -281,11 +282,30 @@ end
 task "golden:verify" do
   FlexrVerification::VERIFICATION_SPECS.each do |spec|
     golden = FlexrVerification.golden_path(spec)
-    abort "missing golden file: #{golden}" unless File.file?(golden)
+    abort "missing golden snapshot: #{golden}" unless File.file?(golden)
 
-    expected = File.read(golden).strip
-    actual = Digest::SHA256.hexdigest(FlexrVerification.generated_source(spec))
-    abort "golden mismatch: #{spec} (expected #{expected}, got #{actual})" unless expected == actual
+    expected = FlexrVerification.normalized_source(File.read(golden, encoding: Encoding::UTF_8))
+    actual = FlexrVerification::Golden.normalize(FlexrVerification.generated_source(spec))
+    next if expected == actual
+
+    actual_path = File.join(FlexrVerification::ROOT, "tmp/golden", File.basename(golden))
+    FileUtils.mkdir_p(File.dirname(actual_path))
+    File.binwrite(actual_path, actual)
+    begin
+      diff, = Open3.capture3("git", "--no-pager", "diff", "--no-index", "--color=never", "--", golden, actual_path)
+      warn diff unless diff.empty?
+    rescue Errno::ENOENT => e
+      warn "git diff unavailable: #{e.message}"
+    end
+    abort "golden mismatch: #{spec}\ncompare with: git diff --no-index -- #{golden.dump} #{actual_path.dump}"
+  end
+end
+
+task "golden:update" do
+  FlexrVerification::VERIFICATION_SPECS.each do |spec|
+    golden = FlexrVerification.golden_path(spec)
+    FileUtils.mkdir_p(File.dirname(golden))
+    File.binwrite(golden, FlexrVerification::Golden.normalize(FlexrVerification.generated_source(spec)))
   end
 end
 

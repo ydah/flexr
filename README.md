@@ -5,6 +5,9 @@
 
 [Product site](https://ydah.github.io/flexr/) · [Playground](https://ydah.github.io/flexr/playground/) · [Documentation](docs/README.md)
 
+This branch maintains flexr 1.x. See the [support policy](docs/reference/compatibility.md#flexr-1x-maintenance)
+and the [migration guide](docs/migration-v2.md) when planning an upgrade to 2.0.
+
 Ruby-native lexer generator for parser authors who want ordinary Ruby
 specifications and deterministic generated output.
 
@@ -22,7 +25,7 @@ use the same rules and actions.
 ## Quick start
 
 ```sh
-gem install flexr
+gem install flexr -v '~> 1.0'
 ```
 
 ```ruby

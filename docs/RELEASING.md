@@ -25,6 +25,13 @@ Then:
 4. Confirm generated golden files and the Unicode snapshot are intentional.
 5. Create the release tag only after the working tree and CI are clean.
 
+Pushing a v1 tag runs the release checks before building and publishing the
+gem through RubyGems Trusted Publishing. The workflow then creates a GitHub
+Release from that version's changelog, leaving the latest major release
+selected on GitHub. Use the version number as the level-two changelog heading,
+optionally linked to the tag comparison, and set the release date before
+tagging.
+
 Unicode snapshot changes are minor-version compatibility changes because they
 can change generated output. Stable runtime and generated-file contracts are
 preserved within a major version unless this document and the changelog

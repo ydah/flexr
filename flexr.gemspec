@@ -16,7 +16,7 @@ Gem::Specification.new do |spec|
   spec.metadata["rubygems_mfa_required"] = "true"
   spec.metadata["generator_ruby_version"] = ">= 3.3 (Prism)"
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/ydah/flexr/tree/main"
+  spec.metadata["source_code_uri"] = "https://github.com/ydah/flexr/tree/v#{spec.version}"
   spec.metadata["bug_tracker_uri"] = "https://github.com/ydah/flexr/issues"
 
   gemspec = File.basename(__FILE__)

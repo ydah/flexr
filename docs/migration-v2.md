@@ -1,8 +1,7 @@
 # Migrating to flexr 2.0
 
-This guide describes the next major version. The v1 preparation release keeps
-existing behavior and offers opt-in deprecation warnings. It does not switch
-the runtime contracts before the major-version upgrade.
+This guide describes how to upgrade to flexr 2.0. The 1.2 release line offers
+opt-in deprecation warnings while keeping the 1.x runtime contracts.
 
 Run static checks before upgrading:
 

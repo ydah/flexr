@@ -27,9 +27,9 @@ module Flexr
           replacement.bytesize - replaced_size
         end
         normalized_edits.sort_by(&:first).reverse_each do |start_offset, end_offset, replacement|
-          result[start_offset...end_offset] = replacement
+          result[start_offset...end_offset] = replacement.b
         end
-        result.insert(adjusted_insertion, payload)
+        result.insert(adjusted_insertion, payload.b)
         result.force_encoding(source.encoding)
       end
 
@@ -46,7 +46,7 @@ module Flexr
           line, next_offset = next_line(source, offset)
         end
 
-        source.b.dup.insert(offset, payload).force_encoding(source.encoding)
+        source.b.dup.insert(offset, payload.b).force_encoding(source.encoding)
       end
 
       def indentation(source, offset)
