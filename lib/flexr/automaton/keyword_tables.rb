@@ -7,7 +7,7 @@ module Flexr
 
       def diagnostics(compiled, spec)
         spec.options.fetch(:keyword_tables, {}).flat_map do |among, entries|
-          targets = compiled.rules.select { |rule| rule.emit? && rule.action[1] == among }
+          targets = compiled.rules.select { |rule| rule.emit? && !rule.channel && rule.action[1] == among }
           entries.filter_map do |spelling, (_, location)|
             matched = compiled.machines.values.filter_map do |machine|
               accepts = full_acceptances(machine.dfa, spelling)
@@ -19,16 +19,16 @@ module Flexr
             end
             if matched.empty?
               Keywords.error!(
-                "no rule with emit: #{among.inspect} accepts the full keyword",
+                "no default-channel rule with emit: #{among.inspect} accepts the full keyword",
                 location: location, note: "input #{spelling.inspect}",
-                help: "add or widen a rule with emit: #{among.inspect} to match the entire spelling"
+                help: "add or widen a default-channel rule with emit: #{among.inspect} to match the entire spelling"
               )
             end
             next unless matched.all? { |accepts, candidates| shadowed?(compiled, accepts, candidates) }
 
             Diagnostics.warning(
               "FLEXR-W022", "keyword #{spelling.inspect} never reaches emit: #{among.inspect}",
-              location: location, note: "an earlier rule wins on input #{spelling.inspect}",
+              location: location, note: "a competing rule wins on input #{spelling.inspect}",
               help: "remove the redundant keyword or change the competing rule"
             )
           end
@@ -43,10 +43,10 @@ module Flexr
       def shadowed?(compiled, accepted, candidates)
         return false if candidates.any?(&:trailing)
 
-        target = candidates.map(&:index).min
+        target = candidates.reduce { |winner, rule| winner.loses_priority_tie?(rule) ? rule : winner }
         accepted.any? do |acceptance|
-          acceptance.rule_index < target && !acceptance.bol_only && !acceptance.end_anchor &&
-            !compiled.rules.fetch(acceptance.rule_index).trailing
+          rule = compiled.rules.fetch(acceptance.rule_index)
+          !acceptance.bol_only && !acceptance.end_anchor && !rule.trailing && target.loses_priority_tie?(rule)
         end
       end
 
@@ -75,18 +75,19 @@ module Flexr
 
       def literal_keyword?(rule)
         spelling = rule.patterns.first
-        return false unless rule.emit? && !rule.trailing && rule.patterns.one? && spelling.is_a?(String) && !spelling.empty?
+        return false unless rule.emit? && !rule.channel && !rule.trailing && rule.patterns.one?
+        return false unless spelling.is_a?(String) && !spelling.empty?
 
         normalized = Keywords.spelling(spelling)
         normalized.valid_encoding? && rule.action[1] == normalized.upcase.to_sym
       end
 
       def groupable?(compiled, rule, literals, tables)
-        return false unless rule.emit? && !rule.trailing && rule.patterns.all?(::Regexp)
-        return false unless literals.all? { |literal| literal.states == rule.states }
+        return false unless rule.emit? && !rule.channel && !rule.trailing && rule.patterns.all?(::Regexp)
+        return false unless literals.all? { |literal| literal.states == rule.states && literal.priority == rule.priority }
         return false if tables&.key?(rule.action[1])
         return false if tables && literals.any? { |literal| tables.key?(literal.action[1]) }
-        return false unless compiled.rules.one? { |entry| entry.emit? && entry.action[1] == rule.action[1] }
+        return false unless compiled.rules.one? { |entry| entry.emit? && !entry.channel && entry.action[1] == rule.action[1] }
 
         literals.all? do |literal|
           compiled.machines.values.all? do |machine|

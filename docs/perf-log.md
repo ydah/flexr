@@ -304,3 +304,197 @@ other lexers or JIT engines.
 `rake bench:regression` also passed with the existing baseline metrics, identity,
 ratio thresholds, and 0.18x floor unchanged. Reproduce the five-iteration sample
 with `ruby -Ilib benchmark/run.rb --iterations 5 --json`.
+
+## 2026-11-22: generated frozen-input scan
+
+The generated simple scanner now follows the runtime's DFA path for frozen
+strings with the default `accel :auto` and no active scan guards. It reads
+the region cache and token-limit parameters only when it needs the fallback
+path. A warmed diagnostic run on `0d1cc81` reported 8,748,740 megamorphic
+instance-variable reads and 1,699,605 writes across five generated scans of
+the JSON corpus with YJIT statistics enabled. Both counters reached zero
+when the acceleration cache fields were initialized up front in an
+experiment. The DFA path avoids those lazy cache writes on eligible input.
+
+The comparison below uses Ruby 4.0.9 on arm64-darwin25 and the default
+140,000-byte JSON input with 50,000 emitted tokens. Baseline `0d1cc81` and
+the updated scanner were run in alternating order. Each result is the median
+of three runs with ten warmup and ten timed iterations per engine. Ratios
+are calculated per run before taking the median.
+
+| Engine | Generated MB/s before → after | Generated / runtime before → after | Generated / handwritten before → after |
+|---|---:|---:|---:|
+| Interpreter | 1.874 → 1.964 | 0.992x → 1.036x | 0.223x → 0.234x |
+| YJIT | 3.635 → 5.633 | 0.606x → 0.958x | 0.388x → 0.519x |
+| ZJIT | 0.431 → 2.080 | 0.200x → 0.972x | 0.043x → 0.202x |
+
+YJIT generated throughput reaches the 0.50x handwritten target in this sample.
+Both JITs remain below the 1.0x generated/runtime target. Runtime allocations
+stay at 3.600 per token, and generated allocations move from 3.210 to 3.200.
+A separate check compared the full runtime, generated, and standalone token
+sequences for frozen JSON, TOML, GraphQL, SQL, and Ruby subset inputs in all
+three engines.
+
+Run the reference JSON matrix with:
+
+```sh
+ruby -Ilib benchmark/matrix.rb --iterations 10
+```
+
+The other lexer samples use one run with five warmup and five timed
+iterations per engine on the same machine. The values are generated/runtime
+throughput ratios. TOML, GraphQL, and SQL use the frozen built-in inputs.
+Ruby subset uses the mutable string loaded by `--input-file`.
+
+| Lexer | Interpreter before → after | YJIT before → after | ZJIT before → after |
+|---|---:|---:|---:|
+| TOML | 0.631x → 0.647x | 0.291x → 0.424x | 0.188x → 0.626x |
+| GraphQL | 0.725x → 0.722x | 0.319x → 0.496x | 0.388x → 0.683x |
+| SQL | 0.643x → 0.681x | 0.350x → 0.467x | 0.409x → 0.664x |
+| Ruby subset | 0.845x → 0.849x | 0.419x → 0.404x | 0.244x → 0.243x |
+
+Run these workloads with:
+
+```sh
+for lexer in toml graphql sql; do
+  ruby -Ilib benchmark/matrix.rb --spec "examples/$lexer/lexer.flexr.rb" --iterations 5
+done
+ruby -e 'STDOUT.write(%q(class Foo "ok" end ) * 10_000)' > /tmp/flexr-ruby-subset-input.txt
+ruby -Ilib benchmark/matrix.rb --spec examples/ruby_subset/lexer.flexr.rb \
+  --input-file /tmp/flexr-ruby-subset-input.txt --iterations 5
+```
+
+## 2026-11-22: packed lookup and token-loop allocations
+
+The packed transition lookup and `next_token` use condition-controlled loops,
+avoiding the block allocation on each packed lookup or token call. The token
+loop still returns the result of an exhausted action enumerator. Packed rows
+remain lazy. A warmed check exercises inherited transitions and confirms that
+reading them leaves the dense rows unmaterialized. The generated direct fast
+path keeps its negative transition sentinel as an integer until the scan
+loop exits.
+
+The JSON comparison uses Ruby 4.0.9 on arm64-darwin25 and the same 140,000-byte,
+50,000-token input as the previous sample. Baseline `73a6587` and the updated
+loops ran in alternating order. Each result is the median of three runs with
+ten warmup and ten timed iterations per engine.
+
+| Engine | Runtime MB/s before → after | Generated MB/s before → after | Generated / runtime before → after | Generated / handwritten before → after |
+|---|---:|---:|---:|---:|
+| Interpreter | 1.897 → 2.022 | 1.978 → 2.199 | 1.043x → 1.088x | 0.237x → 0.282x |
+| YJIT | 6.033 → 6.482 | 5.720 → 6.743 | 0.948x → 1.012x | 0.523x → 0.728x |
+| ZJIT | 2.092 → 2.342 | 2.083 → 2.388 | 0.994x → 1.010x | 0.206x → 0.269x |
+
+Runtime allocations fell from 3.600 to 2.600 per token on all three engines,
+below the 3.4 target. Generated allocations fell from 3.200 to 2.200.
+The YJIT sample reached the 0.70x handwritten stretch target. The three paired
+runs reached the 1.0x generated/runtime target on all three engines, with
+ZJIT ratios from 1.007x to 1.024x. A separate single run through
+`rake bench:matrix` measured 0.980x on YJIT and 0.984x on ZJIT. This
+variation leaves the 1.0x ratio as a measurement target.
+
+The full frozen JSON, TOML, GraphQL, SQL, and Ruby subset token sequences
+matched across runtime, generated, and standalone on all three engines.
+Use the matrix commands in the previous section to repeat the timings.
+
+The non-JSON runs used five warmup and five measured iterations per engine.
+The allocation counts were identical across engines. Ruby subset timing
+uses the mutable input-file control from the previous section.
+
+| Lexer | Generated allocations/token before → after | Interpreter generated/runtime | YJIT generated/runtime | ZJIT generated/runtime |
+|---|---:|---:|---:|---:|
+| TOML | 10.334 → 2.000 | 0.610x → 0.775x | 0.413x → 0.589x | 0.621x → 0.837x |
+| GraphQL | 7.333 → 2.000 | 0.722x → 0.844x | 0.506x → 0.652x | 0.674x → 0.878x |
+| SQL | 9.889 → 2.667 | 0.703x → 0.836x | 0.447x → 0.570x | 0.639x → 0.854x |
+| Ruby subset | 14.778 → 7.009 | 0.824x → 0.952x | 0.416x → 0.414x | 0.243x → 0.250x |
+
+## 2026-11-22: frozen scan EOF check
+
+The unguarded generated DFA loop uses the end-of-input result from
+`String#getbyte` to stop scanning. This removes a separate size lookup and
+comparison per byte. A zero byte still participates in the DFA.
+
+The paired runs use Ruby 4.0.9 on arm64-darwin25 and the same reference
+JSON input as the previous entry. Run
+`ruby -Ilib benchmark/matrix.rb --iterations 10` three times per revision,
+alternating baseline `76c13b4` and the updated scanner. Each run warms each
+engine with ten scans before timing ten more.
+
+| Engine | Generated MB/s before → after | Median generated/runtime before → after | Generated/runtime range after |
+|---|---:|---:|---:|
+| Interpreter | 2.182 → 2.247 | 1.077x → 1.104x | 1.084x–1.108x |
+| YJIT | 6.828 → 6.803 | 1.030x → 1.059x | 1.026x–1.089x |
+| ZJIT | 2.392 → 2.409 | 1.019x → 1.020x | 1.015x–1.027x |
+
+Runtime stayed at 2.600 allocations per token and generated stayed at 2.200.
+The ZJIT sample clears the 1.0x target with about two percent headroom on
+this machine. The YJIT generated rate was nearly unchanged despite
+variation in the ratio.
+
+A separate experiment saved each accepting state in locals and filled the
+reused match record once after the longest match was known. The
+generated/runtime medians moved from 1.097x to 1.097x for the interpreter,
+1.037x to 0.978x for YJIT, and 1.006x to 0.992x for ZJIT. The scanner
+continues to update the match record during traversal.
+
+## 2026-11-22: whole-token selection by engine and workload
+
+This experiment compares whole-token `StringScanner` plans with the frozen
+DFA path on Ruby 4.0.9, arm64-darwin25. The runtime uses the same lexer with
+`accel :strscan`. Generated measurements include both the complete explicit
+`:strscan` mode and a control that keeps the explicit artifact's whole-token
+plans but sets the instance's `@accel_mode` to `:auto`. The control keeps the
+DFA fallback so its ratio isolates the native whole-token attempt from the
+per-region fallback.
+
+Each engine and workload runs in its own process. The test compares all
+token kinds and values before warming up each variant. The reference JSON
+workload uses ten warmup and ten timed scans per sample. The rest use six
+of each. Three samples rotate the order of the variants. The Ruby subset
+input repeats `class Foo "ok" end ` 10,000 times and is frozen for this
+experiment. The two synthetic JSON inputs repeat 680 JSON objects, with
+192 spaces after each object or 192 ASCII letters in each string value.
+The complete token sequences matched across all variants and engines.
+
+Values are throughput relative to the corresponding runtime or generated
+DFA baseline. Each cell lists interpreter, YJIT, and ZJIT in that order.
+
+| Workload | Bytes | Runtime explicit | Generated explicit | Generated whole-token only |
+|---|---:|---:|---:|---:|
+| JSON | 140,000 | 1.056x / 0.776x / 0.992x | 0.520x / 0.279x / 0.550x | 1.027x / 0.663x / 1.008x |
+| JSON with long space runs | 140,080 | 3.906x / 2.528x / 4.052x | 1.818x / 0.851x / 1.927x | 3.571x / 1.744x / 3.546x |
+| JSON with long strings | 139,400 | 1.002x / 0.850x / 0.992x | 0.830x / 0.284x / 0.914x | 0.978x / 0.789x / 0.975x |
+| TOML | 160,000 | 1.008x / 0.688x / 0.946x | 0.506x / 0.286x / 0.544x | 1.138x / 0.764x / 1.132x |
+| GraphQL | 320,000 | 1.217x / 0.743x / 1.099x | 1.577x / 1.092x / 1.546x | 1.570x / 1.063x / 1.545x |
+| SQL | 390,000 | 1.026x / 0.758x / 0.947x | 0.700x / 0.439x / 0.306x | 1.153x / 0.714x / 0.934x |
+| Ruby subset | 190,000 | 1.033x / 0.780x / 0.974x | 0.656x / 0.425x / 0.313x | 1.179x / 0.782x / 1.017x |
+
+The whole-token attempt paid off on long whitespace runs but slowed the
+similarly sized long-string workload. GraphQL gained in generated mode
+while runtime mode slowed on YJIT. These results leave whole-token
+scanning on explicit `accel :strscan`. A default needs a cheap way to
+recognize profitable matches and measurements that include the cost of
+that choice and its fallback.
+
+## 2026-11-22: select the frozen scan's transition layout at generation
+
+The generated artifact already determines whether its state transitions use
+flat direct tables. Selecting the lookup when generating the loop removes
+that choice from each byte scanned on the frozen, unguarded path.
+
+On the integrated branch, the EOF change alone measured a ZJIT ratio of
+0.992x with ten iterations. Adding packed-table lookups to the same loop
+lowered YJIT throughput on the reference direct lexer.
+
+Run `FLEXR_BENCHMARK_CHECK_MATRIX=1 FLEXR_BENCHMARK_ITERATIONS=15 bundle exec rake bench:matrix`
+with Ruby 4.0.9 on arm64-darwin25 and the same 140,000-byte JSON input.
+The medians of three fresh processes passed on all engines.
+
+| Engine | Generated/runtime samples | Median | Generated/handwritten at the median |
+|---|---:|---:|---:|
+| Interpreter | 1.093x, 1.198x, 1.101x | 1.101x | 0.279x |
+| YJIT | 1.009x, 1.017x, 0.982x | 1.009x | 0.686x |
+| ZJIT | 1.014x, 1.007x, 1.032x | 1.014x | 0.262x |
+
+Runtime remained at 2.600 allocations per emitted token. Both JIT ratios have
+limited headroom, and the interpreter remains below the 0.30x target.

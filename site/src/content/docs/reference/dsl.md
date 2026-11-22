@@ -6,6 +6,7 @@ description: The stable lexer specification methods and their role.
 | API | Purpose |
 | --- | --- |
 | `rule(pattern, skip: false, emit: nil, followed_by: nil)` | Register a matching rule and action |
+| `use(rule_set)` | Insert rules from a module extended with `Flexr::Rules` |
 | `on_eof` | Define end-of-input behavior |
 | `emits(*kinds)` | Declare token kinds for diagnostics and parser integration |
 | `state(name)` | Define a named start condition |

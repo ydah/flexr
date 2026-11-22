@@ -2,6 +2,8 @@
 
 module Flexr
   module Runtime
+    EMPTY_CAPTURES = {}.freeze
+
     def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024,
                    max_lookahead_size: nil, max_buffer_size: 64 * 1024 * 1024,
                    max_state_stack: 1024, max_steps: nil, cancellation: nil, retain_input: true,
@@ -20,48 +22,19 @@ module Flexr
         input, chunk_size: chunk_size, max_buffer_size: max_buffer_size,
         retain_input: retain_input, filename: filename
       )
-      @string_input = input.is_a?(String)
-      @stable_input_end = input.bytesize if @string_input && input.frozen?
-      @valid_utf8_input = @string_input && input.frozen? && (config.encoding != Encoding::UTF_8 || begin
-        bytes = input.encoding == Encoding::UTF_8 ? input : input.dup.force_encoding(Encoding::UTF_8)
-        bytes.valid_encoding?
-      end)
-      @simple_location_input = @string_input && input.frozen? && retain_input &&
-        input.ascii_only? && !input.include?("\n")
       @retain_input = retain_input
       @filename = filename
       @error_mode = error_mode
       @token_kind = config.token_kind
       @accel_mode = config.options.fetch(:accel, :auto)
       @max_token_size = max_token_size.to_i
-      @token_limit_required = !@string_input || !input.frozen? || input.bytesize > @max_token_size
       @max_lookahead_size = (max_lookahead_size || max_token_size).to_i
       @max_state_stack = max_state_stack.to_i
       @max_steps = max_steps&.to_i
       @cancellation = cancellation.respond_to?(:arity) ? cancellation : cancellation&.method(:call)
       @steps = 0
-      @position = 0
-      @line = 1
-      @column = 1
-      @state = :initial
-      @state_stack = []
-      @pending = nil
-      @matched = nil
-      @match_start = 0
-      @match_end = 0
-      @text_start = 0
-      @text_line = 1
-      @text_column = 1
-      @bol = true
-      @more_start = nil
-      @more_line = nil
-      @more_column = nil
-      @more_requested = false
-      @non_progress_signatures = {}
-      @active_rule = nil
-      @eof_fired_states = {}
+      reset_input_cursor(input, config.encoding)
       @on_error = nil
-      @halted = false
       @interpreter = nil
       @generated_scanner = generated_runtime? && respond_to?(:scan_one, true)
     end
@@ -74,11 +47,11 @@ module Flexr
       @buffer.source
     end
 
-    def next_token
-      return nil if @halted
+    def next_token(expect: nil)
+      expected = Configuration.expected_tokens!(expect).to_h { |type| [type, true] } unless expect.nil?
 
-      loop do
-        return nil if @halted
+      until @halted
+        activate_pending_inputs if @__flexr_pending_inputs
         consume_step! if scan_steps_guarded?
 
         if eof? && @pending.nil?
@@ -97,14 +70,19 @@ module Flexr
             return token if token
             next
           end
+          if @__flexr_input_frames
+            return nil if defer_input_resume?
+
+            resume_suspended_input
+            next
+          end
           return nil
         end
 
-        @active_rule = nil
-        match = if @generated_scanner
+        match = if @generated_scanner && !expected
           scan_one
         else
-          (@interpreter ||= Runtime::Interpreter.new(self)).scan
+          (@interpreter ||= Runtime::Interpreter.new(self)).scan(expected)
         end
         unless match
           unless eof?
@@ -132,17 +110,27 @@ module Flexr
         @position = match.end_pos
         empty_match = match.end_pos == match.start_pos
         @active_rule = match.rule
-        execute(match.rule)
-        finalize_more
-        ensure_progress!(match, scan_state, empty_match: empty_match) unless
-          @position > match.start_pos && @non_progress_signatures.empty?
-        ensure_token_size! if @token_limit_required
-        update_position
-        discard_consumed_input! unless @retain_input
+        begin
+          if match.capture
+            execute_with_captures(match)
+          else
+            execute(match.rule)
+          end
+          finalize_more
+          ensure_progress!(match, scan_state, empty_match: empty_match) unless
+            @position > match.start_pos && @non_progress_signatures.empty?
+          ensure_token_size! if @token_limit_required
+          update_position
+          discard_consumed_input! unless @retain_input
+        ensure
+          @active_rule = nil
+        end
         token = @pending
         @pending = nil
         return token if token
       end
+    rescue StopIteration => e
+      e.result
     end
 
     def each_token
@@ -161,7 +149,9 @@ module Flexr
       self
     end
 
-    def tokens
+    def tokens(channels: :default)
+      raise ArgumentError, "channels must be :default or :all" unless %i[default all].include?(channels)
+
       result = []
       while (token = next_token)
         result << token
@@ -169,8 +159,8 @@ module Flexr
       result
     end
 
-    def racc_next_token
-      token = next_token
+    def racc_next_token(expect: nil)
+      token = expect.nil? ? next_token : next_token(expect: expect)
       token ? [token[0], token[1]] : [false, "$end"]
     end
 
@@ -179,6 +169,8 @@ module Flexr
 
       @matched = @buffer.byteslice(@text_start, @match_end - @text_start)
     end
+
+    def captures = EMPTY_CAPTURES
 
     def text_bytesize
       @match_end - @text_start
@@ -408,6 +400,27 @@ module Flexr
     end
 
     private
+
+    def reset_input_cursor(input, encoding)
+      @string_input = input.is_a?(String)
+      @stable_input_end = @string_input && input.frozen? ? input.bytesize : nil
+      @valid_utf8_input = @stable_input_end && (encoding != Encoding::UTF_8 || begin
+        bytes = input.encoding == Encoding::UTF_8 ? input : input.dup.force_encoding(Encoding::UTF_8)
+        bytes.valid_encoding?
+      end)
+      @simple_location_input = @stable_input_end && @retain_input && input.ascii_only? && !input.include?("\n")
+      @token_limit_required = !@stable_input_end || @stable_input_end > @max_token_size
+      @position = @match_start = @match_end = @text_start = 0
+      @line = @column = @text_line = @text_column = 1
+      @state = :initial
+      @state_stack = []
+      @pending = @matched = @active_rule = @__flexr_leading_trivia = nil
+      @bol = true
+      @more_start = @more_line = @more_column = nil
+      @more_requested = @halted = false
+      @non_progress_signatures = {}
+      @eof_fired_states = {}
+    end
 
     def execute(rule)
       return __flexr_generated_execute(rule) if generated_runtime? && respond_to?(:__flexr_generated_execute, true)

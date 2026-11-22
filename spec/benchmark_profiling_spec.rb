@@ -66,6 +66,28 @@ RSpec.describe "benchmark profiling" do
     expect { runner.run(engines: ["interpreter"]) }.to raise_error("benchmark failed")
   end
 
+  it "checks the median generated/runtime ratio and requires every engine" do
+    generated_rates = { "interpreter" => [102, 103, 104], "yjit" => [97, 103, 101], "zjit" => [99, 98, 103] }
+    benchmark = lambda do |engine|
+      {
+        "modes" => {
+          "runtime" => { "tokens_per_s" => 100 },
+          "generated" => { "tokens_per_s" => generated_rates.fetch(engine).shift }
+        }
+      }
+    end
+    runner = Flexr::Benchmarking::RubyMatrix.new(probe: ->(_engine) { { "available" => true } }, benchmark: benchmark)
+    result = runner.run(verify_ratio: true)
+    expect(result.fetch("engines").fetch("yjit")).to include(
+      "ratio_samples" => [0.97, 1.03, 1.01], "median_generated_runtime_ratio" => 1.01
+    )
+    expect(result.fetch("generated_runtime_ratio_check")).to include("passed" => false, "failed_engines" => ["zjit"])
+
+    unavailable = ->(_engine) { { "available" => false, "reason" => "not built" } }
+    missing = Flexr::Benchmarking::RubyMatrix.new(probe: unavailable, benchmark: benchmark).run(verify_ratio: true)
+    expect(missing.fetch("generated_runtime_ratio_check").fetch("failed_engines")).to eq(%w[interpreter yjit zjit])
+  end
+
   it "rejects invalid iteration counts before starting subprocesses" do
     errors = StringIO.new
     expect(Flexr::Benchmarking::RubyMatrix.command(["--iterations", "0"], out: StringIO.new, err: errors)).to eq(2)

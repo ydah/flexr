@@ -230,6 +230,39 @@ RSpec.describe "keyword tables" do
     end
   end
 
+  it "reports shadowed keywords using priority before source order" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule("if", emit: :SPECIAL)
+      rule(/[a-z]+/, emit: :IDENT, priority: 1)
+      rule("else", emit: :SPECIAL, priority: 2)
+      keywords %w[if else], among: :IDENT
+    end
+    expect(lexer.new("if").tokens).to eq([[:IF, "if"]])
+    expect(lexer.new("else").tokens).to eq([[:SPECIAL, "else"]])
+
+    warnings = lexer.compile!.diagnostics.select { |diagnostic| diagnostic.code == "FLEXR-W022" }
+    expect(warnings.map(&:note)).to contain_exactly(a_string_including('"else"'))
+  end
+
+  it "suggests grouping only when literal and identifier priorities agree" do
+    code = <<~RUBY
+      class KeywordLexer < Flexr::Lexer
+        rule("if", emit: :IF, priority: 1)
+        rule("else", emit: :ELSE, priority: 1)
+        rule(/[a-z]+/, emit: :IDENT, priority: 1)
+      end
+    RUBY
+    with_spec(code) do |path, _directory|
+      _status, out, _err = run_cli("check", path, "--format", "json")
+      expect(JSON.parse(out)).to include(hash_including("code" => "FLEXR-I003"))
+    end
+    different = code.sub("emit: :IDENT, priority: 1", "emit: :IDENT, priority: 0")
+    with_spec(different) do |path, _directory|
+      _status, out, _err = run_cli("check", path, "--format", "json")
+      expect(JSON.parse(out)).not_to include(hash_including("code" => "FLEXR-I003"))
+    end
+  end
+
   it "suggests grouping consecutive literal rules covered by the same identifier" do
     code = <<~RUBY
       class KeywordLexer < Flexr::Lexer
