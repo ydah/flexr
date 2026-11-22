@@ -28,6 +28,7 @@ module Flexr
       def source(indent: "  ")
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
+        captures = compiled.rules.any?(&:capture_patterns)
         lines << "#{indent}def scan_one"
         lines << "#{indent}  if @__flexr_generated_scan_state != @state"
         lines << "#{indent}    machine = self.class.__flexr_compiled.machines.fetch(@state)"
@@ -130,6 +131,7 @@ module Flexr
         lines << "#{indent}      best.start_pos = position"
         lines << "#{indent}      best.end_pos = cursor"
         lines << "#{indent}      best.total_end_pos = cursor"
+        lines << "#{indent}      best.capture = rule.capture_patterns&.[](acceptance.pattern_index)" if captures
         lines << "#{indent}    end"
         lines << "#{indent}    return best"
         lines << "#{indent}  end"
@@ -167,6 +169,7 @@ module Flexr
         lines << "#{indent}    best.start_pos = position"
         lines << "#{indent}    best.end_pos = cursor"
         lines << "#{indent}    best.total_end_pos = cursor"
+        lines << "#{indent}    best.capture = rule.capture_patterns&.[](acceptance.pattern_index)" if captures
         lines << "#{indent}  end"
         lines << "#{indent}  best"
         lines << "#{indent}end"
@@ -254,11 +257,15 @@ module Flexr
         lines << "#{indent}    next if best && cursor < best.total_end_pos"
         lines << "#{indent}    next if best && cursor == best.total_end_pos &&"
         lines << "#{indent}      rule.index > best.rule.index"
+        if captures
+          lines << "#{indent}    next if best && cursor == best.end_pos && rule.equal?(best.rule) && rule.capture_patterns"
+        end
         lines << "#{indent}    best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
         lines << "#{indent}    best.rule = rule"
         lines << "#{indent}    best.start_pos = start_position"
         lines << "#{indent}    best.end_pos = cursor"
         lines << "#{indent}    best.total_end_pos = cursor"
+        lines << "#{indent}    best.capture = rule.capture_patterns&.[](acceptance.pattern_index)" if captures
         lines << "#{indent}  end"
         lines << "#{indent}  best"
         lines << "#{indent}end"

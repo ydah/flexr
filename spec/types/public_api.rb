@@ -23,6 +23,11 @@ module PublicApiTypecheck
 end
 
 Flexr::Lexer.rule(/[0-9]+/) { emit :INTEGER, text.to_i }
+Flexr::Lexer.rule(/(?<value>[0-9]+)mm/) do
+  # @type var value: String?
+  value = captures[:value]
+  emit :LENGTH, value
+end
 Flexr::Lexer.state(:quoted) { rule(/x/, emit: :X) }
 Flexr::Lexer.all_states { rule(/ /, skip: true) }
 Flexr::Lexer.on_eof { skip }

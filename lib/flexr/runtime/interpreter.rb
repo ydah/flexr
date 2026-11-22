@@ -8,7 +8,7 @@ end
 
 module Flexr
   module Runtime
-    Match = Struct.new(:rule, :start_pos, :end_pos, :total_end_pos, keyword_init: true)
+    Match = Struct.new(:rule, :start_pos, :end_pos, :total_end_pos, :capture, keyword_init: true)
 
     class Interpreter
       def initialize(lexer)
@@ -203,7 +203,7 @@ module Flexr
 
         rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
         @fast_paths[machine.dfa] = !@config.options[:allow_empty_match] &&
-          !reference_rules? && rules.none?(&:trailing) &&
+          !reference_rules? && rules.none?(&:trailing) && rules.none?(&:capture_patterns) &&
           rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
       end
 
@@ -238,7 +238,9 @@ module Flexr
           next if rule.trailing && trailing.nil?
 
           ensure_token_size!(end_position, position, rule: rule)
-          return reusable_match(rule, position, end_position, end_position + (trailing || 0))
+          result = reusable_match(rule, position, end_position, end_position + (trailing || 0))
+          result.capture = rule.capture_patterns&.[](condition.pattern_index) && match
+          return result
         end
         nil
       end
@@ -490,7 +492,10 @@ module Flexr
 
           total_end = cursor + (trailing_size || 0)
           next if best && total_end < best.total_end_pos
-          next if best && total_end == best.total_end_pos && acceptance.rule_index > best.rule.index
+          if best && total_end == best.total_end_pos
+            next if acceptance.rule_index > best.rule.index
+            next if candidate.capture_patterns && candidate.equal?(best.rule) && cursor == best.end_pos
+          end
 
           ensure_token_size!(cursor, position, rule: candidate)
           best = @match ||= Match.new
@@ -498,6 +503,7 @@ module Flexr
           best.start_pos = position
           best.end_pos = cursor
           best.total_end_pos = total_end
+          best.capture = candidate.capture_patterns&.[](acceptance.pattern_index)
         end
         best
       end

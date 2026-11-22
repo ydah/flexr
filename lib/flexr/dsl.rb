@@ -201,11 +201,13 @@ module Flexr
     end
 
     def freeze_specification!
+      include Runtime::Captures if @__flexr_rules.any?(&:capture_patterns)
       @__flexr_rules.each do |rule|
         rule.patterns.freeze
         rule.states.freeze
         rule.pattern_conditions&.each(&:freeze)
         rule.pattern_conditions&.freeze
+        rule.capture_patterns&.freeze
         rule.freeze
       end
       @__flexr_states.each_value(&:freeze)

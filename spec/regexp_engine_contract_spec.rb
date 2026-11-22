@@ -250,13 +250,17 @@ RSpec.describe "regexp engine contracts" do
     expect(lexer.new("aabbab").tokens).to eq([[:PAIR, "aa"], [:PAIR, "bb"], [:OTHER, "a"], [:OTHER, "b"]])
   end
 
-  it "shows a non-capturing rewrite for named groups only when captures are unused" do
-    [/(?<word>ab)/, /(?'word'ab)/, /(?<word>a)\k<word>/].each do |pattern|
-      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-        expect(error.diagnostic.code).to eq("FLEXR-E014")
-        expect(error.diagnostic.help).to include("rule(/(?:ab)/)", "when only grouping is needed",
-                                                 "capture-dependent patterns need a separate rewrite", "keep the action")
-      end
+  it "treats both named group notations as transparent for the DFA without allowing backreferences" do
+    [/(?<word>ab)/, /(?'word'ab)/].each do |pattern|
+      dfa = Flexr.compile_pattern(pattern)
+      expect(dfa.accept?("ab")).to be true
+      expect(dfa.accept?("abb")).to be false
+    end
+
+    expect { Flexr.parse_pattern(/(?<word>a)\k<word>/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.message).to include("backreferences")
+      expect(error.diagnostic.help).to include("split the rule", "compare matched text")
     end
   end
 

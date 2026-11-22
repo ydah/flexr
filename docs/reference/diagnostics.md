@@ -212,20 +212,14 @@ escaped quotes and line feeds.
 For numbered backreferences, the help uses a capture with only two possible
 values. Rewrite `rule(/(a|b)\1/)` or `rule(/(a|b)\k<1>/)` as
 `rule(/(?:aa|bb)/)` and keep the action. This accepts `aa` and `bb`, while
-rejecting `ab` and `ba`. It reproduces the matched text; flexr does not expose
-capture values to actions. If the repeated text cannot be enumerated, split
-the rule into states and compare the matched text in actions instead.
+rejecting `ab` and `ba`. If the repeated text cannot be enumerated, split the
+rule into states and compare the matched text in actions.
 
 For a non-recursive subexpression call, the help shows
 `rule(/(a|b)\g<1>/)` becoming `rule(/[ab]{2}/)` with the same action.
 A call reuses the expression, not the previously captured text: this example
 accepts `aa`, `ab`, `ba`, and `bb`. Recursive calls need a parser or a state
 stack; they cannot be expanded by this example.
-
-For named captures used only for grouping, rewrite `rule(/(?<word>ab)/)` or
-`rule(/(?'word'ab)/)` as `rule(/(?:ab)/)` and keep the action. Backreferences
-and conditions that depend on the capture need a separate rewrite; removing
-the name alone does not preserve them.
 
 For the conditional example `rule(/(a)?(?(1)b|c)/)`, use `rule(/(?:ab|c)/)`
 with the same action. The original matches `ab` when the optional `a` was

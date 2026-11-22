@@ -18,6 +18,7 @@ instance as `self`.
 |---|---|
 | `text` | Matched text, including a `more` prefix when present |
 | `text_bytesize` | Byte size of `text` |
+| `captures` | Frozen hash of named groups from the original rule match |
 | `last_location` | A `Runtime::Location` for the current text span |
 | `lineno` / `line` | One-based current line number |
 | `byte_pos` | Current byte offset |
@@ -27,6 +28,7 @@ instance as `self`.
 
 `text` is memoized for the current action. `last_location` uses the same span;
 `more` makes the span include all joined matches.
+See [named captures](regexp.md#captures) for group values and match bounds.
 
 ## State methods
 
