@@ -17,4 +17,4 @@ may skip self-loop bytes but cannot change the winner.
 
 Use `backend :firstmatch` for specifications that depend on source order.
 It selects the first matching rule and preserves Ruby regexp alternative order
-within that rule. See the [first-match compatibility record](../adr/20261122_stable_explicit_firstmatch.md#%E6%B1%BA%E5%AE%9A).
+within that rule. See the [first-match compatibility record](../adr/20261122_stable_explicit_firstmatch.md#decision).

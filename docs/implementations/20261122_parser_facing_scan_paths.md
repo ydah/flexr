@@ -2,7 +2,7 @@
 
 ## Recognizer
 
-The public contract is in [20261122_action_free_recognition.md / Decision](../adr/20261122_action_free_recognition.md#%E6%B1%BA%E5%AE%9A).
+The public contract is in [20261122_action_free_recognition.md / Decision](../adr/20261122_action_free_recognition.md#decision).
 
 `Flexr::Recognizer` holds the compiled DFA, trailing context tables, fixed rule identities, and rank information.
 Construction materializes lazy generated rows for Ractor sharing.
@@ -17,7 +17,7 @@ The ordinary DFA standalone recognizer fixture measured 90,990 bytes with the he
 
 ## Expected tokens
 
-The eligibility policy is in [20261122_parser_token_expectations.md / Decision](../adr/20261122_parser_token_expectations.md#%E6%B1%BA%E5%AE%9A).
+The eligibility policy is in [20261122_parser_token_expectations.md / Decision](../adr/20261122_parser_token_expectations.md#decision).
 
 `Runtime#next_token` preserves the generated scan path for unrestricted calls.
 Filtered scans use `Runtime::Interpreter`, which checks the eligible candidates at each DFA acceptance or native first match.

@@ -13,7 +13,7 @@ along with the active buffer, filename, and input-specific scanner flags.
 so acceleration uses the restored bytes.
 
 Standalone generation embeds the helper for visible calls to `push_input` or
-for `option :input_stack`. See [20261122_input_stack.md / Decision](../adr/20261122_input_stack.md#%E6%B1%BA%E5%AE%9A).
+for `option :input_stack`. See [20261122_input_stack.md / Decision](../adr/20261122_input_stack.md#decision).
 
 ## Dynamic delimiters
 
@@ -25,7 +25,7 @@ normal match finalization updates coordinates and retains the `less` and
 `more` semantics.
 
 Standalone generation embeds the helper for visible delimiter calls or for
-`option :dynamic_delimiters`. See [20261122_runtime_delimiters.md / Decision](../adr/20261122_runtime_delimiters.md#%E6%B1%BA%E5%AE%9A).
+`option :dynamic_delimiters`. See [20261122_runtime_delimiters.md / Decision](../adr/20261122_runtime_delimiters.md#decision).
 
 ## Indentation
 
@@ -36,7 +36,7 @@ triggers. The input frame hooks save the layout queue, levels, and open
 brackets with the suspended source.
 
 Standalone generation includes the processor when the source declares
-`indentation`. See [20261122_post_lexical_indentation.md / Decision](../adr/20261122_post_lexical_indentation.md#%E6%B1%BA%E5%AE%9A).
+`indentation`. See [20261122_post_lexical_indentation.md / Decision](../adr/20261122_post_lexical_indentation.md#decision).
 
 ## Capture delegation
 
@@ -48,4 +48,4 @@ the layout processor treat the delegating rule as one content match.
 
 Standalone generation embeds the helper for visible calls to `delegate` or
 for `option :delegation`. A separately generated child loads against the
-host's embedded runtime. See [20261122_capture_delegation.md / Decision](../adr/20261122_capture_delegation.md#%E6%B1%BA%E5%AE%9A).
+host's embedded runtime. See [20261122_capture_delegation.md / Decision](../adr/20261122_capture_delegation.md#decision).

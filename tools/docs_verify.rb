@@ -19,8 +19,6 @@ module FlexrDocumentation
     *Dir[File.join(ROOT, "examples/**/README.md")]
   ].freeze
   STABLE_DSL_METHODS = Flexr::DSL::DSL_METHODS - %i[compile! dfa]
-  ADR_HEADINGS = /^## (?:コンテキスト|決定|決定しないこと|検討した代替案|影響)\r?$/
-  ADR_METADATA = /^- (?:決定日: |関連: |ステータス: (?:提案|採用|却下|置換)(?=\r?$| → ))/
 
   module_function
 
@@ -49,9 +47,8 @@ module FlexrDocumentation
 
   def verify_english
     MARKDOWN_FILES.each do |path|
-      content = File.read(path, encoding: "UTF-8")
-      content = content.gsub(ADR_HEADINGS, "").gsub(ADR_METADATA, "") if path.start_with?("#{ROOT}/docs/adr/")
-      raise "documentation contains non-English characters: #{path}" if content.match?(/[ぁ-んァ-ヶ一-龯]/)
+      raise "documentation contains non-English characters: #{path}" if
+        File.read(path).match?(/[ぁ-んァ-ヶ一-龯]/)
     end
   end
 

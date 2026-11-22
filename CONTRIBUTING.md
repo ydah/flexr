@@ -82,6 +82,6 @@ exact contracts in `docs/reference/`, and design rationale in
 them instead of duplicating large source blocks. `rake docs:verify` checks local
 links, the tutorial example, CLI help, and stable DSL coverage.
 
-Write documentation prose in English. ADRs use the fixed template labels in
-the [ADR guide](docs/adr/README.md). Use the guide to decide when to record
-a decision and when to write an [implementation record](docs/implementations/README.md).
+Write all documentation in English. Use the [ADR guide](docs/adr/README.md)
+to decide when to record a decision and when to write an
+[implementation record](docs/implementations/README.md).

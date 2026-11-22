@@ -1,6 +1,6 @@
 # Automata for pattern algebra
 
-The API contract is in [20261122_pattern_algebra.md / Decision](../adr/20261122_pattern_algebra.md#%E6%B1%BA%E5%AE%9A).
+The API contract is in [20261122_pattern_algebra.md / Decision](../adr/20261122_pattern_algebra.md#decision).
 
 `Flexr::Pattern` copies and freezes literal arguments so callers can safely share a value across Ractors.
 The static reader resolves named constants and retains their names for `flexr dot` and `flexr explain`.

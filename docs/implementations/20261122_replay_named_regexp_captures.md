@@ -1,6 +1,6 @@
 # Replay for named regexp captures
 
-The capture contract is in [20261122_named_captures_of_selected_rule.md / Decision](../adr/20261122_named_captures_of_selected_rule.md#%E6%B1%BA%E5%AE%9A).
+The capture contract is in [20261122_named_captures_of_selected_rule.md / Decision](../adr/20261122_named_captures_of_selected_rule.md#decision).
 
 DFA compilation treats named groups as transparent and remembers the pattern index of the winning acceptance.
 `Automaton::Compiler#prepare_capture_pattern` creates a Ruby regexp with absolute anchors and the same encoding and character classes as the DFA.

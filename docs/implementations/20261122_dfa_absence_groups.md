@@ -1,6 +1,6 @@
 # DFA construction for absence groups
 
-The language contract is in [20261122_dfa_absence_groups.md / Decision](../adr/20261122_dfa_absence_groups.md#%E6%B1%BA%E5%AE%9A).
+The language contract is in [20261122_dfa_absence_groups.md / Decision](../adr/20261122_dfa_absence_groups.md#decision).
 
 `Regexp::Normalizer` represents `(?~X)` as the subject's universe minus a universe string followed by `X` and another universe string.
 For nullable `X`, it emits a failing fragment without building the product.

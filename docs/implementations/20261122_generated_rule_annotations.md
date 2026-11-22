@@ -5,7 +5,7 @@ The generator carries their metadata only for specifications that use it.
 
 ## Keyword tables
 
-The emission policy is in [20261122_classify_keywords_after_matching.md / Decision](../adr/20261122_classify_keywords_after_matching.md#%E6%B1%BA%E5%AE%9A).
+The emission policy is in [20261122_classify_keywords_after_matching.md / Decision](../adr/20261122_classify_keywords_after_matching.md#decision).
 
 `Automaton::KeywordTables.diagnostics` validates spellings against full acceptances and checks the native first match on `firstmatch` rules.
 `Keywords::Emission` remaps runtime tokens after matching.
@@ -14,7 +14,7 @@ The table adds no DFA transitions and leaves the artifact ABI unchanged.
 
 ## Trivia channels
 
-The token-consumption contract is in [20261122_trivia_channels.md / Decision](../adr/20261122_trivia_channels.md#%E6%B1%BA%E5%AE%9A).
+The token-consumption contract is in [20261122_trivia_channels.md / Decision](../adr/20261122_trivia_channels.md#decision).
 
 The generator stores channel metadata when named channels are used.
 Standalone output embeds the trivia runtime for those specifications.
@@ -23,7 +23,7 @@ Structured tokens store the immutable trivia metadata outside their data members
 
 ## Rule priority
 
-The precedence contract is in [20261122_explicit_rule_priority.md / Decision](../adr/20261122_explicit_rule_priority.md#%E6%B1%BA%E5%AE%9A).
+The precedence contract is in [20261122_explicit_rule_priority.md / Decision](../adr/20261122_explicit_rule_priority.md#decision).
 
 Generated and standalone artifacts carry priority only for rules that use a nonzero value.
 `IR::Rule#loses_priority_tie?` compares priority and source index when longest-match candidates have equal length.

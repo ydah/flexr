@@ -12,43 +12,43 @@ Record reversible implementation choices in the pull request or in [Implementati
 
 Use `YYYYMMDD_english_snake_case.md`, with the date the record was opened. For the older records in this index, the first recorded Git date supplies the filename and decision date when the original record has no separate date.
 
-Use English prose with the fixed template labels below. Omit either optional section when it has no content.
+Write ADRs in English using this template. Omit either optional section when it has no content.
 
 ```markdown
 # ADR: <State the decision in one sentence>
 
-- ステータス: 提案
-- 決定日: YYYY-MM-DD
-- 関連: <Issues, pull requests, tickets, or ADR filenames>
+- Status: Proposed
+- Decision date: YYYY-MM-DD
+- Related: <Issues, pull requests, tickets, or ADR filenames>
 
-## コンテキスト
+## Context
 
 <The specific problem in this repository and the constraints that affect the choice>
 
-## 決定
+## Decision
 
 <What the project chose, in active voice>
 
-## 決定しないこと
+## Out of scope
 
 <Optional. What is out of scope, with the record or ticket that owns it, or say the owner is undecided>
 
-## 検討した代替案
+## Alternatives considered
 
 <Optional. The alternatives considered and why the project declined them>
 
-## 影響
+## Consequences
 
 <Benefits, costs, and remaining consequences>
 ```
 
-Use a proposed status during review, accepted after agreement, rejected for a declined proposal, and replaced when a later ADR changes an accepted decision. A status describes agreement on the decision. Use these forms in that order.
+Use `Proposed` during review, `Accepted` after agreement, and `Rejected` for a declined proposal. Use `Superseded by` when a later ADR changes an accepted decision. Status records agreement on the decision.
 
 ```markdown
-- ステータス: 提案
-- ステータス: 採用
-- ステータス: 却下
-- ステータス: 置換 → `YYYYMMDD_replacing_decision.md`
+- Status: Proposed
+- Status: Accepted
+- Status: Rejected
+- Status: Superseded by `YYYYMMDD_replacing_decision.md`
 ```
 
 ## Review checklist
@@ -67,7 +67,7 @@ MUST rules are required. For a SHOULD rule, explain any exception in the pull re
 | C-2 | SHOULD | Describe public contracts and persistent formats at the level someone must preserve when replacing the implementation. |
 | C-3 | SHOULD | State scope and indicate the issue or ADR that owns an excluded decision. Say the owner is undecided when there is no known record. |
 | C-4 | SHOULD | Explain the alternatives that were considered and why they were declined. |
-| D-1 | MUST | Add a new ADR to change an accepted decision. Mark the old status as replaced and point to the new filename. Correct spelling and factual errors in place. |
+| D-1 | MUST | Add a new ADR to change an accepted decision. Set the old status to `Superseded by` followed by the new filename. Correct spelling and factual errors in place. |
 | D-2 | SHOULD | Use the same terms as the existing ADRs, code, and user interfaces. |
 | E-1 | SHOULD | Record dates and versions for time-sensitive facts. Leave update dates, assignees, and relative dates in planning records. |
 | F-1 | MUST | Resolve open points or move them to the out-of-scope section before accepting the ADR. |
