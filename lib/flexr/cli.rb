@@ -189,22 +189,29 @@ module Flexr
       require_relative "source/fixes"
       path = File.realpath(spec)
       parsed = read_spec(path)
-      edits = begin
+      original = parsed
+      begin
         compiled = compile(parsed, overrides: { warn_level: :all })
-        Source::Fixes.edits(parsed, compiled)
       rescue CompileError => e
         repairs = Source::Fixes.regexp_edits(parsed, e.diagnostic)
-        raise if repairs.empty?
+        if repairs.empty?
+          index = parsed.rules.index { |rule| rule.span == e.diagnostic&.location }
+          e.diagnostic.location = original.rules.fetch(index).span if index
+          raise
+        end
 
-        repairs
+        repaired = Source::Fixes.apply(parsed.source, repairs)
+        parsed = Source::PrismReader.new(repaired, path: path).read
+        retry
       end
+      edits = Source::Fixes.edits(parsed, compiled)
       fixed = Source::Fixes.apply(parsed.source, edits)
       compile(Source::PrismReader.new(fixed, path: path).read) unless edits.empty?
 
       if options.dry_run
         out.write(fixed)
-      elsif !edits.empty?
-        raise CompileError, "spec changed while preparing fixes: #{spec}" unless File.binread(path) == parsed.source.b
+      elsif fixed != original.source
+        raise CompileError, "spec changed while preparing fixes: #{spec}" unless File.binread(path) == original.source.b
 
         ArtifactWriter.write!(path, fixed)
       end

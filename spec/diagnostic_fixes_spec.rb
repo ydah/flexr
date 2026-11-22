@@ -113,10 +113,11 @@ RSpec.describe "diagnostic fixes" do
     end
   end
 
-  it "rewrites a lazy quoted pattern to stop at its first delimiter" do
+  it "rewrites lazy quoted patterns to stop at their first delimiters" do
     source = <<~RUBY
       class RepairAbsenceLexer < Flexr::Lexer
         rule(/".*?"/m, emit: :STRING)
+        rule(/'.*?'/, emit: :SINGLE)
         rule(" ", skip: true)
       end
     RUBY
@@ -127,8 +128,10 @@ RSpec.describe "diagnostic fixes" do
       expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
       fixed = File.binread(path)
       expect(fixed).to include('rule(/"(?~")"/m,')
+      expect(fixed).to include("rule(/'(?~['\\n])'/,")
       lexer = Module.new.tap { |scope| scope.module_eval(fixed, path) }.const_get(:RepairAbsenceLexer)
       expect(lexer.new(%("a\n" "b")).tokens).to eq([[:STRING, %("a\n")], [:STRING, '"b"']])
+      expect(lexer.new("'c'").tokens).to eq([[:SINGLE, "'c'"]])
     end
   end
 end
