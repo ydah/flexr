@@ -25,7 +25,7 @@ module Flexr
         ].join("\n")
       end
 
-      def source(indent: "  ")
+      def source(indent: "  ", direct: false)
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         captures = compiled.rules.any?(&:capture_patterns)
@@ -104,24 +104,18 @@ module Flexr
         lines << "#{indent}  rules = self.class.__flexr_rules"
         lines << "#{indent}  source = buffer.stable_source"
         lines << "#{indent}  guarded_steps = scan_steps_guarded?"
-        lines << "#{indent}  token_start = more_text_start || position"
-        lines << "#{indent}  token_limit = max_token_size"
         lines << "#{indent}  check_token_limit = token_limit_required?"
         lines << "#{indent}  cursor = position"
         lines << "#{indent}  best = nil"
-        lines << "#{indent}  accel_mode = @accel_mode"
-        lines << "#{indent}  accelerate = accel_mode != :none && !(accel_mode == :auto && @__flexr_generated_auto_accel_off)"
-        lines << "#{indent}  if source && !guarded_steps && !check_token_limit && !accelerate"
-        lines << "#{indent}    while cursor < source.bytesize"
-        lines << "#{indent}      byte = source.getbyte(cursor)"
-        lines << "#{indent}      current = if direct_nxt"
-        lines << "#{indent}        class_id = ec[byte]"
-        lines << "#{indent}        value = direct_nxt[(current * direct_classes) + class_id]"
-        lines << "#{indent}        value >= 0 ? value : nil"
-        lines << "#{indent}      else"
-        lines << "#{indent}        dfa.transition(current, byte)"
-        lines << "#{indent}      end"
-        lines << "#{indent}      break unless current"
+        lines << "#{indent}  if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)"
+        lines << "#{indent}    while (byte = source.getbyte(cursor))"
+        if direct
+          lines << "#{indent}      current = direct_nxt[(current * direct_classes) + ec[byte]]"
+          lines << "#{indent}      break if current < 0"
+        else
+          lines << "#{indent}      current = dfa.transition(current, byte)"
+          lines << "#{indent}      break unless current"
+        end
         lines << "#{indent}      cursor += 1"
         lines << "#{indent}      acceptance = accepts[current].first"
         lines << "#{indent}      next unless acceptance"
@@ -135,6 +129,9 @@ module Flexr
         lines << "#{indent}    end"
         lines << "#{indent}    return best"
         lines << "#{indent}  end"
+        lines << "#{indent}  token_start = more_text_start || position"
+        lines << "#{indent}  token_limit = max_token_size"
+        lines << "#{indent}  accelerate = @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)"
         lines << "#{indent}  while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)"
         lines << "#{indent}    if accelerate"
         lines << "#{indent}      region = __flexr_generated_acceleration_region(dfa, current)"
@@ -256,7 +253,8 @@ module Flexr
         lines << "#{indent}    rule = self.class.__flexr_rules.fetch(acceptance.rule_index)"
         lines << "#{indent}    next if best && cursor < best.total_end_pos"
         lines << "#{indent}    next if best && cursor == best.total_end_pos &&"
-        lines << "#{indent}      rule.index > best.rule.index"
+        priority_check = compiled.rules.any? { |rule| !rule.priority.zero? }
+        lines << "#{indent}      #{priority_check ? 'rule.loses_priority_tie?(best.rule)' : 'rule.index > best.rule.index'}"
         if captures
           lines << "#{indent}    next if best && cursor == best.end_pos && rule.equal?(best.rule) && rule.capture_patterns"
         end

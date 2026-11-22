@@ -50,12 +50,13 @@ module Flexr
       state = @lexer.state
       candidates = candidates_at(start)
       selected = candidates.find { |candidate| candidate[:rule] == rule.index }
+      ties = selected ? candidates.select { |candidate| candidate[:total_length] == selected[:total_length] } : []
       reason = if @config.backend == :firstmatch
         "first_match"
       elsif candidates.length == 1
         "only_match"
-      elsif selected && candidates.count { |candidate| candidate[:total_length] == selected[:total_length] } > 1
-        "rule_order"
+      elsif ties.length > 1
+        ties.count { |candidate| candidate.fetch(:priority, 0) == rule.priority } > 1 ? "rule_order" : "priority"
       else
         "longest"
       end
@@ -167,8 +168,10 @@ module Flexr
       end
       return if trailing.nil?
 
-      { rule: rule.index, patterns: rule.patterns.map(&:inspect), length: ending - start,
-        trailing_length: trailing, total_length: ending - start + trailing }
+      candidate = { rule: rule.index, patterns: rule.patterns.map(&:inspect), length: ending - start,
+                    trailing_length: trailing, total_length: ending - start + trailing }
+      candidate[:priority] = rule.priority unless rule.priority.zero?
+      candidate
     end
 
     def walk(dfa, start, scan_start: start)

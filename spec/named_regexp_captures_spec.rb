@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "json"
 require "open3"
 require "rbconfig"
 
@@ -69,6 +70,60 @@ RSpec.describe "named regexp captures" do
     expect(outcomes(source, "ab")).to all(eq([%w[CAPTURE ab]]))
     firstmatch = source.sub("rule(/", "backend :firstmatch\n  option :experimental\n  rule(/")
     expect(outcomes(firstmatch, "ab")).to all(eq([%w[CAPTURE a], %w[B b]]))
+  end
+
+  it "replays only the selected rule's captures after applying expectations and priority" do
+    source = <<~RUBY
+      require "flexr"
+      class NamedCaptureLexer < Flexr::Lexer
+        rule(/(?<head>a)/, followed_by: "b", emits: :CONTEXT, priority: 2) { emit :CONTEXT, captures }
+        rule(/a(?<tail>b)/, emits: :PAIR, priority: 10) { emit :PAIR, captures }
+        rule(/(?<whole>abc)/, emits: :LONG) { emit :LONG, captures }
+      end
+    RUBY
+    requests = [%i[CONTEXT PAIR], [:CONTEXT], %i[CONTEXT PAIR LONG]]
+    expected = [["PAIR", { "tail" => "b" }], ["CONTEXT", { "head" => "a" }], ["LONG", { "whole" => "abc" }]]
+
+    %i[table direct].each do |backend|
+      expect(outcomes(source, "abc", requests: requests, backend: backend)).to all(eq(expected))
+    end
+  end
+
+  it "uses native firstmatch capture data for the first eligible pattern" do
+    source = <<~RUBY
+      require "flexr"
+      class NamedCaptureLexer < Flexr::Lexer
+        backend :firstmatch
+        rule(/(?<earlier>ab)/, emits: :EARLY) { emit :EARLY, captures }
+        rule(/(?<later>a|ab)/, emits: :KEEP) { emit :KEEP, captures }
+      end
+    RUBY
+
+    expect(outcomes(source, "ab", requests: [[:KEEP]])).to all(eq([["KEEP", { "later" => "a" }]]))
+  end
+
+  it "clears cached captures when entering a state with only plain rules" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/(?<part>a)/) do
+        push(:inside)
+        emit :CAPTURE, captures
+      end
+      state(:inside) do
+        rule("b") { emit :PLAIN, captures }
+      end
+    end
+
+    expect(lexer.new("ab").tokens).to eq([[:CAPTURE, { part: "a" }], [:PLAIN, {}]])
+  end
+
+  it "preserves captures for a rule that would otherwise use a whole-token plan" do
+    lexer = Class.new(Flexr::Lexer) do
+      accel :strscan
+      rule(/(?<part>[a-z]+)/) { emit :WORD, captures[:part] }
+    end
+
+    expect(lexer.compile!.machines.fetch(:initial).whole_tokens).to be_nil
+    expect(lexer.new("capture").tokens).to eq([[:WORD, "capture"]])
   end
 
   it "captures a value matched with vendored Unicode shorthands" do
@@ -164,27 +219,35 @@ RSpec.describe "named regexp captures" do
     end
   end
 
-  def outcomes(source, input)
+  def outcomes(source, input, requests: nil, backend: nil)
     Dir.mktmpdir("flexr-captures-") do |directory|
       path = File.join(directory, "lexer.flexr.rb")
       generated = File.join(directory, "lexer.generated.rb")
       standalone = File.join(directory, "lexer.standalone.rb")
       File.binwrite(path, source)
-      Flexr::Generator.new(path, output: generated).generate
-      Flexr::Generator.new(path, output: standalone, options: { standalone: true }).generate
+      options = backend ? { backend: backend } : {}
+      Flexr::Generator.new(path, output: generated, options: options).generate
+      Flexr::Generator.new(path, output: standalone, options: options.merge(standalone: true)).generate
 
       runner = <<~RUNNER
         require "json"
         require "stringio"
         load ARGV.fetch(0)
-        input = StringIO.new(ARGV.fetch(1))
-        lexer = NamedCaptureLexer.new(input, retain_input: false, chunk_size: 1)
-        puts JSON.generate(lexer.tokens)
+        make_lexer = -> { NamedCaptureLexer.new(StringIO.new(ARGV.fetch(1)), retain_input: false, chunk_size: 1) }
+        tokens = if ARGV[2]
+          JSON.parse(ARGV[2]).map do |types|
+            make_lexer.call.next_token(expect: types.map(&:to_sym))
+          end
+        else
+          make_lexer.call.tokens
+        end
+        puts JSON.generate(tokens)
       RUNNER
       [path, generated, standalone].map do |file|
         command = [RbConfig.ruby]
         command << "-Ilib" unless file == standalone
-        stdout, stderr, status = Open3.capture3(*command, "-e", runner, file, input)
+        arguments = requests ? [input, JSON.generate(requests)] : [input]
+        stdout, stderr, status = Open3.capture3(*command, "-e", runner, file, *arguments)
         expect(status).to be_success, stderr
         JSON.parse(stdout)
       end

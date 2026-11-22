@@ -183,6 +183,8 @@ module Flexr
           states: Array(definition.fetch(:states)).map(&:to_sym),
           bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
           location: definition[:span] || definition[:location], channel: channel,
+          emits: Configuration.rule_emits!(definition[:emits]),
+          priority: definition[:priority],
           capture_patterns: definition[:capture_patterns],
           trailing_dfa: definition[:trailing_dfa] && Generated.load_dfa(definition[:trailing_dfa]),
           pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
