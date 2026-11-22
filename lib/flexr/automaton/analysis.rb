@@ -78,10 +78,10 @@ module Flexr
         while cursor < queue.length
           state = queue.fetch(cursor).first
           accepts = dfa.accepts.fetch(state)
-          winner = accepts.min_by(&:rule_index)&.rule_index
+          winner = accepts.first&.rule_index
           if (include_empty || cursor.positive?) && winner
             shadowed = accepts.map(&:rule_index).uniq.select do |index|
-              (include_unshadowed || index > winner) && remaining.key?(index)
+              (include_unshadowed || index != winner) && remaining.key?(index)
             end
             unless shadowed.empty?
               input = example_input(queue, cursor)
@@ -159,7 +159,8 @@ module Flexr
         end
         return unless matches.key?(target.index)
 
-        winner, (length, total) = matches.max_by { |index, (_, size)| firstmatch ? -index : [size, -index] }
+        priorities = rules.to_h { |rule| [rule.index, rule.priority] }
+        winner, (length, total) = matches.max_by { |index, (_, size)| firstmatch ? -index : [size, priorities.fetch(index), -index] }
         return if same_length && total != matches.fetch(target.index).last
 
         [winner, length, total - length]

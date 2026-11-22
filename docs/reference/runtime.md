@@ -31,8 +31,9 @@ must be positive.
 
 | Method | Result |
 |---|---|
-| `next_token` | One token, or `nil` at EOF |
-| `tokens` | Array containing every token until EOF |
+| `next_token` | One default-channel token, or `nil` at EOF |
+| `tokens(channels: :default)` | Array containing the remaining default-channel tokens |
+| `tokens(channels: :all)` | Array containing the remaining tokens from every channel in input order |
 | `each_token` | Enumerator without a block; otherwise yields tokens and returns `self` |
 | `racc_next_token` | `[type, value]`, or `[false, "$end"]` at EOF |
 | `input` | The currently retained input string |
@@ -45,6 +46,9 @@ must be positive.
 
 `each_token` yields two arguments instead of one when `token_kind :yield` is
 selected. `tokens` always returns an array of token values.
+With trivia channels, `each_token` and `racc_next_token` expose the default
+channel just like `next_token`. Collect all channels from a fresh lexer to
+preserve the full stream. A lexer instance advances as tokens are consumed.
 
 ## Indentation tokens
 

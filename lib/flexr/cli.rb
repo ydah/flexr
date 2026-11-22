@@ -197,6 +197,7 @@ module Flexr
         options.warn_level == :all ||
           (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
       end
+      diagnostics.concat(emit_shorthand_suggestions(parsed)) if parsed && options.warn_level == :all
       if parsed && options.overrides.fetch(:backend, parsed.config[:backend]) != :firstmatch && options.warn_level != :none
         tables = parsed.config.dig(:options, :keyword_tables)
         diagnostics.concat(Automaton::KeywordTables.grouping_suggestions(compiled, tables))
@@ -213,6 +214,18 @@ module Flexr
       return EXIT_FAILURE if options.warn_as_error && diagnostics.any?(&:warning?)
 
       EXIT_OK
+    end
+
+    def emit_shorthand_suggestions(parsed)
+      parsed.rules.filter_map do |rule|
+        token = rule.emit_shorthand
+        next unless token
+
+        Diagnostics.info(
+          "FLEXR-I004", "rule emits #{token.inspect} with unchanged matched text",
+          location: rule.span, help: "use emit: #{token.inspect} on the rule"
+        )
+      end
     end
 
     def print_stats(spec, options, out)
@@ -247,7 +260,8 @@ module Flexr
           label = dfa.accepts[state].map do |acceptance|
             rule = compiled.rules.fetch(acceptance.rule_index)
             pattern = rule.patterns.fetch(acceptance.pattern_index)
-            pattern.is_a?(Pattern) ? "#{rule.index} #{pattern.inspect}" : rule.index
+            description = pattern.is_a?(Pattern) ? "#{rule.index} #{pattern.inspect}" : rule.index
+            "#{description}#{channel_label(rule)}#{priority_label(rule)}"
           end.uniq.join(",")
           label = "#{node_name}\naccept=#{label}" unless label.empty?
           attributes = dot_node_attributes(label, accepting: accepting, accelerated: accelerated_states[state])
@@ -302,7 +316,12 @@ module Flexr
           transitions = dfa.transitions[state].each_with_index.filter_map do |destination, class_id|
             destination && [class_id, destination]
           end
-          out.puts "  #{state}: accepts=#{accepts.inspect} transitions=#{transitions.inspect}"
+          channels = dfa.accepts[state].map(&:rule_index).uniq.filter_map do |index|
+            channel = channel_label(compiled.rules.fetch(index))
+            "#{index}#{channel}" if channel
+          end
+          labels = " channels=[#{channels.join(', ')}]" unless channels.empty?
+          out.puts "  #{state}: accepts=#{accepts.inspect} transitions=#{transitions.inspect}#{labels}"
         end
       end
       EXIT_OK
@@ -314,10 +333,21 @@ module Flexr
       rules = rules.select { |rule| rule.index == rule_number } if rule_number
       raise ArgumentError, "rule not found: #{rule_number}" if rules.empty? && rule_number
 
-      out.puts(rules.map { |rule| "rule #{rule.index}: #{rule.patterns.inspect}" })
-      emitted = rules.filter_map { |rule| rule.action[1] if rule.action.is_a?(Array) && rule.action.first == :emit }
+      out.puts(rules.map { |rule| "rule #{rule.index}#{channel_label(rule)}#{priority_label(rule)}: #{rule.patterns.inspect}" })
+      emitted = rules.filter_map do |rule|
+        rule.action[1] if !rule.channel && rule.action.is_a?(Array) && rule.action.first == :emit
+      end
       out.puts keyword_table_labels(parsed.config, among: emitted)
       EXIT_OK
+    end
+
+    def channel_label(rule)
+      " channel=#{rule.channel.inspect}" if rule.channel
+    end
+
+    def priority_label(rule)
+      priority = rule.priority.to_i
+      priority.zero? ? "" : " (priority #{priority})"
     end
 
     def keyword_table_labels(config, among: nil)
