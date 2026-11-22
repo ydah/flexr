@@ -37,10 +37,18 @@ for (const [name, input] of Object.entries(inputs)) {
   const source = useStable ? readStableFile(filename) : await readFile(path.join(root, filename), 'utf8');
   presets[name] = { source, input };
 }
-const absenceFilename = 'site/ruby/presets/absence.flexr.rb';
-if (!useStable || stableFiles(absenceFilename).includes(absenceFilename)) {
-  const source = useStable ? readStableFile(absenceFilename) : await readFile(path.join(root, absenceFilename), 'utf8');
-  presets.absence = { source, input: '/* 前 */first /* another comment */second' };
+const updatedPresets = {
+  absence: '/* 前 */first /* another comment */second',
+  pattern: 'if ifx [[ababa end',
+  keywords: 'if iffy else end',
+  trivia: '# note\nalpha \tbeta',
+};
+const releasedPresets = useStable ? stableFiles('site/ruby/presets') : null;
+for (const [name, input] of Object.entries(updatedPresets)) {
+  const filename = `site/ruby/presets/${name}.flexr.rb`;
+  if (releasedPresets && !releasedPresets.includes(filename)) continue;
+  const source = useStable ? readStableFile(filename) : await readFile(path.join(root, filename), 'utf8');
+  presets[name] = { source, input };
 }
 await writeFile(path.join(output, 'presets.json'), JSON.stringify(presets));
 const wasm = path.join(site, 'node_modules/@ruby/4.0-wasm-wasi/dist');

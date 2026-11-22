@@ -2,7 +2,7 @@
 
 module Flexr
   module DSL
-    DSL_METHODS = %i[rule state all_states on_eof emits backend token_kind encoding option accel].freeze
+    DSL_METHODS = %i[rule pattern upto state all_states on_eof emits keywords backend token_kind encoding option accel].freeze
     def inherited(child)
       super
       child.__flexr_reset!
@@ -43,6 +43,9 @@ module Flexr
       end
       nil
     end
+
+    def pattern(*values) = Pattern.build(*values)
+    def upto(value) = Pattern.upto(value)
 
     def state(*names, inclusive: false, &block)
       raise ArgumentError, "state requires a block" unless block
@@ -122,6 +125,7 @@ module Flexr
         # The ivar is part of the generated/runtime class contract.
         @__flexr_compiled ||= begin
           compiled = Automaton::Compiler.new(__flexr_spec).compile
+          include Keywords::Emission if @__flexr_config.options[:keyword_tables]
           @__flexr_config.backend = auto_direct?(compiled) ? :direct : :table if @__flexr_config.backend == :auto
           freeze_specification!
           freeze_compiled!(compiled)
@@ -208,6 +212,16 @@ module Flexr
       @__flexr_eof_rules.freeze
       @__flexr_rules.freeze
       @__flexr_states.freeze
+      if (tables = @__flexr_config.options[:keyword_tables])
+        tables.each_value do |table|
+          table.each_value do |entry|
+            entry.last&.freeze
+            entry.freeze
+          end
+          table.freeze
+        end
+        tables.freeze
+      end
       @__flexr_config.options.freeze
       @__flexr_config.declared_tokens.freeze
       @__flexr_config.freeze
@@ -228,8 +242,8 @@ module Flexr
     def normalize_patterns(pattern)
       values = pattern.is_a?(Array) ? pattern : [pattern]
       values.each do |value|
-        unless value.is_a?(::Regexp) || value.is_a?(String)
-          diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, or Array")
+        unless value.is_a?(::Regexp) || value.is_a?(String) || (defined?(Pattern) && value.is_a?(Pattern))
+          diagnostic = Diagnostics.error("FLEXR-E018", "rule pattern must be a Regexp, String, Pattern, or Array")
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
       end
@@ -243,7 +257,9 @@ module Flexr
       when String
         ::Regexp.new(::Regexp.escape(value))
       else
-        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp or String")
+        return value if defined?(Pattern) && value.is_a?(Pattern)
+
+        diagnostic = Diagnostics.error("FLEXR-E018", "followed_by must be a Regexp, String, or Pattern")
         raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
     end

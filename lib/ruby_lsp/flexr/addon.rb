@@ -80,7 +80,7 @@ module RubyLsp
       end
 
       def on_call_node_enter(node)
-        return unless node.name == :rule && node.receiver.nil?
+        return unless %i[rule keywords].include?(node.name) && node.receiver.nil?
 
         source = node.location.source_lines.join
         diagnostics = @analysis.diagnostics(source).select do |diagnostic|
@@ -89,6 +89,7 @@ module RubyLsp
         end
         text = diagnostics.map { |diagnostic| "#{diagnostic.code}: #{@analysis.message(diagnostic)}" }.join("\n\n")
         sections = []
+        sections << "Keyword table. Exact spellings select a token type after a matching emit: rule wins." if node.name == :keywords
         channel = @analysis.channel_at(node.location.start_offset)
         if channel
           sections << "Channel `#{channel.inspect}` preserves trivia. " \

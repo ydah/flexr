@@ -72,7 +72,7 @@ RSpec.describe "token channels" do
   end
 
   it "uses evaluated channel names and action precedence in generated and standalone scanners" do
-    source = <<~'SPEC'
+    source = <<~SPEC
       require "flexr"
       class EvaluatedChannels < Flexr::Lexer
         def self.trivia_channel = :comment
@@ -128,6 +128,92 @@ RSpec.describe "token channels" do
       output = StringIO.new
       expect(Flexr::CLI.run(["check", path, "--format", "json"], out: output)).to eq(0)
       expect(JSON.parse(output.string)).to be_empty
+    end
+  end
+
+  it "remaps only default-channel identifiers for runtime, generated and standalone lexers" do
+    source = <<~'SPEC'
+      require "flexr"
+      class ChannelledKeywords < Flexr::Lexer
+        rule("(") { push :annotation }
+        state :annotation do
+          rule(")") { pop }
+          rule(/[a-z]+/, channel: :comment, emit: :IDENT)
+        end
+        rule(/\s+/, skip: true)
+        rule(/[a-z]+/, emit: :IDENT)
+        keywords %w[if], among: :IDENT
+      end
+    SPEC
+    runner = <<~RUBY
+      load ARGV.fetch(0)
+      input = "(if) if"
+      all = ChannelledKeywords.new(input).tokens(channels: :all)
+      tokens = ChannelledKeywords.new(input).tokens
+      parser = ChannelledKeywords.new(input)
+      puts JSON.generate([all, tokens, parser.racc_next_token, parser.racc_next_token])
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "channel-keywords.flexr.rb")
+      generated = File.join(directory, "channel-keywords.generated.rb")
+      standalone = File.join(directory, "channel-keywords.standalone.rb")
+      File.binwrite(path, source)
+      Flexr::Generator.new(path, output: generated).generate
+      Flexr::Generator.new(path, output: standalone, options: { standalone: true }).generate
+
+      [path, generated, standalone].each do |file|
+        command = [RbConfig.ruby]
+        command << "-Ilib" unless file == standalone
+        stdout, stderr, status = Open3.capture3(*command, "-e", runner, file)
+        expect(status).to be_success, stderr
+        keyword = %w[IF if]
+        expect(JSON.parse(stdout)).to eq([[%w[IDENT if], keyword], [keyword], keyword, [false, "$end"]])
+      end
+    end
+  end
+
+  it "requires keyword tables to target a default-channel rule" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/[a-z]+/, channel: :comment, emit: :IDENT)
+      keywords %w[if], among: :IDENT
+    end
+    expect { lexer.compile! }.to raise_error(Flexr::CompileError) { |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E028")
+      expect(error.diagnostic.note).to include('"if"')
+    }
+  end
+
+  it "allows hidden rules to shadow default-channel keywords" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule("if", channel: :comment, emit: :IDENT)
+      rule(/[a-z]+/, emit: :IDENT)
+      keywords %w[if], among: :IDENT
+    end
+    warning = lexer.compile!.diagnostics.find { |diagnostic| diagnostic.code == "FLEXR-W022" }
+    expect(warning&.note).to include('"if"')
+  end
+
+  it "excludes hidden literals and identifier rules from keyword grouping suggestions" do
+    source = <<~SPEC
+      require "flexr"
+      class ChannelKeywordGrouping < Flexr::Lexer
+        rule("if", emit: :IF)
+        rule("end", emit: :END)
+        rule(/[a-z]+/, emit: :IDENT)
+      end
+    SPEC
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "channel-keyword-grouping.flexr.rb")
+      variants = [source, source.sub("emit: :IF", "channel: :comment, emit: :IF"),
+                  source.sub("emit: :IDENT", "channel: :comment, emit: :IDENT")]
+      diagnostics = variants.map do |variant|
+        File.binwrite(path, variant)
+        output = StringIO.new
+        expect(Flexr::CLI.run(["check", path, "--format", "json"], out: output)).to eq(0)
+        JSON.parse(output.string).map { |diagnostic| diagnostic.fetch("code") }
+      end
+      expect(diagnostics.first).to include("FLEXR-I003")
+      expect(diagnostics.drop(1).flatten).not_to include("FLEXR-I003")
     end
   end
 

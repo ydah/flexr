@@ -75,8 +75,9 @@ test('the absence preset ends each comment at its first terminator', async () =>
 });
 
 test('trivia keeps whitespace and comments in structured token output', async () => {
-  const source = await readFile(new URL('../ruby/presets/trivia.flexr.rb', import.meta.url), 'utf8');
-  const input = '# note\nalpha \tbeta';
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  assert.ok(presets.trivia, 'trivia preset is packaged');
+  const { source, input } = presets.trivia;
   for (const mode of ['runtime', 'generated']) {
     const result = await runtime.run({ source, input, mode });
     assert.equal(result.error, undefined, result.error);
@@ -106,6 +107,29 @@ test('share links retain Unicode source and input without running code', () => {
   assert.deepEqual(decodeState(encodeState(state)), state);
   assert.throws(() => decodeState('x'.repeat(300_000)), /too large/);
   assert.throws(() => decodeState(btoa(JSON.stringify({ source: 5, input: '' }))), /Invalid/);
+});
+
+test('pattern algebra keeps overlapping delimiters and keywords distinct', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ ...presets.pattern, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [
+      ['KEYWORD', 'if'], ['IDENT', 'ifx'], ['BLOCK', '[[aba'], ['IDENT', 'ba'], ['KEYWORD', 'end'],
+    ]);
+  }
+});
+
+test('the keyword preset classifies exact identifiers in both modes', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  assert.ok(presets.keywords, 'keyword preset is packaged');
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ ...presets.keywords, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [
+      ['IF', 'if'], ['IDENT', 'iffy'], ['ELSE', 'else'], ['END', 'end'],
+    ]);
+  }
 });
 
 test('language presets use the repository examples and run in both modes', async () => {

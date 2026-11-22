@@ -104,3 +104,22 @@ test('offers the absence preset from the packaged lexer examples', async ({ page
   await expect(page.locator('#spec')).toHaveValue(/\(\?~/);
   await expect(page.locator('#input')).toHaveValue(/first.*second/);
 });
+
+test('loads the keyword table preset from the packaged lexer examples', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  await page.getByRole('combobox', { name: 'Choose a playground preset' }).selectOption('keywords');
+  await expect(page.locator('#spec')).toHaveValue(/keywords %w\[if else end\]/);
+  await expect(page.locator('#input')).toHaveValue('if iffy else end');
+});
+
+
+test('shows leading trivia from the comments and whitespace preset', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  await page.getByRole('combobox', { name: 'Choose a playground preset' }).selectOption('trivia');
+  await expect(page.locator('#spec')).toHaveValue(/channel: :comment/);
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await expect(page.locator('#status')).toContainText('2 tokens', { timeout: 30_000 });
+  const [first] = JSON.parse(await page.locator('#tokens').textContent());
+  expect(first.value).toBe('alpha');
+  expect(first.leading_trivia.map(item => [item.channel, item.value])).toEqual([['comment', '# note'], ['whitespace', '\n']]);
+});

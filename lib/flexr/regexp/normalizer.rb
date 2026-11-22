@@ -15,6 +15,10 @@ module Flexr
         normalize_node(@ast)
       end
 
+      def universe
+        @universe ||= AST::Star.new(child: universal_character, loc: nil)
+      end
+
       private
 
       def normalize_node(node)
@@ -149,9 +153,8 @@ module Flexr
       def absence(node)
         return AST::Fail.new(loc: node.loc) if AST.nullable?(node.child)
 
-        @universe ||= AST::Star.new(child: universal_character, loc: nil)
         child = normalize_node(node.child)
-        AST::Difference.new(left: @universe, right: sequence([@universe, child, @universe]), loc: node.loc)
+        AST::Difference.new(left: universe, right: sequence([universe, child, universe]), loc: node.loc)
       end
 
       def universal_character
