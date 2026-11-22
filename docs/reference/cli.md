@@ -19,6 +19,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `tokens SPEC` | Print names declared by `emits` | Space-separated names |
 | `dot SPEC` | Render the DFA as Graphviz DOT | DOT on stdout |
 | `trace SPEC` | Print DFA states, or trace input when supplied | Human or JSON input trace |
+| `skeleton SPEC` | Build shortest inputs that cover DFA transitions | Human or JSON coverage report |
 | `explain SPEC` | List parsed rules and patterns | Text on stdout |
 | `bench SPEC` | Run the benchmark harness | Benchmark output |
 | `import INPUT` | Translate flex/Rexical input | Ruby on stdout or `--output` |
@@ -50,13 +51,14 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--input STRING` | Literal input, including an empty string | Trace |
 | `--input-file PATH` | Input file | Trace and bench |
 | `--generated` | Run the generated scanner | Input trace |
+| `--verify` | Execute the generated cases in all three modes | Skeleton |
 
 The complete help output is kept as a checked snapshot:
 
 <!-- flexr-help:start -->
 Usage: flexr [COMMAND] SPEC.rb [options]
 
-Commands: check, stats, tokens, dot, explain, trace, bench, import
+Commands: check, stats, tokens, dot, explain, trace, skeleton, bench, import
 Options:
   -o, --output PATH          generated output path
   -b, --backend NAME         table | direct | firstmatch | auto
@@ -75,6 +77,7 @@ Options:
       --input STRING          trace input (executes SPEC actions)
       --input-file PATH       trace or benchmark input
       --generated             trace generated scanner
+      --verify                verify skeleton across all modes (executes SPEC actions)
       --target 2.0            report migration requirements (static check only)
 <!-- flexr-help:end -->
 
@@ -113,6 +116,38 @@ Tracing adds candidate analysis and retains steps in memory; it is a debugging
 tool, not a benchmark. Firstmatch candidate analysis reads the remaining
 buffered input to inspect rules beyond the selected first match. It obeys the
 lexer's buffer limit. Normal lexers do not load or run tracing code.
+
+## DFA coverage with skeleton
+
+```sh
+flexr skeleton examples/calculator/lexer.flexr.rb
+flexr skeleton examples/calculator/lexer.flexr.rb --format json --verify
+```
+
+The command reads the specification statically. For each lexical state,
+it finds a shortest input that reaches each DFA transition. A transition is
+identified by its source state, byte class, and destination. Several
+transitions can share one input. Each case starts at byte zero in the named
+lexical state, at the beginning of a line. The empty input exercises EOF.
+UTF-8 witnesses finish their last character, and transitions with no valid
+witness are listed as uncovered. Use `--format json` to preserve binary inputs
+as byte arrays when they cannot be represented as UTF-8 text.
+
+The JSON report contains `coverage` totals and a `cases` array. Each case
+lists its lexical `state`, `input`, ordered `transitions`, and
+`rule_bodies`. A rule body records its rule index and byte length from the
+beginning of the input, including bodies accepted before the final transition.
+The beginning- and end-of-line conditions are checked at those positions.
+Rule selection, trailing context, and actions can change what a lexer emits.
+
+`--verify` runs the specification and its actions in separate Ruby processes
+for runtime, generated, and standalone modes. Use this option on trusted
+specifications. The comparison includes tokens emitted before any error,
+the last byte position and lexical state, and any reported errors. Token
+values use the [snapshot representation](testing.md). Differing outcomes
+are listed under `verification.mismatches`, and the command exits with
+status 1. Matching errors are a valid parity result. Uncovered edges appear
+in the report and leave the exit status unchanged.
 
 ## Exit statuses
 

@@ -9,7 +9,7 @@ require_relative "migration"
 
 module Flexr
   module CLI
-    COMMANDS = %w[check stats tokens dot explain trace bench import].freeze
+    COMMANDS = %w[check stats tokens dot explain trace skeleton bench import].freeze
     EXIT_OK = 0
     EXIT_FAILURE = 1
     EXIT_USAGE = 2
@@ -22,13 +22,13 @@ module Flexr
       return version(out) if args.delete("--version")
 
       command = COMMANDS.include?(args.first) ? args.shift.to_sym : :generate
-      options, output, rule_number, benchmark_args, positionals, trace_args = parse(args, command)
+      options, output, rule_number, benchmark_args, positionals, command_args = parse(args, command)
       raise ArgumentError, "lrama format is only valid for tokens" if options.format == :lrama && command != :tokens
       spec = positionals.shift
       raise ArgumentError, "a SPEC.rb path is required" unless spec
       raise ArgumentError, "unexpected argument: #{positionals.first}" unless positionals.empty?
 
-      execute(command, spec, options, output, rule_number, benchmark_args, out, err, trace_args: trace_args)
+      execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: command_args)
     rescue ArgumentError => e
       err.puts "error: #{e.message}"
       usage(err, status: EXIT_USAGE)
@@ -47,7 +47,7 @@ module Flexr
       rule_number = nil
       benchmark_args = []
       positionals = []
-      trace_args = {}
+      command_args = {}
       parsing_options = true
 
       until args.empty?
@@ -97,17 +97,20 @@ module Flexr
         when "--grammar"
           raise ArgumentError, "--grammar is only valid for check" unless command == :check
           options.grammar = required_argument!(args, argument)
+        when "--verify"
+          raise ArgumentError, "--verify is only valid for the skeleton command" unless command == :skeleton
+          command_args[:verify] = true
         when "--input", "--generated"
           raise ArgumentError, "#{argument} is only valid for the trace command" unless command == :trace
           if argument == "--generated"
-            trace_args[:generated] = true
+            command_args[:generated] = true
           else
-            trace_args[:input] = args.shift || raise(ArgumentError, "--input requires a value")
+            command_args[:input] = args.shift || raise(ArgumentError, "--input requires a value")
           end
         when "--input-file"
           value = required_argument!(args, argument)
           if command == :trace
-            trace_args[:input_file] = value
+            command_args[:input_file] = value
           elsif command == :bench
             benchmark_args.push(argument, value)
           else
@@ -122,17 +125,18 @@ module Flexr
       end
 
       options.validate!
-      raise ArgumentError, "choose --input or --input-file" if trace_args.key?(:input) && trace_args[:input_file]
+      raise ArgumentError, "skeleton requires static compilation; remove --eval" if command == :skeleton && options.eval_mode
+      raise ArgumentError, "choose --input or --input-file" if command_args.key?(:input) && command_args[:input_file]
       raise ArgumentError, "--generated requires --input or --input-file" if
-        trace_args[:generated] && !trace_args.key?(:input) && !trace_args[:input_file]
-      [options, output, rule_number, benchmark_args, positionals, trace_args]
+        command_args[:generated] && !command_args.key?(:input) && !command_args[:input_file]
+      [options, output, rule_number, benchmark_args, positionals, command_args]
     rescue ArgumentError => e
       raise e if e.message.start_with?("unsupported ", "--rule")
 
       raise ArgumentError, "invalid option value: #{e.message}"
     end
 
-    def execute(command, spec, options, output, rule_number, benchmark_args, out, err, trace_args: {})
+    def execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: {})
       case command
       when :check
         check(spec, options, out)
@@ -153,11 +157,13 @@ module Flexr
       when :explain
         print_explanation(spec, rule_number, out)
       when :trace
-        if trace_args.key?(:input) || trace_args[:input_file]
-          print_input_trace(spec, options, trace_args, out)
+        if command_args.key?(:input) || command_args[:input_file]
+          print_input_trace(spec, options, command_args, out)
         else
           print_trace(spec, options, out)
         end
+      when :skeleton
+        print_skeleton(spec, options, out, verify: command_args[:verify])
       when :bench
         run_benchmark(spec, options, benchmark_args, out)
       when :import
@@ -374,6 +380,21 @@ module Flexr
       EXIT_OK
     end
 
+    def print_skeleton(spec, options, out, verify:)
+      require_relative "skeleton"
+      parsed = read_spec(spec)
+      compiled = compile(parsed, overrides: options.overrides)
+      report = Skeleton.new(compiled, encoding: parsed.config.fetch(:encoding)).report
+      if verify
+        require_relative "skeleton/verification"
+        report[:verification] = Skeleton::Verification.new(
+          spec, class_name: parsed.class_name, options: options.generator_options
+        ).compare(report.fetch(:cases))
+      end
+      out.puts(options.format == :json ? JSON.pretty_generate(report) : Skeleton.human(report))
+      report.dig(:verification, :mismatches)&.any? ? EXIT_FAILURE : EXIT_OK
+    end
+
     def run_benchmark(spec, options, benchmark_args, out)
       require_relative "../../benchmark/run"
       args = ["--spec", spec, *benchmark_args]
@@ -466,7 +487,7 @@ module Flexr
       out.puts <<~USAGE
         Usage: flexr [COMMAND] SPEC.rb [options]
 
-        Commands: check, stats, tokens, dot, explain, trace, bench, import
+        Commands: check, stats, tokens, dot, explain, trace, skeleton, bench, import
         Options:
           -o, --output PATH          generated output path
           -b, --backend NAME         table | direct | firstmatch | auto
@@ -485,6 +506,7 @@ module Flexr
               --input STRING          trace input (executes SPEC actions)
               --input-file PATH       trace or benchmark input
               --generated             trace generated scanner
+              --verify                verify skeleton across all modes (executes SPEC actions)
               --target 2.0            report migration requirements (static check only)
       USAGE
       status
