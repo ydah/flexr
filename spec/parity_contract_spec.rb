@@ -9,7 +9,7 @@ RSpec.describe "runtime and generated parity" do
     File.expand_path("..", __dir__)
   end
 
-  def outcomes_for(source, class_name, inputs)
+  def outcomes_for(source, class_name, inputs, streaming: false)
     Dir.mktmpdir("flexr-parity-") do |directory|
       spec = File.join(directory, "lexer.flexr.rb")
       generated = File.join(directory, "lexer.generated.rb")
@@ -19,20 +19,28 @@ RSpec.describe "runtime and generated parity" do
       Flexr::Generator.new(spec, output: standalone, options: { standalone: true }).generate
 
       {
-        runtime: run_lexer_file(spec, class_name, inputs, load_path: true),
-        generated: run_lexer_file(generated, class_name, inputs, load_path: true),
-        standalone: run_lexer_file(standalone, class_name, inputs, load_path: false)
+        runtime: run_lexer_file(spec, class_name, inputs, load_path: true, streaming: streaming),
+        generated: run_lexer_file(generated, class_name, inputs, load_path: true, streaming: streaming),
+        standalone: run_lexer_file(standalone, class_name, inputs, load_path: false, streaming: streaming)
       }
     end
   end
 
-  def run_lexer_file(path, class_name, inputs, load_path:)
+  def run_lexer_file(path, class_name, inputs, load_path:, streaming:)
     script = <<~RUBY
       require "json"
+      require "stringio"
       load ARGV.fetch(0)
       lexer = Object.const_get(ARGV.fetch(1))
       inputs = JSON.parse(ARGV.fetch(2))
-      puts JSON.generate(inputs.map { |input| lexer.new(input).tokens })
+      tokens = inputs.map do |input|
+        if #{streaming}
+          lexer.new(StringIO.new(input), chunk_size: 1, retain_input: false).tokens
+        else
+          lexer.new(input).tokens
+        end
+      end
+      puts JSON.generate(tokens)
     RUBY
     command = [RbConfig.ruby]
     command.push("-I", File.join(repository_root, "lib")) if load_path
@@ -104,6 +112,62 @@ RSpec.describe "runtime and generated parity" do
     expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
     expect(outcomes[:runtime]).to include("code" => "FLEXR-E021", "byte_pos" => 5, "location" => [5, 5],
                                           "note" => "rule /a/", "rule" => 1)
+  end
+
+  %i[table direct auto].each do |backend|
+    it "ends absence comments at the first close in every #{backend} scanner" do
+      source = <<~'RUBY'.sub("BACKEND", backend.to_s)
+        require "flexr"
+        class AbsenceParityLexer < Flexr::Lexer
+          backend :BACKEND
+          accel :strscan
+          rule(%r{/\*(?~\*/)\*/}, emit: :COMMENT)
+          rule(/./m, emit: :OTHER)
+        end
+      RUBY
+      input = "/*é\n***/x/**/"
+      expected = [[["COMMENT", "/*é\n***/"], ["OTHER", "x"], ["COMMENT", "/**/"]]]
+      expect(outcomes_for(source, "AbsenceParityLexer", [input]).values).to all(eq(expected))
+    end
+  end
+
+  it "uses the compiled absence language for trailing context in all modes" do
+    source = <<~RUBY
+      require "flexr"
+      class AbsenceTrailingLexer < Flexr::Lexer
+        backend :firstmatch
+        rule("x", followed_by: /y(?~ab)ab/, emit: :X)
+        rule(/./m, emit: :OTHER)
+      end
+    RUBY
+    input = "xyab"
+    expected = [[%w[X x], %w[OTHER y], %w[OTHER a], %w[OTHER b]]]
+    expect(outcomes_for(source, "AbsenceTrailingLexer", [input]).values).to all(eq(expected))
+  end
+
+  { "UTF_8" => "OTHER", "BINARY" => "BYTE" }.each do |encoding, byte_token|
+    it "respects trailing absence anchors and boundaries in streaming #{encoding}" do
+      source = <<~'RUBY'.sub("INPUT_ENCODING", encoding)
+        require "flexr"
+        class AbsenceTrailingBoundaryLexer < Flexr::Lexer
+          encoding Encoding::INPUT_ENCODING
+          rule("x", followed_by: /^y(?~ab)ab/, emit: :ANCHOR)
+          rule("x\n", followed_by: /^y(?~ab)ab/, emit: :ANCHOR)
+          rule("x", followed_by: /y(?~ab)\xC3/n, emit: :BYTE)
+          rule(/\xC3\xA9/n, skip: true)
+          rule(/./m, emit: :OTHER)
+        end
+      RUBY
+      inputs = %W[xyab x\nyab xyé]
+      expected = [
+        [%w[OTHER x], %w[OTHER y], %w[OTHER a], %w[OTHER b]],
+        [%W[ANCHOR x\n], %w[OTHER y], %w[OTHER a], %w[OTHER b]],
+        [[byte_token, "x"], %w[OTHER y]]
+      ]
+
+      outcomes = outcomes_for(source, "AbsenceTrailingBoundaryLexer", inputs, streaming: true)
+      expect(outcomes.values).to all(eq(expected))
+    end
   end
 
   %i[table direct firstmatch].each do |backend|

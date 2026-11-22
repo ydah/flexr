@@ -29,7 +29,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Atomic groups | Unsupported | Use the delimited-text example in `FLEXR-E014` where applicable; removing atomic groups can change matches |
 | Named captures | Unsupported | Use `(?:...)` when only grouping is needed; capture-dependent patterns need a separate rewrite |
 | Conditional groups | Unsupported | Use the finite alternatives shown by `FLEXR-E014` where applicable, or separate rules and state checks |
-| Absence groups `(?~...)` | Unsupported | For a single excluded literal, use the negated character class shown by `FLEXR-E014`; larger expressions need a separate rewrite |
+| Absence groups `(?~X)` | Supported | Rule patterns require a longest-match backend. See [absence groups](#absence-groups) |
 
 Malformed syntax produces `FLEXR-E001`. Unsupported constructs produce
 `FLEXR-E014`; the diagnostic help normally names the supported replacement.
@@ -45,6 +45,38 @@ is explicitly enabled, in which case flexr advances to guarantee progress.
 Repetition remains a symbolic AST node until NFA construction, avoiding large
 intermediate trees. In `{n,m}`, `m` must be at least `n`; explicit bounds may
 not exceed 1000. `{n,}` uses an unbounded loop after the required copies.
+
+## Absence groups
+
+`(?~X)` matches text containing no substring matched by `X`. The group
+can consume line feeds. In UTF-8 it consumes complete Unicode scalars, and
+in binary mode it consumes bytes. For example, this rule skips C-style
+comments through the first closing delimiter.
+
+```ruby
+rule(%r{/\*(?~\*/)\*/}, skip: true)
+```
+
+Each occurrence of the forbidden expression must fit within the group's
+own span. The normal longest-match rule still applies to the surrounding
+pattern, including delimiters that can overlap themselves.
+
+If `X` can match the empty string, the group has an empty language because
+every string contains the empty string. Otherwise the group can itself
+match empty input, so a rule consisting of `(?~X)` alone reports
+`FLEXR-E005` unless empty matches are enabled.
+
+The compiled automaton uses this language definition in runtime, generated,
+and standalone modes. Ruby 4.0.9's regexp matcher, for example, accepts
+empty input for `\A(?~a?)\z`; flexr's `(?~a?)` has an empty language.
+Likewise, flexr parses `X` as an ordinary alternation in `(?~a|b)`.
+
+Use `table`, `direct`, or `auto` for rule patterns that use absence.
+All backends support non-nullable absence expressions in `followed_by:`
+because trailing context is evaluated by a DFA. Extended `(?~|...)`
+forms report `FLEXR-E014`. Anchors inside `X` report `FLEXR-E009`.
+
+See [ADR 0028](../adr/0028-dfa-absence-groups.md) for the compilation strategy.
 
 ## Captures
 

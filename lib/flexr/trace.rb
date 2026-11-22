@@ -112,8 +112,6 @@ module Flexr
       dfa = @compiled.machines.fetch(@lexer.state).dfa
       best = {}
       walk(dfa, start) do |acceptance, ending|
-        next if acceptance.bol_only && !@lexer.beginning_of_line?
-
         rule = @rules.fetch(acceptance.rule_index)
         candidate = candidate_for(rule, start, ending)
         next unless candidate
@@ -159,7 +157,7 @@ module Flexr
           rule.trailing, encoding: @config.encoding, options: { unicode: @config.options[:unicode] == true }
         )
         longest = nil
-        walk(dfa, ending) { |_acceptance, cursor| longest = cursor - ending }
+        walk(dfa, ending, scan_start: start) { |_acceptance, cursor| longest = cursor - ending }
         longest
       else
         0
@@ -170,12 +168,14 @@ module Flexr
         trailing_length: trailing, total_length: ending - start + trailing }
     end
 
-    def walk(dfa, start)
+    def walk(dfa, start, scan_start: start)
       state = dfa.start
       cursor = start
       loop do
         if @lexer.utf8_boundary?(cursor)
           dfa.accepts[state].each do |acceptance|
+            next if acceptance.bol_only && !@lexer.__flexr_beginning_of_line_at?(start, scan_start)
+
             yield acceptance, cursor unless acceptance.end_anchor && !end_anchor?(cursor)
           end
         end

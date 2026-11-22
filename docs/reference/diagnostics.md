@@ -218,11 +218,11 @@ with the same action. The original matches `ab` when the optional `a` was
 captured, or `c` otherwise. Other conditions need their own alternatives,
 separate rules, or state checks.
 
-For an absence group excluding a single literal, rewrite `rule(/x(?~a)/)`
-as `rule(/x[^a]*/)` and keep the action. Both consume `x` and the following
-characters up to the next `a` or end of input, including line feeds. The `x`
-keeps the rule from matching empty input. Larger absence expressions need a
-separate rewrite: `(?~ab)` does not mean `[^ab]*`.
+Use `(?~X)` directly with a longest-match backend. `FLEXR-E014` recommends
+that backend for an absence group in a `firstmatch` rule body. When the
+excluded expression accepts the empty string, an unreachable rule may
+report that the absence language is empty with `FLEXR-W001`. See
+[absence groups](regexp.md#absence-groups) for the matching rules.
 
 For word boundaries, the help uses examples where the surrounding literals
 already determine the assertion. Rewrite `rule(/foo\b:/)` as `rule(/foo:/)`:

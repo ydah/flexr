@@ -131,6 +131,7 @@ RSpec.describe "generated artifact safety" do
         generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
         expect(generated.bytesize).to be < 100_000
+        expect(generated).not_to include("\r\n")
         expect(generated).not_to include(
           "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis"
         )

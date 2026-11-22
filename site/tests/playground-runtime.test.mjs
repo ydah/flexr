@@ -80,6 +80,16 @@ test('literal Unicode actions and surrounding constants survive generation', asy
   }
 });
 
+test('the absence preset ends each comment at its first terminator', async () => {
+  const presets = JSON.parse(await readFile(new URL('../public/playground-runtime/presets.json', import.meta.url), 'utf8'));
+  assert.match(presets.absence?.source ?? '', /\(\?~/);
+  for (const mode of ['runtime', 'generated']) {
+    const result = await runtime.run({ ...presets.absence, mode });
+    assert.equal(result.error, undefined, result.error);
+    assert.deepEqual(result.tokens, [['IDENT', 'first'], ['IDENT', 'second']]);
+  }
+});
+
 test('share links retain Unicode source and input without running code', () => {
   const state = { source: 'class Lexer; # café\nend', input: '日本語', mode: 'runtime' };
   assert.deepEqual(decodeState(encodeState(state)), state);

@@ -31,8 +31,9 @@ module Flexr
     end
 
     class NFABuilder
-      def initialize
+      def initialize(&compile_difference)
         @nfa = NFA.new
+        @compile_difference = compile_difference
       end
 
       def build(patterns)
@@ -75,9 +76,27 @@ module Flexr
           repeat_fragment(node.child, 0, nil)
         when Regexp::AST::Repeat
           repeat_fragment(node.child, node.minimum, node.maximum)
+        when Regexp::AST::Difference
+          dfa_fragment(@compile_difference.call(node))
         else
           raise CompileError, "cannot build NFA from #{node.class}"
         end
+      end
+
+      def dfa_fragment(dfa)
+        offset = @nfa.states.length
+        dfa.states.times { @nfa.new_state }
+        finish = @nfa.new_state
+        classes = dfa.ec.each_index.chunk { |byte| dfa.ec.fetch(byte) }.to_a
+        dfa.transitions.each_with_index do |row, state|
+          from = offset + state
+          classes.each do |class_id, bytes|
+            destination = row.fetch(class_id)
+            @nfa.transition(from, bytes.first, bytes.last, offset + destination) if destination
+          end
+          @nfa.epsilon(from, finish) unless dfa.accepts.fetch(state).empty?
+        end
+        [offset + dfa.start, finish]
       end
 
       def repeat_fragment(child, minimum, maximum)
