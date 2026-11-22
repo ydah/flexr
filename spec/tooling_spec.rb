@@ -86,21 +86,17 @@ RSpec.describe "verification tooling" do
     expect(stdout).to include("golden:verify:[]", "accel:equivalence:[]", "dogfood:verify:[]")
   end
 
-  it "passes the independent verification gates" do
-    %w[golden:verify accel:equivalence dogfood:verify].each do |name|
-      _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-S", "rake", name, chdir: root)
-      expect(status).to be_success, "#{name} failed: #{stderr}"
-    end
-  end
-
-  it "keeps verification tasks composable after dogfood" do
+  it "restores the runtime tokenizer so acceleration can run after dogfood" do
     script = <<~RUBY
-      require "rake"
-      load "Rakefile"
+      spec = FlexrVerification::TOKENIZER_SPEC
+      tokenizer = FlexrVerification.load_runtime(spec)
+      FlexrVerification.send(:remove_const, :VERIFICATION_SPECS)
+      FlexrVerification.const_set(:VERIFICATION_SPECS, [spec])
       Rake::Task["dogfood:verify"].invoke
+      abort "dogfood did not restore the runtime tokenizer" unless Flexr::Regexp::SourceLexer.equal?(tokenizer)
       Rake::Task["accel:equivalence"].invoke
     RUBY
-    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, chdir: root)
+    _stdout, stderr, status = verification_script(script)
 
     expect(status).to be_success, stderr
   end

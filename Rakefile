@@ -566,6 +566,11 @@ desc "Compare runtime and generated lexers on randomized inputs"
 task :fuzz do
   cases = Integer(ENV.fetch("FLEXR_FUZZ_CASES", "10000"), 10)
   seed = Integer(ENV.fetch("FLEXR_SEED", "17"), 10)
+  shard = ENV.fetch("FLEXR_FUZZ_SHARD", "0/1")
+  shard_parts = %r{\A(\d+)/(\d+)\z}.match(shard)
+  shard_index, shard_count = shard_parts.captures.map(&:to_i) if shard_parts
+  abort "FLEXR_FUZZ_SHARD must be INDEX/TOTAL with 0 <= INDEX < TOTAL" unless shard_parts && shard_index < shard_count
+
   random = Random.new(seed)
   FlexrVerification::VERIFICATION_SPECS.each do |spec|
     FlexrVerification.with_fuzz_lexers(spec) do |runtime_lexer, generated_lexer|
@@ -581,6 +586,9 @@ task :fuzz do
           (FlexrVerification.random_unicode_string(random, max_codepoints: 16) +
             Array.new(random.rand(64)) { random.rand(32..126) }.pack("C*")).force_encoding(Encoding::UTF_8)
         end
+        # Generate skipped inputs so every shard uses the same seeded sequence.
+        next unless index % shard_count == shard_index
+
         expected = FlexrVerification.lexer_outcome(runtime_lexer, input, **FlexrVerification::FUZZ_OPTIONS)
         actual = FlexrVerification.lexer_outcome(generated_lexer, input, **FlexrVerification::FUZZ_OPTIONS)
         next if expected == actual
@@ -595,7 +603,9 @@ task :fuzz do
       end
     end
   end
-  puts "fuzz: #{cases} inputs per example passed"
+  checked_cases = [cases - shard_index, 0].max.ceildiv(shard_count)
+  shard_label = shard_count == 1 ? "" : " (shard #{shard})"
+  puts "fuzz: #{checked_cases} inputs per example passed#{shard_label}"
 end
 
 namespace :verification do

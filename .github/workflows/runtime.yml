@@ -18,6 +18,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
 jobs:
   runtime:
     name: runtime / ${{ matrix.os }} / ruby ${{ matrix.ruby }} / ${{ matrix.jit }}
@@ -26,11 +30,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        ruby: ["3.4", "4.0", head]
+        ruby: ${{ fromJSON(github.event_name == 'schedule' && '["3.4","4.0","head"]' || '["3.4","4.0"]') }}
         jit: ["off", "on"]
-        exclude:
-          - os: windows-latest
-            ruby: head
+        # RubyInstaller builds use the interpreter even with --yjit.
+        exclude: >-
+          ${{ fromJSON(github.event_name == 'schedule'
+            && '[{"os":"windows-latest","ruby":"head"},{"os":"windows-latest","jit":"on"}]'
+            || '[{"os":"macos-latest","jit":"on"},{"os":"windows-latest","jit":"on"}]') }}
     env:
       RUBYOPT: ${{ matrix.jit == 'on' && '--yjit' || '' }}
     continue-on-error: ${{ matrix.ruby == 'head' }}
@@ -42,6 +48,11 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - run: bundle exec rake test
+      - name: Run the suite with coverage on Ubuntu Ruby 4.0
+        if: matrix.os == 'ubuntu-latest' && matrix.ruby == '4.0' && matrix.jit == 'off'
+        run: bundle exec rake coverage
+      - name: Run the suite on other combinations
+        if: matrix.os != 'ubuntu-latest' || matrix.ruby != '4.0' || matrix.jit != 'off'
+        run: bundle exec rake test
       - run: bundle exec rake modes:equivalence
       - run: bundle exec rake accel:equivalence

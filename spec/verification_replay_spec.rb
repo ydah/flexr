@@ -59,7 +59,7 @@ RSpec.describe "verification failure replay" do
     end
   end
 
-  it "preserves invalid UTF-8 input and token bytes for a fuzz mismatch" do
+  it "preserves the global case number and bytes for a fuzz mismatch in a shard" do
     mutation = <<~RUBY
       module DivergeOnInvalidUTF8
         def lexer_outcome(lexer, input, **)
@@ -74,7 +74,9 @@ RSpec.describe "verification failure replay" do
     RUBY
 
     Dir.mktmpdir do |dir|
-      env = { "FLEXR_FAILURE_DIR" => dir, "FLEXR_FUZZ_CASES" => "100", "FLEXR_SEED" => "17" }
+      env = {
+        "FLEXR_FAILURE_DIR" => dir, "FLEXR_FUZZ_CASES" => "100", "FLEXR_SEED" => "17", "FLEXR_FUZZ_SHARD" => "2/3"
+      }
       _stdout, stderr, status = run_task("fuzz", env, mutation)
       expect(status.exitstatus).to eq(1)
       expect(stderr).to include("fuzz mode mismatch:")
@@ -83,6 +85,7 @@ RSpec.describe "verification failure replay" do
       path = paths.first
       failure = JSON.parse(File.read(path))
       expect(failure).to include("task" => "fuzz", "seed" => 17, "options" => { "error_mode" => "panic" })
+      expect((failure.fetch("case") - 1) % 3).to eq(2)
       spec = failure.fetch("spec")
       expect(spec.fetch("sha256")).to eq(Digest::SHA256.file(File.join(root, spec.fetch("path"))).hexdigest)
       expect(failure.fetch("backends")).to include("runtime", "generated")
@@ -100,5 +103,11 @@ RSpec.describe "verification failure replay" do
       expect(status).to be_success, stderr
       expect(stdout).to include("fuzz", "passed")
     end
+  end
+
+  it "rejects an out-of-range fuzz shard" do
+    _stdout, stderr, status = run_task("fuzz", "FLEXR_FUZZ_SHARD" => "3/3", "FLEXR_FUZZ_CASES" => "0")
+    expect(status.exitstatus).to eq(1)
+    expect(stderr).to include("FLEXR_FUZZ_SHARD must be INDEX/TOTAL")
   end
 end
