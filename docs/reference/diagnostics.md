@@ -143,7 +143,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E013` | `reject` is not supported | Use states and `less` |
 | `FLEXR-E014` | Regexp construct is not DFA-compatible | Follow the diagnostic alternative |
 | `FLEXR-E017` | Pattern is not statically resolvable | Rewrite as a static expression or use trusted `--eval` |
-| `FLEXR-E018` | Rule pattern or trailing context has an invalid type | Use a regexp, string, pattern value, or valid array |
+| `FLEXR-E018` | Rule pattern, trailing context, or channel is invalid | Use a regexp, string, pattern value, valid array, or channel symbol other than `:all` |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
 | `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
 | `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |
@@ -153,7 +153,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E025` | The lexical state stack overflowed | Remove recursive pushes or raise the limit |
 | `FLEXR-E026` | A cancellation callback stopped lexing | Resume with a new lexer when ready |
 | `FLEXR-E027` | An error callback returned an unknown action | Return `:skip`, `:raise`, `:token`, or `:halt` |
-| `FLEXR-E028` | A keyword spelling or declaration is invalid, or the base rule cannot consume the full spelling | Correct the spelling or widen a rule declared with the base `emit:` type |
+| `FLEXR-E028` | A keyword spelling or declaration is invalid, or the default-channel base rule cannot consume the full spelling | Correct the spelling or widen a default-channel rule declared with the base `emit:` type |
 | `FLEXR-E029` | A pattern operation has an empty language | Review the operands or the terminator |
 
 ### Pattern operations
@@ -348,8 +348,8 @@ warnings. `--warn-as-error` turns selected warnings into a failed command.
 
 ## Informational diagnostics
 
-`flexr check` reports `FLEXR-I003` when consecutive literal rules can share
-the following identifier rule using `keywords`. The DFA must show that the
+`flexr check` reports `FLEXR-I003` when consecutive default-channel literal
+rules can share the following default-channel identifier rule using `keywords`. The DFA must show that the
 identifier accepts the full spellings without anchors in the same states.
 `--warn none` hides this suggestion. `--warn-as-error` still permits checks
 with informational diagnostics.

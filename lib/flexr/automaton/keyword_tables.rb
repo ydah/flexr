@@ -7,7 +7,7 @@ module Flexr
 
       def diagnostics(compiled, spec)
         spec.options.fetch(:keyword_tables, {}).flat_map do |among, entries|
-          targets = compiled.rules.select { |rule| rule.emit? && rule.action[1] == among }
+          targets = compiled.rules.select { |rule| rule.emit? && !rule.channel && rule.action[1] == among }
           entries.filter_map do |spelling, (_, location)|
             matched = compiled.machines.values.filter_map do |machine|
               accepts = full_acceptances(machine.dfa, spelling)
@@ -19,9 +19,9 @@ module Flexr
             end
             if matched.empty?
               Keywords.error!(
-                "no rule with emit: #{among.inspect} accepts the full keyword",
+                "no default-channel rule with emit: #{among.inspect} accepts the full keyword",
                 location: location, note: "input #{spelling.inspect}",
-                help: "add or widen a rule with emit: #{among.inspect} to match the entire spelling"
+                help: "add or widen a default-channel rule with emit: #{among.inspect} to match the entire spelling"
               )
             end
             next unless matched.all? { |accepts, candidates| shadowed?(compiled, accepts, candidates) }
@@ -75,18 +75,19 @@ module Flexr
 
       def literal_keyword?(rule)
         spelling = rule.patterns.first
-        return false unless rule.emit? && !rule.trailing && rule.patterns.one? && spelling.is_a?(String) && !spelling.empty?
+        return false unless rule.emit? && !rule.channel && !rule.trailing && rule.patterns.one?
+        return false unless spelling.is_a?(String) && !spelling.empty?
 
         normalized = Keywords.spelling(spelling)
         normalized.valid_encoding? && rule.action[1] == normalized.upcase.to_sym
       end
 
       def groupable?(compiled, rule, literals, tables)
-        return false unless rule.emit? && !rule.trailing && rule.patterns.all?(::Regexp)
+        return false unless rule.emit? && !rule.channel && !rule.trailing && rule.patterns.all?(::Regexp)
         return false unless literals.all? { |literal| literal.states == rule.states }
         return false if tables&.key?(rule.action[1])
         return false if tables && literals.any? { |literal| tables.key?(literal.action[1]) }
-        return false unless compiled.rules.one? { |entry| entry.emit? && entry.action[1] == rule.action[1] }
+        return false unless compiled.rules.one? { |entry| entry.emit? && !entry.channel && entry.action[1] == rule.action[1] }
 
         literals.all? do |literal|
           compiled.machines.values.all? do |machine|

@@ -11,8 +11,10 @@ module RubyLsp
       def diagnostics(source)
         return @diagnostics if @source == source
 
+        @channels = {}
         diagnostics = begin
           parsed = ::Flexr::Source::PrismReader.new(source).read
+          parsed.rules.each { |rule| @channels[rule.span.first] = rule.channel if rule.channel }
           compiled = ::Flexr::CLI.compile(parsed, overrides: { warn_level: :all })
           compiled.diagnostics.reject { |diagnostic| diagnostic.code == "FLEXR-W016" }
         rescue ::Flexr::Error => e
@@ -22,6 +24,10 @@ module RubyLsp
         end
         @source = source.dup.freeze
         @diagnostics = diagnostics
+      end
+
+      def channel_at(offset)
+        @channels[offset]
       end
 
       def message(diagnostic)
@@ -81,12 +87,16 @@ module RubyLsp
           diagnostic.location &&
             (node.location.start_offset...node.location.end_offset).cover?(diagnostic.location.first)
         end
-        messages = diagnostics.map { |diagnostic| "#{diagnostic.code}: #{@analysis.message(diagnostic)}" }
-        messages.unshift("Keyword table. Exact spellings select a token type after a matching emit: rule wins.") if node.name == :keywords
-        return if messages.empty?
-
-        text = messages.join("\n\n")
-        @builder.push("```text\n#{text}\n```", category: :documentation)
+        text = diagnostics.map { |diagnostic| "#{diagnostic.code}: #{@analysis.message(diagnostic)}" }.join("\n\n")
+        sections = []
+        sections << "Keyword table. Exact spellings select a token type after a matching emit: rule wins." if node.name == :keywords
+        channel = @analysis.channel_at(node.location.start_offset)
+        if channel
+          sections << "Channel `#{channel.inspect}` preserves trivia. " \
+            "Read it with `tokens(channels: :all)` or `leading_trivia` on structured tokens."
+        end
+        sections << "```text\n#{text}\n```" unless text.empty?
+        @builder.push(sections.join("\n\n"), category: :documentation) unless sections.empty?
       end
     end
 

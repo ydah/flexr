@@ -729,6 +729,8 @@ module Flexr
         return {} if declared.empty?
 
         emitted = @spec.rules.each_with_object({}) do |rule, rules_by_token|
+          next if rule.channel
+
           action = rule.action
           tokens = if action.is_a?(Array) && action.first == :emit
             [action.last]

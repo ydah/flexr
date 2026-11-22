@@ -59,6 +59,11 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      if parsed.rules.any?(&:channel)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support token channels")' \
+          ' unless defined?(Flexr::Runtime::Channels)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
@@ -93,10 +98,11 @@ module Flexr
         conditions = Array(rule.pattern_conditions).map do |condition|
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
+        channel = "channel: #{ruby_literal(rule.channel)}, " if rule.channel
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
           "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
-          "bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
+          "#{channel}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
       "{ artifact: #{ruby_literal(artifact_metadata)}, rules: [#{definitions.join(', ')}], " \
         "backend: #{ruby_literal(effective_backend(parsed))}, " \
@@ -122,7 +128,7 @@ module Flexr
       rules = parsed.rules.map do |rule|
         IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),
                      action: rule.action, states: rule.states, bol_only: rule.bol_only,
-                     end_anchor: rule.end_anchor, location: rule.span)
+                     end_anchor: rule.end_anchor, location: rule.span, channel: rule.channel)
       rescue CompileError => e
         e.diagnostic.location ||= rule.span if e.diagnostic
         raise
@@ -234,6 +240,7 @@ module Flexr
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
+      sources << "runtime/channels.rb" if parsed.rules.any?(&:channel)
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
@@ -299,7 +306,7 @@ module Flexr
         return unless action.first == :emit
 
         type = action.fetch(1)
-        return keyword_action_body(type) if keyword_tables&.key?(type)
+        return keyword_action_body(type) if !rule.channel && keyword_tables&.key?(type)
 
         "emit(#{ruby_literal(type)}, text)"
       when String
@@ -409,6 +416,16 @@ module Flexr
         runtime_rule = runtime_rules.fetch(rule.index)
         rule.patterns = runtime_rule.patterns
         rule.trailing = runtime_rule.trailing
+        next unless rule.dynamic_channel || rule.channel || runtime_rule.channel
+
+        rule.channel = runtime_rule.channel
+        next unless runtime_rule.skip? || runtime_rule.emit?
+
+        rule.action = runtime_rule.action
+        next unless rule.bind_action
+
+        rule.bind_action = false
+        passthrough.dsl_edits.map! { |edit| edit.first(2) == rule.span ? [*rule.span, ""] : edit }
       end
       generate_static(passthrough)
     end

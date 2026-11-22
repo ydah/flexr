@@ -25,6 +25,7 @@ const presets = JSON.parse(await readFile(new URL('../../public/playground-runti
           {Object.hasOwn(presets, 'absence') && <option value="absence">C comments with absence</option>}
           {Object.hasOwn(presets, 'pattern') && <option value="pattern">Named pattern algebra</option>}
           {Object.hasOwn(presets, 'keywords') && <option value="keywords">Keywords and identifiers</option>}
+          {Object.hasOwn(presets, 'trivia') && <option value="trivia">Comments and whitespace trivia</option>}
         </select>
         <textarea id="spec" aria-label="Lexer specification" spellcheck="false" maxlength="20000"></textarea>
       </div>
