@@ -8,7 +8,7 @@ end
 
 module Flexr
   module Runtime
-    Match = Struct.new(:rule, :start_pos, :end_pos, :total_end_pos, keyword_init: true)
+    Match = Struct.new(:rule, :start_pos, :end_pos, :total_end_pos, :capture, keyword_init: true)
 
     class Interpreter
       include Firstmatch if defined?(Firstmatch)
@@ -108,7 +108,7 @@ module Flexr
             rule = rules.fetch(acceptance.rule_index)
             next if best && cursor == best.total_end_pos && rule.loses_priority_tie?(best.rule)
 
-            best ||= (@match ||= Match.new)
+            best ||= (@fast_match ||= Match.new)
             best.rule = rule
             best.start_pos = position
             best.end_pos = cursor
@@ -140,7 +140,7 @@ module Flexr
           rule = rules.fetch(acceptance.rule_index)
           next if best && cursor == best.total_end_pos && rule.loses_priority_tie?(best.rule)
 
-          best ||= (@match ||= Match.new)
+          best ||= (@fast_match ||= Match.new)
           best.rule = rule
           best.start_pos = position
           best.end_pos = cursor
@@ -157,7 +157,7 @@ module Flexr
 
         rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
         @fast_paths[machine.dfa] = !@config.options[:allow_empty_match] &&
-          rules.none?(&:trailing) &&
+          rules.none?(&:trailing) && rules.none?(&:capture_patterns) &&
           rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
       end
 
@@ -210,7 +210,10 @@ module Flexr
 
           total_end = cursor + (trailing_size || 0)
           next if best && total_end < best.total_end_pos
-          next if best && total_end == best.total_end_pos && candidate.loses_priority_tie?(best.rule)
+          if best && total_end == best.total_end_pos
+            next if candidate.loses_priority_tie?(best.rule)
+            next if candidate.capture_patterns && candidate.equal?(best.rule) && cursor == best.end_pos
+          end
 
           ensure_token_size!(cursor, position, rule: candidate)
           best = @match ||= Match.new
@@ -218,6 +221,7 @@ module Flexr
           best.start_pos = position
           best.end_pos = cursor
           best.total_end_pos = total_end
+          best.capture = candidate.capture_patterns&.[](acceptance.pattern_index)
         end
         best
       end

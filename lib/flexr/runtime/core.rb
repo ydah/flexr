@@ -2,6 +2,8 @@
 
 module Flexr
   module Runtime
+    EMPTY_CAPTURES = {}.freeze
+
     def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024,
                    max_lookahead_size: nil, max_buffer_size: 64 * 1024 * 1024,
                    max_state_stack: 1024, max_steps: nil, cancellation: nil, retain_input: true,
@@ -135,7 +137,11 @@ module Flexr
         @position = match.end_pos
         empty_match = match.end_pos == match.start_pos
         @active_rule = match.rule
-        execute(match.rule)
+        if match.capture
+          execute_with_captures(match)
+        else
+          execute(match.rule)
+        end
         finalize_more
         ensure_progress!(match, scan_state, empty_match: empty_match) unless
           @position > match.start_pos && @non_progress_signatures.empty?
@@ -186,6 +192,8 @@ module Flexr
 
       @matched = @buffer.byteslice(@text_start, @match_end - @text_start)
     end
+
+    def captures = EMPTY_CAPTURES
 
     def text_bytesize
       @match_end - @text_start

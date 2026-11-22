@@ -39,7 +39,9 @@ module Flexr
           next if rule.trailing && trailing.nil?
 
           ensure_token_size!(end_position, position, rule: rule)
-          return reusable_match(rule, position, end_position, end_position + (trailing || 0))
+          result = reusable_match(rule, position, end_position, end_position + (trailing || 0))
+          result.capture = rule.capture_patterns&.[](condition.pattern_index) && match
+          return result
         end
         nil
       end
