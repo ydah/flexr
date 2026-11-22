@@ -176,12 +176,14 @@ module Flexr
     def __flexr_add_generated_rule(definition)
       __flexr_mutate! do
         action = definition.fetch(:action)
+        channel = definition[:channel]
         @__flexr_rules << IR::Rule.new(
           index: definition.fetch(:index), patterns: Array(definition.fetch(:patterns)),
           trailing: normalize_trailing(definition[:trailing]), action: action,
           states: Array(definition.fetch(:states)).map(&:to_sym),
           bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
-          location: definition[:span] || definition[:location],
+          location: definition[:span] || definition[:location], channel: channel,
+          priority: definition[:priority],
           trailing_dfa: definition[:trailing_dfa] && Generated.load_dfa(definition[:trailing_dfa]),
           pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
             next unless condition
@@ -190,6 +192,7 @@ module Flexr
                                       bol_only: condition[2], end_anchor: condition[3])
           end
         )
+        include Runtime::Channels if channel
       end
     rescue CompileError => e
       e.diagnostic.location ||= definition[:span] || definition[:location] if e.diagnostic
