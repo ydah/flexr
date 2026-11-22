@@ -43,6 +43,7 @@ require_relative "runtime/channels"
 require_relative "dsl"
 require_relative "keywords"
 require_relative "lexer"
+require_relative "rules"
 require_relative "generated"
 
 

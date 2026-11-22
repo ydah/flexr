@@ -40,6 +40,16 @@ module Flexr
     def !: () -> Pattern
   end
 
+  module Rules
+    module Use
+      def use: (::Module) -> nil
+    end
+
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer) ?{ () [self: Lexer] -> untyped } -> nil
+    def pattern: (*pattern_operand) -> Pattern
+    def upto: (pattern_operand) -> Pattern
+  end
+
   module DSL
     def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer) ?{ () [self: Lexer] -> untyped } -> nil
     def pattern: (*pattern_operand) -> Pattern
@@ -58,6 +68,7 @@ module Flexr
 
   class Lexer
     extend DSL
+    extend Rules::Use
 
     def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?chunk_size: Integer) -> void
     def next_token: () -> token?
