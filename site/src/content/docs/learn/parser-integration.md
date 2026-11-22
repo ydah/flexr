@@ -7,16 +7,17 @@ The lexer/parser boundary should be explicit: the lexer owns characters and loca
 
 ## Racc protocol
 
-For a Racc parser, forward token requests to `racc_next_token`.
-It returns a pair of token kind and semantic value, with `[false, "$end"]` at EOF.
+A Racc parser can forward requests from its `next_token` method to the
+Flexr lexer's `racc_next_token` method. It returns a pair of token kind and
+semantic value, with `[false, "$end"]` at EOF.
 
 ```ruby
-def racc_next_token
+def next_token
   @lexer.racc_next_token
 end
 ```
 
-Declare the token names in both the lexer and parser grammar. Keep EOF behavior in one adapter rather than duplicating it in every action.
+Declare the token names in both the lexer and parser grammar. Generate a working project with `flexr new NAME --parser racc`. [Racc calculator tutorial](https://github.com/ydah/flexr/blob/main/docs/tutorial/build-a-calculator-parser.md#racc).
 
 ## Parser token expectations
 
@@ -36,6 +37,6 @@ See the [Ruby slash and JavaScript template examples on GitHub](https://github.c
 
 ## Lrama protocol
 
-Lrama integrations use the same basic token/value contract. The example in [`examples/with_lrama`](https://github.com/ydah/flexr/tree/main/examples/with_lrama) shows the complete wiring.
+Lrama generates C. The generated flexr project feeds the lexer's token kinds and values to the compiled parser. Start with `flexr new NAME --parser lrama` and a C compiler. [Lrama calculator tutorial](https://github.com/ydah/flexr/blob/main/docs/tutorial/build-a-calculator-parser.md#lrama).
 
 `emits` is useful for diagnostics and parser integration, but it does not replace the parser grammar's token declarations. See [tokens and locations](/flexr/reference/tokens-and-locations/) for return shapes.

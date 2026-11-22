@@ -4,6 +4,7 @@ The executable is `flexr`, with usage:
 
 ```text
 flexr [COMMAND] SPEC.rb [options]
+flexr new NAME --parser lrama|racc
 ```
 
 Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
@@ -24,6 +25,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `explain SPEC` | List parsed rules and patterns | Text on stdout |
 | `bench SPEC` | Run the benchmark harness | Benchmark output |
 | `import INPUT` | Translate flex, Rexical, or oedipus_lex input | Ruby on stdout or `--output` |
+| `new NAME --parser PARSER` | Create a Racc or Lrama calculator project | New project directory |
 
 `trace` without input describes the automaton. To execute a specification and
 inspect rule selection, pass `--input STRING` or `--input-file PATH`.
@@ -55,13 +57,15 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--generated` | Run the generated scanner | Input trace |
 | `--verify` | Execute the generated cases in all three modes | Skeleton |
 | `--from oedipus_lex` | Select the oedipus_lex `.rex` dialect | Import |
+| `--parser PARSER` | `lrama` or `racc` | New project |
 
 The complete help output is kept as a checked snapshot:
 
 <!-- flexr-help:start -->
 Usage: flexr [COMMAND] SPEC.rb [options]
+       flexr new NAME --parser lrama|racc
 
-Commands: check, fix, stats, tokens, dot, explain, trace, skeleton, bench, import
+Commands: check, fix, stats, tokens, dot, explain, trace, skeleton, bench, import, new
 Options:
   -o, --output PATH          generated output path
   -b, --backend NAME         table | direct | firstmatch | auto
@@ -104,6 +108,14 @@ as quick fixes for DFA backends.
   at the first closing quote. It preserves the regexp's newline handling.
 - `FLEXR-I003` groups adjacent literal rules into a keyword table when the
   compiler verifies the change and there are no intervening comments.
+
+## New parser project
+
+`flexr new NAME --parser PARSER` creates a directory in the current directory.
+The name must start with a letter or digit and may also contain hyphens and
+underscores. Choose a name that is available. Follow the generated README or
+the [calculator parser tutorial](../tutorial/build-a-calculator-parser.md)
+to install dependencies, build the parser, and run the tests.
 
 ## Input trace
 
@@ -192,7 +204,7 @@ grammar author's responsibility.
 | Status | Meaning |
 |---:|---|
 | `0` | Command completed; warnings do not fail by default |
-| `1` | Specification, input, import, or generation failure |
+| `1` | Specification, input, import, generation, or project creation failure |
 | `2` | Invalid command-line usage |
 
 `check --format json` writes one JSON array to stdout. Human diagnostics go to

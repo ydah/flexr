@@ -9,7 +9,7 @@ require_relative "migration"
 
 module Flexr
   module CLI
-    COMMANDS = %w[check fix stats tokens dot explain trace skeleton bench import].freeze
+    COMMANDS = %w[check fix stats tokens dot explain trace skeleton bench import new].freeze
     EXIT_OK = 0
     EXIT_FAILURE = 1
     EXIT_USAGE = 2
@@ -18,10 +18,13 @@ module Flexr
 
     def run(argv, out: $stdout, err: $stderr)
       args = argv.dup
-      return usage(out) if args.include?("--help") || args.include?("-h")
-      return version(out) if args.delete("--version")
-
       command = COMMANDS.include?(args.first) ? args.shift.to_sym : :generate
+      if args.include?("--help") || args.include?("-h")
+        return command == :new ? new_project_usage(out) : usage(out)
+      end
+      return version(out) if args.delete("--version")
+      return new_project(args, out) if command == :new
+
       options, output, rule_number, benchmark_args, positionals, command_args = parse(args, command)
       raise ArgumentError, "lrama format is only valid for tokens" if options.format == :lrama && command != :tokens
       spec = positionals.shift
@@ -31,7 +34,7 @@ module Flexr
       execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: command_args)
     rescue ArgumentError => e
       err.puts "error: #{e.message}"
-      usage(err, status: EXIT_USAGE)
+      command == :new ? new_project_usage(err, status: EXIT_USAGE) : usage(err, status: EXIT_USAGE)
     rescue Flexr::Error, Errno::ENOENT, Errno::EACCES, SyntaxError => e
       err.puts render_error(e, options: options, path: spec,
                            normalize_source: command == :generate || (command == :check && options&.eval_mode))
@@ -39,6 +42,35 @@ module Flexr
     rescue StandardError => e
       err.puts "error: #{e.class}: #{e.message}"
       EXIT_FAILURE
+    end
+
+    def new_project(args, out)
+      require "optparse"
+      require_relative "project_template"
+
+      parser = nil
+      OptionParser.new do |options|
+        options.require_exact = true
+        options.on("--parser PARSER") do |value|
+          raise ArgumentError, "--parser may only be given once" if parser
+
+          parser = value
+        end
+      end.parse!(args)
+      raise ArgumentError, "a project name is required" if args.empty?
+      raise ArgumentError, "unexpected argument: #{args[1]}" if args.length > 1
+
+      ProjectTemplate.create(args.first, parser: parser)
+      out.puts "Created #{args.first} with #{parser}. See #{args.first}/README.md to get started."
+      EXIT_OK
+    rescue OptionParser::ParseError => e
+      raise ArgumentError, e.message
+    end
+
+    def new_project_usage(out, status: EXIT_OK)
+      out.puts "Usage: flexr new NAME --parser lrama|racc"
+      out.puts "Create a calculator project in a new directory in the current directory."
+      status
     end
 
     def parse(args, command)
@@ -542,8 +574,9 @@ module Flexr
     def usage(out, status: EXIT_OK)
       out.puts <<~USAGE
         Usage: flexr [COMMAND] SPEC.rb [options]
+               flexr new NAME --parser lrama|racc
 
-        Commands: check, fix, stats, tokens, dot, explain, trace, skeleton, bench, import
+        Commands: check, fix, stats, tokens, dot, explain, trace, skeleton, bench, import, new
         Options:
           -o, --output PATH          generated output path
           -b, --backend NAME         table | direct | firstmatch | auto
