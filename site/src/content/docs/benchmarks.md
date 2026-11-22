@@ -7,12 +7,12 @@ Benchmark results depend on Ruby, hardware, input distribution, backend, and tab
 
 ## Reference JSON
 
-Measured on 2026-11-22 with Ruby 4.0.9 on arm64 macOS, using 140,000 bytes of input and 50,000 emitted tokens. These are medians from three runs per engine.
+Measured on 2026-11-22 with Ruby 4.0.9 on arm64 macOS, using 140,000 bytes of input and 50,000 emitted tokens. Each row reports the run with the median generated/runtime ratio out of three runs per engine.
 
 | Engine | Runtime / handwritten | Generated / handwritten | Generated / runtime |
 |---|---:|---:|---:|
-| Interpreter | 0.263x | 0.292x | 1.104x |
-| YJIT | 0.693x | 0.718x | 1.059x |
-| ZJIT | 0.260x | 0.264x | 1.020x |
+| Interpreter | 0.253x | 0.279x | 1.101x |
+| YJIT | 0.680x | 0.686x | 1.009x |
+| ZJIT | 0.259x | 0.262x | 1.014x |
 
-Start with `auto` and use [the reproduction commands](https://github.com/ydah/flexr/blob/main/docs/perf-log.md#2026-11-22-frozen-scan-eof-check) to measure the workload you plan to deploy.
+Start with `auto` and use [the reproduction commands](https://github.com/ydah/flexr/blob/main/docs/perf-log.md#2026-11-22-select-the-frozen-scans-transition-layout-at-generation) to measure the workload you plan to deploy.

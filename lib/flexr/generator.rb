@@ -69,7 +69,7 @@ module Flexr
           ' unless defined?(Flexr::Runtime::Channels)'
         install = "#{guard}\n#{indent}#{install}"
       end
-      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
+      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
       parsed.rules.each do |rule|

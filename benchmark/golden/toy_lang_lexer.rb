@@ -93,13 +93,8 @@ module ToyLang
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
         while (byte = source.getbyte(cursor))
-          if direct_nxt
-            current = direct_nxt[(current * direct_classes) + ec[byte]]
-            break if current < 0
-          else
-            current = dfa.transition(current, byte)
-            break unless current
-          end
+          current = dfa.transition(current, byte)
+          break unless current
           cursor += 1
           acceptance = accepts[current].first
           next unless acceptance

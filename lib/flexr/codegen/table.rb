@@ -25,7 +25,7 @@ module Flexr
         ].join("\n")
       end
 
-      def source(indent: "  ")
+      def source(indent: "  ", direct: false)
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         lines << "#{indent}def scan_one"
@@ -108,13 +108,13 @@ module Flexr
         lines << "#{indent}  best = nil"
         lines << "#{indent}  if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)"
         lines << "#{indent}    while (byte = source.getbyte(cursor))"
-        lines << "#{indent}      if direct_nxt"
-        lines << "#{indent}        current = direct_nxt[(current * direct_classes) + ec[byte]]"
-        lines << "#{indent}        break if current < 0"
-        lines << "#{indent}      else"
-        lines << "#{indent}        current = dfa.transition(current, byte)"
-        lines << "#{indent}        break unless current"
-        lines << "#{indent}      end"
+        if direct
+          lines << "#{indent}      current = direct_nxt[(current * direct_classes) + ec[byte]]"
+          lines << "#{indent}      break if current < 0"
+        else
+          lines << "#{indent}      current = dfa.transition(current, byte)"
+          lines << "#{indent}      break unless current"
+        end
         lines << "#{indent}      cursor += 1"
         lines << "#{indent}      acceptance = accepts[current].first"
         lines << "#{indent}      next unless acceptance"

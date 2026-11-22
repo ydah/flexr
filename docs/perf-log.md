@@ -437,3 +437,26 @@ while runtime mode slowed on YJIT. These results leave whole-token
 scanning on explicit `accel :strscan`. A default needs a cheap way to
 recognize profitable matches and measurements that include the cost of
 that choice and its fallback.
+
+## 2026-11-22: select the frozen scan's transition layout at generation
+
+The generated artifact already determines whether its state transitions use
+flat direct tables. Selecting the lookup when generating the loop removes
+that choice from each byte scanned on the frozen, unguarded path.
+
+On the integrated branch, the EOF change alone measured a ZJIT ratio of
+0.992x with ten iterations. Adding packed-table lookups to the same loop
+lowered YJIT throughput on the reference direct lexer.
+
+Run `FLEXR_BENCHMARK_CHECK_MATRIX=1 FLEXR_BENCHMARK_ITERATIONS=15 bundle exec rake bench:matrix`
+with Ruby 4.0.9 on arm64-darwin25 and the same 140,000-byte JSON input.
+The medians of three fresh processes passed on all engines.
+
+| Engine | Generated/runtime samples | Median | Generated/handwritten at the median |
+|---|---:|---:|---:|
+| Interpreter | 1.093x, 1.198x, 1.101x | 1.101x | 0.279x |
+| YJIT | 1.009x, 1.017x, 0.982x | 1.009x | 0.686x |
+| ZJIT | 1.014x, 1.007x, 1.032x | 1.014x | 0.262x |
+
+Runtime remained at 2.600 allocations per emitted token. Both JIT ratios have
+limited headroom, and the interpreter remains below the 0.30x target.
