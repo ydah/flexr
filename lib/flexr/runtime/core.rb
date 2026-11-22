@@ -77,11 +77,7 @@ module Flexr
     end
 
     def next_token(expect: nil)
-      unless expect.nil?
-        raise ArgumentError, "expect: must be an Array of token Symbols" unless expect.is_a?(Array) && expect.all?(Symbol)
-
-        expected = expect.to_h { |type| [type, true] }
-      end
+      expected = Configuration.expected_tokens!(expect).to_h { |type| [type, true] } unless expect.nil?
 
       until @halted
         consume_step! if scan_steps_guarded?

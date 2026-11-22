@@ -162,6 +162,22 @@ that the spelling always reaches the competing rule.
 See [ADR 0030](../adr/0030-classify-keywords-after-matching.md) for the decision
 to keep keyword spellings out of the DFA.
 
+## `indentation(newline:, indent:, dedent:, brackets: [], tab_width: 8)`
+
+Configure layout processing with three distinct token Symbols. Emit the
+configured `newline` for LF or CRLF. A newline rule may also consume the
+following spaces and tabs. Skip ordinary whitespace and comments, or send
+them to trivia channels. Keep each layout-significant line break visible as
+the configured newline token.
+
+`brackets` contains two-character strings, each with an opening and a
+closing character. Each character can appear in one pair. A recognized
+bracket token is identified by its original matched character. Set
+`tab_width` to a positive integer. A tab advances to the next tab stop.
+
+See [indentation tokens](runtime.md#indentation-tokens) for the output order
+and positions.
+
 ## `backend(name)`
 
 Selects `:table`, `:direct`, `:auto`, or `:firstmatch`

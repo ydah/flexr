@@ -58,6 +58,12 @@ module Flexr
       raise CompileError.new(message, diagnostic: diagnostic)
     end
 
+    def expected_tokens!(value)
+      return value if value.is_a?(Array) && value.all?(Symbol)
+
+      raise ArgumentError, "expect: must be an Array of token Symbols"
+    end
+
     def validated_symbol!(value, allowed, name)
       symbol = value.to_sym
       return symbol if allowed.include?(symbol)

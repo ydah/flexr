@@ -59,6 +59,10 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      if parsed.config.dig(:options, :indentation)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime lacks indentation support") unless respond_to?(:indentation)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if parsed.rules.any? { |rule| !rule.priority.to_i.zero? }
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support explicit rule priority")' \
           ' unless Flexr::IR::Rule.method_defined?(:loses_priority_tie?)'
@@ -252,6 +256,7 @@ module Flexr
 
     def embedded_runtime(parsed, compiled)
       sources = RUNTIME_SOURCES.dup
+      sources << "runtime/indentation.rb" if parsed.config.dig(:options, :indentation)
       sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb") if effective_backend(parsed) == :firstmatch
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
@@ -424,6 +429,9 @@ module Flexr
       # --eval is intentionally explicit; the generated file still contains
       # executable action source, but its metadata is deterministic for this run.
       parsed = klass.__flexr_spec
+      if (indentation = parsed.options[:indentation])
+        (passthrough.config[:options] ||= {})[:indentation] = indentation
+      end
       if (tables = parsed.options[:keyword_tables])
         (passthrough.config[:options] ||= {})[:keyword_tables] = tables
         passthrough.config[:declared_tokens] |= parsed.declared_tokens

@@ -228,6 +228,7 @@ module Flexr
 
       def expected_rule?(rule, expected, buffer, start_pos, end_pos = nil)
         return true if rule.skip? || rule.channel
+        return true if @config.options[:indentation] && @lexer.__flexr_layout_candidate?(expected, start_pos, end_pos)
         return rule.emits.any? { |type| expected.key?(type) } if rule.emits
         return true unless rule.emit?
 
