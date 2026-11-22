@@ -52,6 +52,9 @@ lexer.on_error = ->(_error) { :skip }
 lexer.on_error = PublicApiTypecheck::ErrorHandler.new
 lexer.on_error = PublicApiTypecheck::ErrorHandler.new.method(:call)
 lexer.on_error = nil
+# @type var bookmark: Flexr::Runtime::Checkpoint
+bookmark = lexer.checkpoint
+lexer.seek(1).restore(bookmark)
 # @type var tokens: Array[Flexr::token]
 tokens = lexer.tokens
 # @type var byte_position: Integer
@@ -87,4 +90,9 @@ generation = Flexr::Generator.new("lexer.flexr.rb").generate
 status = Flexr::CLI.run(["check", "lexer.flexr.rb"])
 # @type var accepted: bool
 accepted = Flexr.compile_pattern(/a/).accept?("a")
-puts tokens, byte_position, column, next_token, rendered, generation, status, accepted
+recognizer = Flexr::Lexer.recognizer
+# @type var match: [Flexr::rule_identity, Integer]?
+match = recognizer.match("12", 0)
+# @type var ending: Integer?
+ending = recognizer.match("12", 0) { |_rule, finish| finish }
+puts tokens, byte_position, column, next_token, rendered, generation, status, accepted, match, ending

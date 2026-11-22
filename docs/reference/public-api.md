@@ -10,6 +10,10 @@ else may change between releases without a deprecation cycle.
 - Runtime consumption: `initialize`, `next_token`, `tokens`, `each_token`, and
   `racc_next_token`. See [parser token expectations](runtime.md#parser-token-expectations)
   for the `expect:` keyword.
+- [Runtime positioning](runtime.md#checkpoint-and-seek): `checkpoint`,
+  `restore`, `seek`, and the opaque `Flexr::Runtime::Checkpoint`.
+- `Flexr::Lexer.recognizer` and `Flexr::Recognizer#match` for
+  [action-free matching](runtime.md#action-free-recognition).
 - Action context methods in [actions.md](actions.md).
 - `Flexr::Runtime::Token`, `Flexr::Runtime::Location`, `Flexr::LexError`,
   `Flexr::CompileError`, `Flexr::UnsupportedRegexpError`, and

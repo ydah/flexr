@@ -78,6 +78,18 @@ RSpec.describe "parser token expectations" do
     expect(lexer.new(StringIO.new("abc"), chunk_size: 1, max_lookahead_size: 0).next_token(expect: [:A])).to eq([:A, "a"])
   end
 
+  it "breaks total-length ties by priority after filtering eligible rules" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule("a", followed_by: "b", emit: :CONTEXT, priority: 2)
+      rule("ab", emits: :AB, priority: 10) { emit :AB }
+      rule("abc", emit: :LONG)
+    end
+
+    expect(lexer.new("abc").next_token(expect: %i[CONTEXT AB])).to eq([:AB, "ab"])
+    expect(lexer.new("abc").next_token(expect: [:CONTEXT])).to eq([:CONTEXT, "a"])
+    expect(lexer.new("abc").next_token(expect: %i[CONTEXT AB LONG])).to eq([:LONG, "abc"])
+  end
+
   it "keeps native firstmatch rule and alternative order among eligible candidates" do
     lexer = Class.new(Flexr::Lexer) do
       backend :firstmatch

@@ -17,7 +17,7 @@ module Flexr
       version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
       unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/accel.rb
       runtime/record.rb runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
-      runtime/interpreter.rb runtime/core.rb dsl.rb lexer.rb generated.rb
+      runtime/interpreter.rb runtime/recognizer.rb runtime/core.rb runtime/checkpoint.rb dsl.rb lexer.rb generated.rb
     ].freeze
 
     MATCHER_RUNTIME_SOURCES = %w[
@@ -59,12 +59,17 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      if parsed.rules.any? { |rule| !rule.priority.to_i.zero? }
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support explicit rule priority")' \
+          ' unless Flexr::IR::Rule.method_defined?(:loses_priority_tie?)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if parsed.rules.any?(&:channel)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support token channels")' \
           ' unless defined?(Flexr::Runtime::Channels)'
         install = "#{guard}\n#{indent}#{install}"
       end
-      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent)}"
+      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct)}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
       parsed.rules.each do |rule|
@@ -98,10 +103,12 @@ module Flexr
         conditions = Array(rule.pattern_conditions).map do |condition|
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
+        priority = ("priority: #{rule.priority}, " unless rule.priority.to_i.zero?)
         channel = "channel: #{ruby_literal(rule.channel)}, " if rule.channel
         emits = "emits: #{ruby_literal(rule.emits)}, " if rule.emits
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
           "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
+          "#{priority}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
           "#{channel}#{emits}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
@@ -129,7 +136,7 @@ module Flexr
       rules = parsed.rules.map do |rule|
         IR::Rule.new(index: rule.index, patterns: rule.patterns, trailing: normalize_trailing(rule.trailing),
                      action: rule.action, states: rule.states, bol_only: rule.bol_only,
-                     end_anchor: rule.end_anchor, location: rule.span, channel: rule.channel, emits: rule.emits)
+                     end_anchor: rule.end_anchor, location: rule.span, channel: rule.channel, priority: rule.priority, emits: rule.emits)
       rescue CompileError => e
         e.diagnostic.location ||= rule.span if e.diagnostic
         raise
@@ -238,6 +245,7 @@ module Flexr
 
     def embedded_runtime(parsed)
       sources = RUNTIME_SOURCES.dup
+      sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb") if effective_backend(parsed) == :firstmatch
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
@@ -418,6 +426,7 @@ module Flexr
         rule.patterns = runtime_rule.patterns
         rule.trailing = runtime_rule.trailing
         rule.emits = runtime_rule.emits
+        rule.priority = runtime_rule.priority
         next unless rule.dynamic_channel || rule.channel || runtime_rule.channel
 
         rule.channel = runtime_rule.channel

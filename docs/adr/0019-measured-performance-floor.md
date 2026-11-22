@@ -10,15 +10,10 @@ runtime/generated ratio was `1.042x`. These figures are recorded in
 
 ## Decision
 
-The handwritten comparison is a stretch target, not a release claim. The v1.0
-performance floor is a measured, regression-tested `0.18x` handwritten ratio;
-the `0.7x` target remains open for a future optimization milestone. The
-runtime/generated relationship remains governed by the existing `0.2x` risk
-threshold.
-
-This revision preserves an honest acceptance criterion: the project must not
-claim to have reached `0.7x`, and benchmark output must continue to be recorded
-from an actual run.
+The measured, regression-tested interpreter floor is `0.18x` of the handwritten
+JSON lexer. [ADR 0027](0027-per-engine-performance-targets.md) defines the
+throughput targets for each engine and the generated/runtime comparison.
+Benchmark output must come from an actual run.
 
 The absolute floor is enforced by the local release gate. CI uses a portable
 variant that keeps the 10% baseline-regression check but omits the absolute

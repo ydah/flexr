@@ -184,6 +184,7 @@ module Flexr
           bol_only: definition.fetch(:bol_only, false), end_anchor: definition[:end_anchor],
           location: definition[:span] || definition[:location], channel: channel,
           emits: Configuration.rule_emits!(definition[:emits]),
+          priority: definition[:priority],
           trailing_dfa: definition[:trailing_dfa] && Generated.load_dfa(definition[:trailing_dfa]),
           pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
             next unless condition

@@ -80,10 +80,8 @@ module Flexr
 
         expected = expect.to_h { |type| [type, true] }
       end
-      return nil if @halted
 
-      loop do
-        return nil if @halted
+      until @halted
         consume_step! if scan_steps_guarded?
 
         if eof? && @pending.nil?
@@ -148,6 +146,8 @@ module Flexr
         @pending = nil
         return token if token
       end
+    rescue StopIteration => e
+      e.result
     end
 
     def each_token
