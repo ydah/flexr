@@ -32,7 +32,7 @@ test('packages the released lexer and presets when building the public Playgroun
       await write(`examples/${name}/lexer.flexr.rb`, `# Released ${name}\n`);
     }
     await write('site/ruby/presets/heredoc.flexr.rb', '# Released heredoc preset\n');
-    await write('site/ruby/presets/html-js.flexr.rb', '# Released HTML and JS preset\n');
+    await write('site/ruby/presets/html_js.flexr.rb', '# Released HTML and JS preset\n');
     git('add', 'lib', 'examples', 'site/ruby/presets');
     git('-c', 'user.name=flexr test', '-c', 'user.email=flexr@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Release');
     git('tag', stableTag);
@@ -47,7 +47,7 @@ test('packages the released lexer and presets when building the public Playgroun
     await write('site/ruby/presets/priority.flexr.rb', '# Main priority preset\n');
     await write('site/ruby/presets/indentation.flexr.rb', '# Main indentation preset\n');
     await write('site/ruby/presets/heredoc.flexr.rb', '# Main heredoc preset\n');
-    await write('site/ruby/presets/html-js.flexr.rb', '# Main HTML and JS preset\n');
+    await write('site/ruby/presets/html_js.flexr.rb', '# Main HTML and JS preset\n');
     await write('site/ruby/presets/html_javascript.rb', '# Main JavaScript lexer\n');
     await cp(new URL('../scripts/', import.meta.url), path.join(site, 'scripts'), { recursive: true });
     for (const asset of ['ruby+stdlib.wasm', 'LICENSE', 'NOTICE']) {

@@ -50,7 +50,7 @@ for (const [name, input] of Object.entries(updatedPresets)) {
   if (releasedPresets && !releasedPresets.includes(filename)) continue;
   presets[name] = { source: await readSource(filename), input };
 }
-const htmlPreset = 'site/ruby/presets/html-js.flexr.rb';
+const htmlPreset = 'site/ruby/presets/html_js.flexr.rb';
 const javascriptLexer = 'site/ruby/presets/html_javascript.rb';
 if (!releasedPresets || [htmlPreset, javascriptLexer].every(filename => releasedPresets.includes(filename))) {
   files['/app/lib/playground/html_javascript.rb'] = await readSource(javascriptLexer);
