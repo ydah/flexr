@@ -32,6 +32,7 @@ module Flexr
       end
 
       def rule_calls(parsed, spans)
+        spans &= parsed.dsl_spans
         return [] if spans.empty?
 
         nodes = [::Prism.parse(parsed.source).value]
@@ -52,7 +53,7 @@ module Flexr
         tables = parsed.config.dig(:options, :keyword_tables)
         Automaton::KeywordTables.grouping_candidates(compiled, tables).filter_map do |literals, rule|
           spans = [*literals, rule].map(&:location)
-          next if spans.any?(&:nil?)
+          next unless (spans - parsed.dsl_spans).empty?
           next unless spans.each_cons(2).all? do |(_, last), (first, _)|
             first >= last && parsed.source.byteslice(last...first).match?(/\A[ \t]*\r?\n[ \t]*\z/)
           end

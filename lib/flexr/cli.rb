@@ -95,6 +95,9 @@ module Flexr
         when "--target"
           raise ArgumentError, "--target is only valid for the check command" unless command == :check
           options.target = required_argument!(args, argument)
+        when "--from"
+          raise ArgumentError, "--from is only valid for import" unless command == :import
+          options.import_format = required_argument!(args, argument).to_sym
         when "--rule"
           rule_number = Integer(required_argument!(args, argument), 10)
           raise ArgumentError, "--rule must be non-negative" if rule_number.negative?
@@ -167,7 +170,7 @@ module Flexr
       when :bench
         run_benchmark(spec, options, benchmark_args, out)
       when :import
-        result = Importer.import(spec)
+        result = Importer.import(spec, from: options.import_format)
         result.warnings.each { |warning| err.puts "warning: #{warning}" }
         return EXIT_FAILURE unless result.complete?
 
@@ -453,6 +456,7 @@ module Flexr
       if (tables = config_options[:keyword_tables])
         klass.__flexr_config.options[:keyword_tables] = tables
       end
+      klass.indentation(**config_options[:indentation]) if config_options[:indentation]
       config_options.slice(*Configuration::BOOLEAN_OPTIONS).each do |name, value|
         klass.option(name) if value
       end
@@ -539,6 +543,7 @@ module Flexr
               --generated             trace generated scanner
               --target 2.0            report migration requirements (static check only)
               --dry-run               print the fixed spec without writing (fix only)
+              --from oedipus_lex      read an oedipus_lex .rex file (import only)
       USAGE
       status
     end

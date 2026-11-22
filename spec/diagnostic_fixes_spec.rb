@@ -88,6 +88,27 @@ RSpec.describe "diagnostic fixes" do
     end
   end
 
+  it "leaves the declaration site of shared keyword rules unchanged" do
+    source = <<~RUBY
+      module SharedKeywordRules
+        extend Flexr::Rules
+        rule("if", emit: :IF)
+        rule("end", emit: :END)
+        rule(/[a-z]+/, emit: :IDENT)
+      end
+      class SharedKeywordLexer < Flexr::Lexer
+        use SharedKeywordRules
+      end
+    RUBY
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "lexer.flexr.rb")
+      File.binwrite(path, source)
+      errors = StringIO.new
+      expect(Flexr::CLI.run(["fix", path], out: StringIO.new, err: errors)).to eq(0), errors.string
+      expect(File.binread(path)).to eq(source)
+    end
+  end
+
   it "exposes a shadowed literal without making the covering rule unreachable" do
     source = <<~RUBY
       class RepairPriorityLexer < Flexr::Lexer

@@ -233,9 +233,12 @@ RSpec.describe "named regexp captures" do
         require "json"
         require "stringio"
         load ARGV.fetch(0)
-        make_lexer = -> { NamedCaptureLexer.new(StringIO.new(ARGV.fetch(1)), retain_input: false, chunk_size: 1) }
-        tokens = if ARGV[2]
-          JSON.parse(ARGV[2]).map do |types|
+        STDIN.binmode
+        requests = JSON.parse(STDIN.gets)
+        input = STDIN.read
+        make_lexer = -> { NamedCaptureLexer.new(StringIO.new(input), retain_input: false, chunk_size: 1) }
+        tokens = if requests
+          requests.map do |types|
             make_lexer.call.next_token(expect: types.map(&:to_sym))
           end
         else
@@ -246,8 +249,8 @@ RSpec.describe "named regexp captures" do
       [path, generated, standalone].map do |file|
         command = [RbConfig.ruby]
         command << "-Ilib" unless file == standalone
-        arguments = requests ? [input, JSON.generate(requests)] : [input]
-        stdout, stderr, status = Open3.capture3(*command, "-e", runner, file, *arguments)
+        data = [JSON.generate(requests), input.b].join("\n")
+        stdout, stderr, status = Open3.capture3(*command, "-e", runner, file, stdin_data: data, binmode: true)
         expect(status).to be_success, stderr
         JSON.parse(stdout)
       end
