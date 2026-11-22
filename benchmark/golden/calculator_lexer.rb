@@ -85,14 +85,10 @@ module CalculatorExample
       rules = self.class.__flexr_rules
       source = buffer.stable_source
       guarded_steps = scan_steps_guarded?
-      token_start = more_text_start || position
-      token_limit = max_token_size
       check_token_limit = token_limit_required?
       cursor = position
       best = nil
-      accel_mode = @accel_mode
-      accelerate = accel_mode != :none && !(accel_mode == :auto && @__flexr_generated_auto_accel_off)
-      if source && !guarded_steps && !check_token_limit && !accelerate
+      if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
         while cursor < source.bytesize
           byte = source.getbyte(cursor)
           current = if direct_nxt
@@ -115,6 +111,9 @@ module CalculatorExample
         end
         return best
       end
+      token_start = more_text_start || position
+      token_limit = max_token_size
+      accelerate = @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
         if accelerate
           region = __flexr_generated_acceleration_region(dfa, current)

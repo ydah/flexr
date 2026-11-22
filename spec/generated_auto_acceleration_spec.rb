@@ -1,0 +1,56 @@
+# frozen_string_literal: true
+
+require "stringio"
+
+RSpec.describe "generated automatic region acceleration" do
+  let(:input) { "#{'a' * 32}!#{'b' * 32}".freeze }
+  let(:tokens) { [[:WORD, "a" * 32], [:PUNCTUATION, "!"], [:WORD, "b" * 32]] }
+
+  def generated_lexer(accel)
+    Dir.mktmpdir("flexr-generated-auto-accel-") do |directory|
+      spec = File.join(directory, "lexer.flexr.rb")
+      File.write(spec, <<~RUBY)
+        class GeneratedAutoAccelerationLexer < Flexr::Lexer
+          backend :direct
+          accel :#{accel}
+          rule(/[a-z]+/, emit: :WORD)
+          rule("!", emit: :PUNCTUATION)
+        end
+      RUBY
+      scope = Module.new
+      scope.module_eval(Flexr::Generator.new(spec).generate, spec, 1)
+      scope.const_get(:GeneratedAutoAccelerationLexer, false)
+    end
+  end
+
+  it "stays on the DFA for frozen, unguarded strings in auto mode" do
+    lexer = generated_lexer(:auto).new(input)
+
+    expect(lexer).not_to receive(:__flexr_generated_acceleration_region)
+    expect(lexer.tokens).to eq(tokens)
+  end
+
+  it "keeps the auto region path available with streaming or runtime limits" do
+    generated = generated_lexer(:auto)
+    cases = [
+      [StringIO.new(input), { chunk_size: 3, retain_input: false }],
+      [input.dup, {}],
+      [input, { max_steps: 1000 }],
+      [input, { max_token_size: 32 }]
+    ]
+
+    cases.each do |source, options|
+      lexer = generated.new(source, **options)
+
+      expect(lexer).to receive(:__flexr_generated_acceleration_region).at_least(:once).and_call_original
+      expect(lexer.tokens).to eq(tokens)
+    end
+  end
+
+  it "uses native scanning for explicitly accelerated frozen strings" do
+    lexer = generated_lexer(:strscan).new(input)
+
+    expect_any_instance_of(StringScanner).to receive(:skip).at_least(:once).and_call_original
+    expect(lexer.tokens).to eq(tokens)
+  end
+end
