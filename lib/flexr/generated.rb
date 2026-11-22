@@ -27,6 +27,8 @@ module Flexr
       config.fetch(:options, {}).each do |option, value|
         if option == :accel
           klass.accel(value)
+        elsif option == :indentation
+          klass.indentation(**value)
         elsif value == true
           klass.option(option)
         else

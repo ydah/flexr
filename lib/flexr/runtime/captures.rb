@@ -14,11 +14,17 @@ module Flexr
       def execute_with_captures(match)
         @capture_match = match
         execute(match.rule)
+        finish_delegation if @__flexr_delegation_end
       ensure
-        @capture_match = @captures = nil
+        @capture_match = @captures = @capture_data = nil
+        @__flexr_delegation_tokens = @__flexr_delegation_end = nil
       end
 
       def capture_data
+        @capture_data ||= replay_capture_data
+      end
+
+      def replay_capture_data
         match = @capture_match
         return match.capture if match.capture.is_a?(MatchData)
 

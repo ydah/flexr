@@ -41,6 +41,16 @@ module Flexr
     def !: () -> Pattern
   end
 
+  module Rules
+    module Use
+      def use: (::Module) -> nil
+    end
+
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer, ?emits: (Symbol | Array[Symbol])?) ?{ () [self: Lexer] -> untyped } -> nil
+    def pattern: (*pattern_operand) -> Pattern
+    def upto: (pattern_operand) -> Pattern
+  end
+
   class Recognizer
     def match: (String, Integer) -> [rule_identity, Integer]?
              | [Result] (String, Integer) { (rule_identity, Integer) -> Result } -> Result?
@@ -55,6 +65,7 @@ module Flexr
     def on_eof: () { () [self: Lexer] -> untyped } -> void
     def emits: (*untyped) -> void
     def keywords: (Array[String] | Hash[String, Symbol], among: Symbol) -> nil
+    def indentation: (newline: Symbol, indent: Symbol, dedent: Symbol, ?brackets: Array[String], ?tab_width: Integer) -> nil
     def backend: (:table | :direct | :auto | :firstmatch | String) -> void
     def token_kind: (:array | :struct | :yield | String) -> void
     def encoding: (Encoding | String) -> void
@@ -65,6 +76,7 @@ module Flexr
 
   class Lexer
     extend DSL
+    extend Rules::Use
 
     def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?chunk_size: Integer) -> void
     def next_token: (?expect: Array[Symbol]?) -> token?
@@ -75,6 +87,7 @@ module Flexr
     def checkpoint: () -> Runtime::Checkpoint
     def restore: (Runtime::Checkpoint) -> self
     def seek: (Integer) -> self
+    def push_input: (String | _Input, ?filename: String?) -> nil
 
     attr_reader filename: String?
     attr_reader error_mode: Symbol
@@ -85,6 +98,7 @@ module Flexr
     def input: () -> String
     def text: () -> String
     def captures: () -> Hash[Symbol, String?]
+    def delegate: (singleton(Lexer), capture: Symbol) -> nil
     def text_bytesize: () -> Integer
     def last_location: () -> Runtime::Location
     def byte_pos: () -> Integer
@@ -105,6 +119,8 @@ module Flexr
     alias state= begin_state
     def less: (Integer) -> nil
     def more: () -> true
+    def scan_until: (String) -> String?
+    def scan_until_line: (String) -> String?
   end
 
   module Runtime

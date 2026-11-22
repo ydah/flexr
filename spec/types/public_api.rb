@@ -3,6 +3,11 @@
 require "flexr"
 
 module PublicApiTypecheck
+  module SharedRules
+    extend Flexr::Rules
+    rule(/#[^\n]*/, channel: :comment)
+  end
+
   class Cancellation
     def call
       false
@@ -20,6 +25,10 @@ module PublicApiTypecheck
       error.message.empty? ? :skip : :token
     end
   end
+
+  class EmbeddedLexer < Flexr::Lexer
+    rule(/[a-z]+/, emit: :IDENT)
+  end
 end
 
 Flexr::Lexer.rule(/[0-9]+/, emits: [:INTEGER]) { emit :INTEGER, text.to_i }
@@ -32,9 +41,11 @@ Flexr::Lexer.state(:quoted) { rule(/x/, emit: :X) }
 Flexr::Lexer.all_states { rule(/ /, skip: true) }
 Flexr::Lexer.on_eof { skip }
 Flexr::Lexer.emits(:INTEGER, :X)
+Flexr::Lexer.use(PublicApiTypecheck::SharedRules)
 Flexr::Lexer.rule(/[a-z]+/, emit: :IDENT)
 Flexr::Lexer.keywords(%w[if else], among: :IDENT)
 Flexr::Lexer.keywords({ "yes" => :TRUE, "true" => :TRUE }, among: :IDENT)
+Flexr::Lexer.indentation(newline: :NEWLINE, indent: :INDENT, dedent: :DEDENT, brackets: ["()"], tab_width: 4)
 Flexr::Lexer.backend(:table)
 Flexr::Lexer.token_kind(:array)
 Flexr::Lexer.encoding(Encoding::UTF_8)
@@ -46,6 +57,9 @@ reserved = Flexr::Lexer.pattern(%w[if end])
 named_word = (word - reserved) & Flexr::Lexer.pattern(/.{1,8}/)
 Flexr::Lexer.rule(named_word | ".")
 Flexr::Lexer.rule(Flexr::Lexer.pattern("<") + Flexr::Lexer.upto(">"), skip: true)
+Flexr::Lexer.rule(/<(?<embedded>[a-z]+)>/) { delegate PublicApiTypecheck::EmbeddedLexer, capture: :embedded }
+Flexr::Lexer.rule("<<") { emit :INLINE, scan_until(">>") }
+Flexr::Lexer.rule("<<TAG\n") { emit :HEREDOC, scan_until_line("TAG") }
 
 lexer = Flexr::Lexer.new("12", filename: "input.txt", max_steps: 1000)
 Flexr::Lexer.new("12", cancellation: -> { false })
@@ -60,6 +74,7 @@ lexer.on_error = nil
 # @type var bookmark: Flexr::Runtime::Checkpoint
 bookmark = lexer.checkpoint
 lexer.seek(1).restore(bookmark)
+lexer.push_input("included", filename: "defaults.txt")
 # @type var tokens: Array[Flexr::token]
 tokens = lexer.tokens
 # @type var byte_position: Integer

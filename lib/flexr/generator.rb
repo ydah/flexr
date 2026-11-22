@@ -59,6 +59,10 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      if parsed.config.dig(:options, :indentation)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime lacks indentation support") unless respond_to?(:indentation)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if parsed.rules.any? { |rule| !rule.priority.to_i.zero? }
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support explicit rule priority")' \
           ' unless Flexr::IR::Rule.method_defined?(:loses_priority_tie?)'
@@ -72,6 +76,11 @@ module Flexr
       if compiled.rules.any?(&:capture_patterns)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support named regexp captures")' \
           ' unless defined?(Flexr::Runtime::Captures)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
+      if uses_delegation?(parsed)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support lexer delegation")' \
+          ' unless defined?(Flexr::Runtime::DelegatedTokens)'
         install = "#{guard}\n#{indent}#{install}"
       end
       install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct)}"
@@ -252,12 +261,17 @@ module Flexr
 
     def embedded_runtime(parsed, compiled)
       sources = RUNTIME_SOURCES.dup
+      sources << "runtime/input_stack.rb" if parsed.uses_input_stack || parsed.config.dig(:options, :input_stack)
+      sources << "runtime/indentation.rb" if parsed.config.dig(:options, :indentation)
+      sources << "runtime/delimiters.rb" if parsed.uses_dynamic_delimiters || parsed.config.dig(:options, :dynamic_delimiters)
       sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb") if effective_backend(parsed) == :firstmatch
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
-      sources << "runtime/channels.rb" if parsed.rules.any?(&:channel)
+      sources << "runtime/channels.rb" if parsed.uses_rule_sets || parsed.rules.any?(&:channel) || uses_delegation?(parsed)
       sources << "runtime/captures.rb" if compiled.rules.any?(&:capture_patterns)
+      sources << "runtime/delegation.rb" if uses_delegation?(parsed)
+      sources << "rules.rb" if parsed.uses_rule_sets
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
@@ -265,6 +279,10 @@ module Flexr
 
     def matcher_runtime?(parsed)
       effective_backend(parsed) == :firstmatch || parsed.rules.any?(&:trailing)
+    end
+
+    def uses_delegation?(parsed)
+      parsed.uses_delegation || parsed.config.dig(:options, :delegation)
     end
 
     def encoding_expression(encoding)
@@ -424,6 +442,9 @@ module Flexr
       # --eval is intentionally explicit; the generated file still contains
       # executable action source, but its metadata is deterministic for this run.
       parsed = klass.__flexr_spec
+      if (indentation = parsed.options[:indentation])
+        (passthrough.config[:options] ||= {})[:indentation] = indentation
+      end
       if (tables = parsed.options[:keyword_tables])
         (passthrough.config[:options] ||= {})[:keyword_tables] = tables
         passthrough.config[:declared_tokens] |= parsed.declared_tokens
