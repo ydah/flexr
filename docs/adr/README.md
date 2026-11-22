@@ -74,38 +74,30 @@ MUST rules are required. For a SHOULD rule, explain any exception in the pull re
 
 ## Index
 
-The previous filenames are listed here for readers following historical references. The [v2.2.0 ADR directory](https://github.com/ydah/flexr/tree/v2.2.0/docs/adr) contains the original records.
-
-| Previous file | Record |
-| --- | --- |
-| `0001-byte-level-dfa.md` | [Compile lexer transitions over bytes](20260809_byte_level_dfa.md) |
-| `0003-leftmost-longest.md` | [Select the longest match at each input position by default](20260809_leftmost_longest.md) |
-| `0006-accel-not-scanner.md` | [Keep DFA rule selection authoritative during acceleration](20260809_accel_not_scanner.md) |
-| `0008-what-pure-ruby-means.md` | [Run lexers with Ruby and its standard library](20260809_what_pure_ruby_means.md) |
-| `0016-spec-is-plain-ruby.md` | [Use an internal Ruby DSL for lexer specifications](20260809_spec_is_plain_ruby.md) |
-| `0017-static-analysis-by-default.md` | [Generate from static source unless the caller requests evaluation](20260809_static_analysis_by_default.md) |
-| `0018-prism-for-generator-only.md` | [Run lexers with Ruby and its standard library](20260809_what_pure_ruby_means.md) |
-| `0019-measured-performance-floor.md` | [Measured performance floor for the pure-Ruby backend](../implementations/20260810_measured_performance_floor.md) |
-| `0020-vendored-unicode-contract.md` | [Use vendored Unicode data as the compatibility contract](20260810_vendored_unicode_contract.md) |
-| `0021-ruby-34-minimum.md` | [Require Ruby 3.4 or later for flexr 2](20261122_ruby_34_minimum.md) |
-| `0022-immutable-tokens-and-locations.md` | [Make structured tokens and locations immutable Ruby Data records](20261122_immutable_tokens_and_locations.md) |
-| `0023-stable-explicit-firstmatch.md` | [Support first-match selection as a stable explicit backend](20261122_stable_explicit_firstmatch.md) |
-| `0024-opt-in-ractor-sharing.md` | [Prepare generated lexers for Ractor sharing on request](20261122_opt_in_ractor_sharing.md) |
-| `0025-explicit-whole-token-acceleration.md` | [Require explicit opt-in for whole-token acceleration](20261122_explicit_whole_token_acceleration.md) |
-| `0026-retain-direct-dispatch.md` | [Retain direct dispatch after the state cases experiment](../implementations/20261122_retain_direct_dispatch.md) |
-| `0027-per-engine-performance-targets.md` | [Set performance targets per Ruby engine](../implementations/20261122_per_engine_performance_targets.md) |
-| `0028-dfa-absence-groups.md` | [Define absence groups to match text with no forbidden substring](20261122_dfa_absence_groups.md) |
-| `0029-pattern-algebra.md` | [Expose composable regular languages as immutable pattern values](20261122_pattern_algebra.md) |
-| `0030-classify-keywords-after-matching.md` | [Classify keywords after the base rule wins](20261122_classify_keywords_after_matching.md) |
-| `0031-trivia-channels.md` | [Preserve trivia without changing the default token stream](20261122_trivia_channels.md) |
-| `0032-explicit-rule-priority.md` | [Apply explicit rule priority only to equal-length matches](20261122_explicit_rule_priority.md) |
-| `0033-action-free-recognition.md` | [Recognize rules at a byte offset without running actions](20261122_action_free_recognition.md) |
-| `0034-lexer-checkpoints.md` | [Restore a lexer with an opaque bookmark and seek by byte offset](20261122_lexer_checkpoints.md) |
-| `0035-parser-token-expectations.md` | [Apply parser token expectations before selecting a rule](20261122_parser_token_expectations.md) |
-| `0038-replay-named-regexp-captures.md` | [Expose named captures from the selected rule body](20261122_named_captures_of_selected_rule.md) |
-| `0039-input-stack.md` | [Suspend the parent input while a lexer scans an included source](20261122_input_stack.md) |
-| `0040-runtime-delimiters.md` | [Let a rule action consume a delimiter chosen from the input](20261122_runtime_delimiters.md) |
-| `0041-post-lexical-indentation.md` | [Emit indentation tokens from the parser-visible stream](20261122_post_lexical_indentation.md) |
-| `0042-capture-delegation.md` | [Delegate the exact captured source range to a child lexer](20261122_capture_delegation.md) |
-| `0043-expand-reusable-rules-explicitly.md` | [Insert reusable rules at each explicit use site](20261122_expand_reusable_rules_explicitly.md) |
-| `0044-import-oedipus-firstmatch.md` | [Preserve first-match order when importing oedipus_lex](20261122_import_oedipus_firstmatch.md) |
+- [Compile lexer transitions over bytes](20260809_byte_level_dfa.md)
+- [Select the longest match at each input position by default](20260809_leftmost_longest.md)
+- [Keep DFA rule selection authoritative during acceleration](20260809_accel_not_scanner.md)
+- [Run lexers with Ruby and its standard library](20260809_what_pure_ruby_means.md)
+- [Use an internal Ruby DSL for lexer specifications](20260809_spec_is_plain_ruby.md)
+- [Generate from static source unless the caller requests evaluation](20260809_static_analysis_by_default.md)
+- [Use vendored Unicode data as the compatibility contract](20260810_vendored_unicode_contract.md)
+- [Require Ruby 3.4 or later for flexr 2](20261122_ruby_34_minimum.md)
+- [Make structured tokens and locations immutable Ruby Data records](20261122_immutable_tokens_and_locations.md)
+- [Support first-match selection as a stable explicit backend](20261122_stable_explicit_firstmatch.md)
+- [Prepare generated lexers for Ractor sharing on request](20261122_opt_in_ractor_sharing.md)
+- [Require explicit opt-in for whole-token acceleration](20261122_explicit_whole_token_acceleration.md)
+- [Define absence groups to match text with no forbidden substring](20261122_dfa_absence_groups.md)
+- [Expose composable regular languages as immutable pattern values](20261122_pattern_algebra.md)
+- [Classify keywords after the base rule wins](20261122_classify_keywords_after_matching.md)
+- [Preserve trivia without changing the default token stream](20261122_trivia_channels.md)
+- [Apply explicit rule priority only to equal-length matches](20261122_explicit_rule_priority.md)
+- [Recognize rules at a byte offset without running actions](20261122_action_free_recognition.md)
+- [Restore a lexer with an opaque bookmark and seek by byte offset](20261122_lexer_checkpoints.md)
+- [Apply parser token expectations before selecting a rule](20261122_parser_token_expectations.md)
+- [Expose named captures from the selected rule body](20261122_named_captures_of_selected_rule.md)
+- [Suspend the parent input while a lexer scans an included source](20261122_input_stack.md)
+- [Let a rule action consume a delimiter chosen from the input](20261122_runtime_delimiters.md)
+- [Emit indentation tokens from the parser-visible stream](20261122_post_lexical_indentation.md)
+- [Delegate the exact captured source range to a child lexer](20261122_capture_delegation.md)
+- [Insert reusable rules at each explicit use site](20261122_expand_reusable_rules_explicitly.md)
+- [Preserve first-match order when importing oedipus_lex](20261122_import_oedipus_firstmatch.md)
