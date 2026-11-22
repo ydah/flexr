@@ -682,3 +682,24 @@ the same machine.
 ```sh
 FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 3
 ```
+
+## 2026-11-23: Snapshot mutable String input
+
+The same Ruby 4.0.9 machine and fixed workload matrix compared mutable
+inputs before and after taking one frozen snapshot per lexer. Each cell
+is the median of three samples with three warmup and three timed scans per
+sample. Runtime, generated, and standalone token parity passed in all 30
+cells, including frozen inputs. This table shows the generated/runtime
+ratios for inputs supplied as mutable Strings.
+
+| Workload | Interpreter | YJIT | ZJIT |
+|---|---:|---:|---:|
+| json | 1.144x to 1.215x | 0.587x to 1.221x | 0.238x to 1.109x |
+| toml | 0.918x to 0.810x | 0.426x to 0.592x | 0.241x to 0.871x |
+| graphql | 0.960x to 0.874x | 0.454x to 0.665x | 0.278x to 0.918x |
+| sql | 0.932x to 0.849x | 0.415x to 0.652x | 0.246x to 0.883x |
+| ruby_subset | 0.944x to 0.842x | 0.442x to 0.659x | 0.252x to 0.902x |
+
+All six JSON cells met the `1.0x` threshold. Across the full matrix the
+lowest ratio was `0.592x`. The other four workloads still need
+attention before the gate can pass.

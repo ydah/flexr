@@ -16,6 +16,7 @@ Lexer.new(input,
   max_steps: nil,
   cancellation: nil,
   retain_input: true,
+  freeze_input: true,
   chunk_size: 64 * 1024)
 ```
 
@@ -26,6 +27,12 @@ or `:panic`; unknown values raise `ArgumentError` at initialization.
 leaves the step count unbounded; `cancellation` may be a callable accepting
 zero arguments or the lexer. Size limits are non-negative, and `chunk_size`
 must be positive.
+
+The lexer takes a frozen snapshot of each mutable String at initialization
+or when `push_input` queues it. It reuses an already frozen String.
+Pass `freeze_input: false` to borrow the supplied mutable String. With
+`retain_input: false`, compaction can detach the retained window from that
+String. IO continues to read in chunks.
 
 ## Consumption
 
