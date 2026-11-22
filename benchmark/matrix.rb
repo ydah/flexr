@@ -27,17 +27,23 @@ module Flexr
         @benchmark = benchmark || method(:benchmark_engine)
       end
 
-      def run(engines: FLAGS.keys)
+      def run(engines: FLAGS.keys, verify_ratio: false)
         results = engines.to_h do |engine|
           availability = @probe.call(engine)
           result = if availability.fetch("available")
-            { "status" => "measured", "ruby" => availability["ruby"], "result" => @benchmark.call(engine) }
+            measurement = verify_ratio ? measure_ratio(engine) : { "result" => @benchmark.call(engine) }
+            { "status" => "measured", "ruby" => availability["ruby"], **measurement }
           else
             { "status" => "unavailable", "reason" => availability.fetch("reason") }
           end
           [engine, result]
         end
-        { "schema" => 1, "engines" => results }
+        report = { "schema" => 1, "engines" => results }
+        if verify_ratio
+          failed = results.keys.reject { |engine| results.fetch(engine).fetch("median_generated_runtime_ratio", 0) >= 1.0 }
+          report["generated_runtime_ratio_check"] = { "minimum" => 1.0, "passed" => failed.empty?, "failed_engines" => failed }
+        end
+        report
       end
 
       def self.command(argv, out: $stdout, err: $stderr)
@@ -45,7 +51,13 @@ module Flexr
         return Benchmarking.usage(out) if options[:help]
         raise ArgumentError, "matrix results cannot share a baseline output file" if options[:write_baseline]
 
-        out.puts JSON.pretty_generate(new(arguments: argv).run)
+        verify_ratio = ENV["FLEXR_BENCHMARK_CHECK_MATRIX"] == "1"
+        report = new(arguments: argv).run(verify_ratio: verify_ratio)
+        out.puts JSON.pretty_generate(report)
+        if (check = report["generated_runtime_ratio_check"]) && !check.fetch("passed")
+          err.puts "matrix error: generated/runtime ratio check failed for #{check.fetch('failed_engines').join(', ')}"
+          return 1
+        end
         0
       rescue ArgumentError, Errno::ENOENT => e
         err.puts "matrix error: #{e.message}"
@@ -56,6 +68,21 @@ module Flexr
       end
 
       private
+
+      def measure_ratio(engine)
+        samples = Array.new(3) { @benchmark.call(engine) }
+        ratios = samples.map do |sample|
+          modes = sample.fetch("modes")
+          runtime = modes.fetch("runtime").fetch("tokens_per_s")
+          generated = modes.fetch("generated").fetch("tokens_per_s")
+          runtime.positive? ? generated.fdiv(runtime) : 0.0
+        end
+        median = ratios.each_index.sort_by { |index| ratios.fetch(index) }.fetch(1)
+        {
+          "result" => samples.fetch(median), "ratio_samples" => ratios,
+          "median_generated_runtime_ratio" => ratios.fetch(median)
+        }
+      end
 
       def probe_engine(engine)
         stdout, stderr, status = Open3.capture3({ "RUBYOPT" => nil }, RbConfig.ruby, *FLAGS.fetch(engine),

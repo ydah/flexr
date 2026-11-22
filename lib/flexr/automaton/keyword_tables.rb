@@ -51,6 +51,19 @@ module Flexr
       end
 
       def grouping_suggestions(compiled, tables)
+        grouping_candidates(compiled, tables).map do |literals, rule|
+          among = rule.action[1]
+          spellings = literals.map { |literal| literal.patterns.first }.uniq
+          Diagnostics.info(
+            "FLEXR-I003", "#{literals.length} consecutive literal rules can share an identifier rule",
+            location: literals.first.location,
+            help: "replace them with keywords #{spellings.inspect}, among: #{among.inspect}",
+            note: "input #{spellings.first.inspect} also matches rule #{rule.index}"
+          )
+        end
+      end
+
+      def grouping_candidates(compiled, tables)
         pending = []
         compiled.rules.filter_map do |rule|
           if literal_keyword?(rule)
@@ -62,14 +75,7 @@ module Flexr
           pending = []
           next unless literals.length >= 2 && groupable?(compiled, rule, literals, tables)
 
-          among = rule.action[1]
-          spellings = literals.map { |literal| literal.patterns.first }.uniq
-          Diagnostics.info(
-            "FLEXR-I003", "#{literals.length} consecutive literal rules can share an identifier rule",
-            location: literals.first.location,
-            help: "replace them with keywords #{spellings.inspect}, among: #{among.inspect}",
-            note: "input #{spellings.first.inspect} also matches rule #{rule.index}"
-          )
+          [literals, rule]
         end
       end
 

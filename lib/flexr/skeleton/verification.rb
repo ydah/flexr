@@ -11,7 +11,7 @@ module Flexr
       RUNNER = <<~RUBY
         require "json"
         mode, path, origin, class_name, snapshot_path, result_path = ARGV
-        request = JSON.parse(STDIN.read)
+        request = JSON.parse(STDIN.binmode.read)
         require "flexr" unless mode == "standalone"
         if mode == "runtime"
           load origin
@@ -89,7 +89,7 @@ module Flexr
         command = [RbConfig.ruby]
         command.push("-I", File.expand_path("../..", __dir__)) unless mode == :standalone
         command.push("-e", RUNNER, mode.to_s, source_path, @spec, @class_name, snapshot_path, result_path)
-        _, stderr, status = Open3.capture3(*command, stdin_data: JSON.generate(request))
+        _, stderr, status = Open3.capture3(*command, stdin_data: JSON.generate(request), binmode: true)
         unless status.success? && File.file?(result_path)
           detail = stderr.lines.first&.strip
           detail = "worker exited without producing a report (#{status})" if detail.nil? || detail.empty?
