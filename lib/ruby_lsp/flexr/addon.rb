@@ -95,8 +95,22 @@ module RubyLsp
           sections << "Channel `#{channel.inspect}` preserves trivia. " \
             "Read it with `tokens(channels: :all)` or `leading_trivia` on structured tokens."
         end
+        hint = priority_hint(node) if node.name == :rule
+        sections << hint if hint
         sections << "```text\n#{text}\n```" unless text.empty?
         @builder.push(sections.join("\n\n"), category: :documentation) unless sections.empty?
+      end
+
+      private
+
+      def priority_hint(node)
+        keywords = Array(node.arguments&.arguments).grep(Prism::KeywordHashNode).flat_map(&:elements)
+        pair = keywords.grep(Prism::AssocNode).find do |option|
+          option.key.is_a?(Prism::SymbolNode) && option.key.value == "priority"
+        end
+        return unless pair&.value.is_a?(Prism::IntegerNode)
+
+        "priority #{pair.value.value} breaks equal-length matches. Higher priority wins, then source order."
       end
     end
 

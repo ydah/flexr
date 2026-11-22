@@ -71,11 +71,12 @@ RSpec.describe "token channels" do
     expect(lexer.new("a").tokens(channels: :all)).to eq([[:A, "a"]])
   end
 
-  it "uses evaluated channel names and action precedence in generated and standalone scanners" do
+  it "uses evaluated channels, priorities and action precedence in generated and standalone scanners" do
     source = <<~SPEC
       require "flexr"
       class EvaluatedChannels < Flexr::Lexer
         def self.trivia_channel = :comment
+        def self.trivia_priority = 2
         def self.discard_channel = :skip
         def self.skip_comment = true
         def self.note_type = :NOTE
@@ -85,6 +86,7 @@ RSpec.describe "token channels" do
         rule("$", channel: :comment, skip: skip_comment) { raise "discarded action" }
         rule("@", channel: :comment, emit: note_type)
         rule("x", emit: :WORD)
+        rule("x", channel: trivia_channel, priority: trivia_priority)
       end
     SPEC
     runner = 'load ARGV.fetch(0); puts JSON.generate(EvaluatedChannels.new("#:@!$x").tokens(channels: :all))'
@@ -99,7 +101,7 @@ RSpec.describe "token channels" do
         command << "-Ilib" unless standalone
         stdout, stderr, status = Open3.capture3(*command, "-e", runner, target)
         expect(status).to be_success, stderr
-        expect(JSON.parse(stdout)).to eq([["comment", "#"], ["COLON", ":"], ["NOTE", "@"], ["WORD", "x"]])
+        expect(JSON.parse(stdout)).to eq([["comment", "#"], ["COLON", ":"], ["NOTE", "@"], ["comment", "x"]])
       end
     end
   ensure
@@ -135,13 +137,15 @@ RSpec.describe "token channels" do
     source = <<~'SPEC'
       require "flexr"
       class ChannelledKeywords < Flexr::Lexer
+        IDENT = pattern(/[a-z]+/)
         rule("(") { push :annotation }
         state :annotation do
           rule(")") { pop }
-          rule(/[a-z]+/, channel: :comment, emit: :IDENT)
+          rule(IDENT, emit: :PLAIN_ANNOTATION)
+          rule(IDENT, channel: :comment, emit: :IDENT, priority: 2)
         end
         rule(/\s+/, skip: true)
-        rule(/[a-z]+/, emit: :IDENT)
+        rule(IDENT, emit: :IDENT)
         keywords %w[if], among: :IDENT
       end
     SPEC

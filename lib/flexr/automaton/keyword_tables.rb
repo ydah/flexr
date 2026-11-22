@@ -28,7 +28,7 @@ module Flexr
 
             Diagnostics.warning(
               "FLEXR-W022", "keyword #{spelling.inspect} never reaches emit: #{among.inspect}",
-              location: location, note: "an earlier rule wins on input #{spelling.inspect}",
+              location: location, note: "a competing rule wins on input #{spelling.inspect}",
               help: "remove the redundant keyword or change the competing rule"
             )
           end
@@ -43,10 +43,10 @@ module Flexr
       def shadowed?(compiled, accepted, candidates)
         return false if candidates.any?(&:trailing)
 
-        target = candidates.map(&:index).min
+        target = candidates.reduce { |winner, rule| winner.loses_priority_tie?(rule) ? rule : winner }
         accepted.any? do |acceptance|
-          acceptance.rule_index < target && !acceptance.bol_only && !acceptance.end_anchor &&
-            !compiled.rules.fetch(acceptance.rule_index).trailing
+          rule = compiled.rules.fetch(acceptance.rule_index)
+          !acceptance.bol_only && !acceptance.end_anchor && !rule.trailing && target.loses_priority_tie?(rule)
         end
       end
 
@@ -84,7 +84,7 @@ module Flexr
 
       def groupable?(compiled, rule, literals, tables)
         return false unless rule.emit? && !rule.channel && !rule.trailing && rule.patterns.all?(::Regexp)
-        return false unless literals.all? { |literal| literal.states == rule.states }
+        return false unless literals.all? { |literal| literal.states == rule.states && literal.priority == rule.priority }
         return false if tables&.key?(rule.action[1])
         return false if tables && literals.any? { |literal| tables.key?(literal.action[1]) }
         return false unless compiled.rules.one? { |entry| entry.emit? && !entry.channel && entry.action[1] == rule.action[1] }

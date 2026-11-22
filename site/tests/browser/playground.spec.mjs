@@ -132,3 +132,12 @@ test('shows leading trivia from the comments and whitespace preset', async ({ pa
   expect(first.value).toBe('alpha');
   expect(first.leading_trivia.map(item => [item.channel, item.value])).toEqual([['comment', '# note'], ['whitespace', '\n']]);
 });
+
+test('runs the equal-length rule priority preset', async ({ page }) => {
+  await page.goto('/flexr/playground/');
+  await page.getByRole('combobox', { name: 'Choose a playground preset' }).selectOption('priority');
+  await expect(page.locator('#spec')).toHaveValue(/priority: 10/);
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await expect(page.locator('#status')).toContainText('2 tokens', { timeout: 30_000 });
+  expect(JSON.parse(await page.locator('#tokens').textContent())).toEqual([['IF', 'if'], ['IDENT', 'ifx']]);
+});
