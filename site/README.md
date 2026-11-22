@@ -10,14 +10,17 @@ page switch to the same topic under `/flexr/stable/` when that topic exists in
 the release. If a topic is available in only one version, the link opens
 Getting started in the other version.
 
-`pnpm dev` and `pnpm build` copy the pinned release's Markdown from Git into
-the ignored `src/content/docs/stable/` directory. Fetch the release tag with
-`git fetch --tags` if it is missing from your clone. GitHub Pages also uses
-that tag's Ruby library and example presets for the public Playground.
+`pnpm dev` and `pnpm build` copy the release's Markdown from Git into the
+ignored `src/content/docs/stable/` directory. The GitHub Pages build selects
+the latest published stable GitHub release. Its tag supplies both the
+documentation and the public Playground's Ruby library and example presets.
 
-After a new stable gem is public on RubyGems and its Git tag is available,
-update `stableReleaseTag` in `scripts/stable-release.mjs`. Run
-`FLEXR_PLAYGROUND_STABLE=1 pnpm build` to reproduce the deployment build.
+Local builds default to `v2.0.0`. To reproduce a Pages build for a specific
+release, fetch its tag if needed and pass it to the build:
+
+```sh
+FLEXR_STABLE_RELEASE_TAG=v2.0.0 FLEXR_PLAYGROUND_STABLE=1 pnpm build
+```
 
 ## Local development
 
