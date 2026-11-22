@@ -16,11 +16,12 @@ module Flexr
 
       attr_reader :source
 
-      def initialize(source, options: 0, encoding: Encoding::UTF_8, unicode: false)
+      def initialize(source, options: 0, encoding: Encoding::UTF_8, unicode: false, preserve_captures: false)
         @source = source
         @options = options
         @encoding = encoding
         @unicode = unicode
+        @preserve_captures = preserve_captures
         @index = 0
         @class_depth = 0
         offset = 0
@@ -142,6 +143,7 @@ module Flexr
         expect(")")
         @options = saved_options if prefix
         return AST::Absence.new(child: node, loc: span(starting)) if prefix == :absence
+        return AST::NamedCapture.new(opening: prefix, child: node) if prefix.is_a?(String)
 
         node
       end
@@ -185,10 +187,8 @@ module Flexr
           raise unsupported("atomic groups",
                             'for unescaped single-line quoted text, a DFA-compatible rewrite is rule(/"[^"\n]*"/); keep the action; removing atomic groups can change matches')
         end
-        if peek_prefix?("<") || peek_prefix?("'")
-          raise unsupported("named captures",
-                            "when only grouping is needed, rewrite rule(/(?<word>ab)/) as rule(/(?:ab)/); keep the action; capture-dependent patterns need a separate rewrite")
-        end
+        return named_capture_prefix("<", ">") if consume?("<")
+        return named_capture_prefix("'", "'") if consume?("'")
         if peek_prefix?("(")
           raise unsupported("conditional groups",
                             "for this optional-prefix conditional, rewrite rule(/(a)?(?(1)b|c)/) as rule(/(?:ab|c)/); keep the action; other conditions need separate rules or state checks")
@@ -199,6 +199,11 @@ module Flexr
           return :absence
         end
         raise unsupported("unsupported group syntax", "use a non-capturing group (?:...)")
+      end
+
+      def named_capture_prefix(opener, closer)
+        name = read_until(closer)
+        @preserve_captures ? "#{opener}#{name}#{closer}" : true
       end
 
       def update_option(flag, enabled)
