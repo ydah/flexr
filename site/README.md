@@ -55,6 +55,14 @@ The original three presets remain editable starting points. TOML, GraphQL, and
 SQL subset presets load the actual repository example sources, packaged at build
 time, so their lexer rules are maintained in one place.
 
+The context presets show `INDENT` and `DEDENT` locations, heredoc bodies delimited
+by the tag in each opener, and JavaScript tokens with locations in the enclosing
+HTML. The HTML preset loads a small JavaScript lexer bundled in the WASM library
+files. To use the generated HTML lexer locally, place the child lexer at
+`playground/html_javascript.rb` on Ruby's load path. A public build offers this
+preset when both Ruby files are in the pinned release.
+[JavaScript lexer source](ruby/presets/html_javascript.rb)
+
 The main page stops execution after five seconds; runtime download/startup has a
 30-second limit. Source and input are limited to 20,000 characters each, DFA
 construction to 1024 states, and output to 4 MB. Graphviz loads in a separate
