@@ -3,6 +3,39 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## [2.2.0](https://github.com/ydah/flexr/compare/v2.1.0...v2.2.0)
+
+### Added
+
+- Read named regexp groups from `captures` in a rule action. Delegate a
+  capture to another lexer with `delegate(ChildLexer, capture: :name)` while
+  preserving the child tokens' locations in the parent source.
+- Match a compiled DFA at a byte offset with `Lexer.recognizer` without
+  running rule actions. Use `checkpoint`, `restore`, and `seek` to resume
+  a lexer between token reads.
+- Pass `expect:` to `next_token` or `racc_next_token` to let the parser
+  restrict eligible token rules for the current read.
+- Emit indent and dedent tokens for indentation-sensitive languages, pause
+  the current source with `push_input` to scan an included file, and read
+  runtime delimiters with `scan_until` or `scan_until_line`.
+- Reuse named lexer rule sets with `use`, including in lexical states.
+- Preview and apply supported diagnostic fixes with `flexr fix`. Ruby LSP
+  offers the same fixes and adds state navigation, token symbol completion,
+  and a rule and state outline for `.flexr.rb` files.
+- Generate shortest inputs for DFA transitions with `flexr skeleton` and
+  optionally verify scanner parity across runtime, generated, and standalone
+  modes. Start a Racc or Lrama project with `flexr new --parser`.
+- Import supported oedipus_lex `.rex` declarations with
+  `flexr import --from oedipus_lex`, preserving first-match rule order.
+- Try indentation, heredoc, and embedded JavaScript in the Playground when
+  its runtime supports them. Copy a GitHub issue draft with the exact
+  specification, input, runtime version, and diagnostics from a run.
+
+### Upgrade notes
+
+- Generated lexers using named regexp captures or lexer delegation require
+  flexr 2.2 or later at runtime. Standalone files include their runtime.
+
 ## [2.1.0](https://github.com/ydah/flexr/compare/v2.0.0...v2.1.0)
 
 ### Added
