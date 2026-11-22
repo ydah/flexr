@@ -1,8 +1,9 @@
 # Migrating to flexr 2.0
 
-This guide describes the v2 prerelease. The preceding v1 preparation release
-keeps existing behavior and offers opt-in deprecation warnings. In v2 the
-contracts below are enforced and those preparation warnings are removed.
+This guide covers the upgrade to flexr 2.0. The
+[1.x maintenance branch](https://github.com/ydah/flexr/tree/maint/1.x) keeps
+existing runtime behavior and provides opt-in deprecation warnings. Flexr 2.0
+enforces the contracts below.
 
 Run static checks before upgrading:
 

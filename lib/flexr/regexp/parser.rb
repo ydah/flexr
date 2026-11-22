@@ -141,6 +141,8 @@ module Flexr
         node = parse_expression
         expect(")")
         @options = saved_options if prefix
+        return AST::Absence.new(child: node, loc: span(starting)) if prefix == :absence
+
         node
       end
 
@@ -191,9 +193,10 @@ module Flexr
           raise unsupported("conditional groups",
                             "for this optional-prefix conditional, rewrite rule(/(a)?(?(1)b|c)/) as rule(/(?:ab|c)/); keep the action; other conditions need separate rules or state checks")
         end
-        if peek_prefix?("~")
-          raise unsupported("absence groups",
-                            "when excluding a single literal, rewrite rule(/x(?~a)/) as rule(/x[^a]*/); keep the action; larger absence expressions need a separate rewrite")
+        if consume?("~")
+          raise unsupported("extended absence operators", "use an absence group (?~X) to exclude a subexpression") if peek_prefix?("|")
+
+          return :absence
         end
         raise unsupported("unsupported group syntax", "use a non-capturing group (?:...)")
       end
@@ -520,7 +523,7 @@ module Flexr
 
       def anchor_nodes(node)
         return [node] if node.is_a?(AST::Anchor)
-        return anchor_nodes(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat)
+        return anchor_nodes(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat) || node.is_a?(AST::Absence)
         return [] unless node.respond_to?(:children)
 
         node.children.flat_map { |child| anchor_nodes(child) }

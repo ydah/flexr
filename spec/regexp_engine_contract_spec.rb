@@ -268,12 +268,83 @@ RSpec.describe "regexp engine contracts" do
     end
   end
 
-  it "shows an absence-group rewrite limited to excluding a single literal" do
-    expect { Flexr.parse_pattern(/x(?~a)/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-      expect(error.diagnostic.code).to eq("FLEXR-E014")
-      expect(error.diagnostic.help).to include("rule(/x(?~a)/)", "rule(/x[^a]*/)", "when excluding a single literal",
-                                               "larger absence expressions need a separate rewrite", "keep the action")
+  it "agrees with Ruby on an absence group excluding nonempty alternatives" do
+    dfa = Flexr.compile_pattern(/(?~(?:ab|bb))/, options: { allow_empty_match: true })
+    reference = /\A(?~(?:ab|bb))\z/
+    (0..4).each do |length|
+      %W[a b é \n].repeated_permutation(length) do |characters|
+        input = characters.join
+        expect(dfa.accept?(input)).to eq(reference.match?(input)), input.inspect
+      end
     end
+  end
+
+  it "defines absence by the excluded language when Ruby chooses a different match" do
+    nullable = Flexr.compile_pattern(/(?~a?)/)
+    expect(nullable.accept?("")).to be(false)
+    expect(nullable.accept?("bbb")).to be(false)
+
+    alternation = Flexr.compile_pattern(/x(?~a|b)/)
+    expect(alternation.accept?("xé\n")).to be(true)
+    expect(alternation.accept?("xca")).to be(false)
+    expect(alternation.accept?("xcb")).to be(false)
+
+    nesting = Flexr.compile_pattern(/x(?~(?~ab))/)
+    expect(nesting.accept?("x")).to be(false)
+  end
+
+  it "restricts absence to whole UTF-8 scalars or binary bytes as configured" do
+    utf8 = Flexr.compile_pattern(/x(?~é)/)
+    expect(utf8.accept?("xあ")).to be(true)
+    expect(utf8.accept?("xé")).to be(false)
+    expect(utf8.accept?("x\xC3".b)).to be(false)
+    expect(utf8.accept?("x\xE0\x80\x80".b)).to be(false)
+    expect(utf8.accept?("x\xED\xA0\x80".b)).to be(false)
+    expect(utf8.accept?("x\xF0\x80\x80\x80".b)).to be(false)
+    expect(utf8.accept?("x\xF4\x90\x80\x80".b)).to be(false)
+    expect(utf8.accept?("x\xFF".b)).to be(false)
+
+    binary = Flexr.compile_pattern(/x(?~\xFF)/n)
+    expect(binary.accept?("x\x80\x00".b)).to be(true)
+    expect(binary.accept?("x\xFF".b)).to be(false)
+
+    utf8_with_byte_expression = Flexr.compile_pattern(/x(?~\xFF)/n, encoding: Encoding::UTF_8)
+    expect(utf8_with_byte_expression.accept?("xé")).to be(true)
+    expect(utf8_with_byte_expression.accept?("x\x80".b)).to be(false)
+  end
+
+  it "reports empty matches, nested anchors, and limits for absence operations" do
+    expect { Flexr.compile_pattern(/(?~ab)/) }.to raise_error(Flexr::CompileError) { |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E005")
+    }
+    expect { Flexr.compile_pattern(/x(?~^ab)/) }.to raise_error(Flexr::CompileError) { |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E009")
+    }
+    expect { Flexr.compile_pattern(/x(?~ab)/, options: { max_dfa_states: 3 }) }.to raise_error(Flexr::CompileError) { |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E006")
+      expect(error.diagnostic.message).to include("absence")
+    }
+  end
+
+  it "reports an empty absence language separately from a shadowed rule" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/a(?~b?)/, emit: :IMPOSSIBLE)
+      rule(/a/, emit: :A)
+    end
+    lexer.compile!
+    diagnostic = lexer.__flexr_compiled.diagnostics.find { |item| item.code == "FLEXR-W001" }
+    expect(diagnostic.note).to include('""', "every string")
+  end
+
+  it "rejects firstmatch body rules with absence rather than using Ruby's different semantics" do
+    lexer = Class.new(Flexr::Lexer) do
+      backend :firstmatch
+      rule(/x(?~a|b)/, emit: :MATCH)
+    end
+    expect { lexer.compile! }.to raise_error(Flexr::UnsupportedRegexpError) { |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.help).to include("backend :table")
+    }
   end
 
   it "preserves accepted input and token text in the suggested group rewrites" do

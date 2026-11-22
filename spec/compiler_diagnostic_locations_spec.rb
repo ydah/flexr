@@ -76,7 +76,6 @@ RSpec.describe "compiler diagnostic locations" do
       '/(?<word>ab)/' => 'rule(/(?:ab)/)',
       "/(?'word'ab)/" => 'rule(/(?:ab)/)',
       '/(a)?(?(1)b|c)/' => 'rule(/(?:ab|c)/)',
-      '/x(?~a)/' => 'rule(/x[^a]*/)',
       '/foo\b:/' => 'rule(/foo:/)',
       '/foo\Bbar/' => 'rule(/foobar/)',
       '/\Ga/' => 'rule(/a/)',
@@ -106,6 +105,19 @@ RSpec.describe "compiler diagnostic locations" do
         expect(error.diagnostic.help).to eq(help)
       end
     end
+  end
+
+  it "accepts absence statically and identifies the firstmatch restriction at the rule" do
+    statement = "rule(/x(?~ab)/, emit: :A)"
+    write_spec("  #{statement}")
+    expect(check).to eq([0, []])
+    expect(Flexr::Generator.new(@path).generate).to include("/x(?~ab)/")
+
+    write_spec("  backend :firstmatch\n  #{statement}")
+    status, diagnostics = check
+    expect(status).to eq(1)
+    expect(diagnostics.first).to include("code" => "FLEXR-E014", "location" => span(statement))
+    expect(diagnostics.first.fetch("help")).to include("backend :table")
   end
 
   it "preserves the suggested match-reset suffix location in generated code" do
