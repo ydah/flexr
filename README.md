@@ -1,5 +1,7 @@
 # flexr
 
+<img src="site/src/assets/flexr-logo.png" alt="flexr logo" width="160" height="160">
+
 [![Runtime](https://github.com/ydah/flexr/actions/workflows/runtime.yml/badge.svg)](https://github.com/ydah/flexr/actions/workflows/runtime.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 

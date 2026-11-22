@@ -10,6 +10,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'flexr',
+      logo: { src: './src/assets/flexr-logo.png', replacesTitle: true },
       description: 'A Ruby-native lexer generator for parser authors.',
       customCss: ['./src/styles/custom.css'],
       components: { PageTitle: './src/components/DocsTitle.astro' },

@@ -100,26 +100,12 @@ textarea {
 
 .site-nav-brand {
   display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--flexr-ink);
-  font-family: var(--sl-font-mono);
-  font-size: 1rem;
-  font-weight: 700;
-  text-decoration: none;
+  flex-shrink: 0;
 }
 
-.site-nav-brand::before {
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 999px;
-  background: var(--flexr-green);
-  content: "";
-}
-
-.site-nav-brand span {
-  color: var(--flexr-green);
-  font-weight: 400;
+[data-theme="dark"] .site-title img {
+  border-radius: 0.3rem;
+  background: var(--flexr-canvas);
 }
 
 .site-nav-links {
