@@ -190,13 +190,13 @@ RSpec.describe "lexer input stacks" do
           rule(/ +/, channel: :space)
           rule(/#[^\n]*/, channel: :comment)
           rule(/\n/, emit: :NL)
-          rule("@") do
+          rule(/(?<marker>@)/, emits: :INCLUDE) do
             if filename == "root.lex"
               push_input(StringIO.new("  child\n    @\n    peer"), filename: "child.lex")
             else
               push_input(StringIO.new("leaf\n    deep # tail"), filename: "leaf.lex")
             end
-            emit :INCLUDE, filename
+            emit :INCLUDE, [filename, captures[:marker]]
           end
           rule(/[a-z]+/, emit: :WORD)
           on_eof { emit :END, filename unless filename == "leaf.lex" }
@@ -233,17 +233,23 @@ RSpec.describe "lexer input stacks" do
         }
         visible = all.select { |token| token.channel == :default }
         abort "all channels changed the layout stream" unless visible.map(&encode) == tokens.map(&encode)
+        parser = NestedLayoutFixture.new(StringIO.new(source), filename: "root.lex", chunk_size: 1, retain_input: false)
+        selected = tokens.map do |token|
+          type = %i[NL END].include?(token.type) ? :WORD : token.type
+          parser.next_token(expect: [type])
+        end
+        abort "expectations changed input boundaries" unless selected.map(&encode) == tokens.map(&encode)
         puts JSON.generate([tokens.map(&encode), resumed.map(&encode), all.select { |token| token.channel == :comment }.map(&encode)])
       RUBY
       parent_head = [
         ["WORD", "root", "root.lex", 0, []], ["NL", "\n", "root.lex", 4, []], ["IN", nil, "root.lex", 7, []],
         ["WORD", "before", "root.lex", 7, ["  "]], ["NL", "\n", "root.lex", 13, []],
-        ["INCLUDE", "root.lex", "root.lex", 16, ["  "]]
+        ["INCLUDE", ["root.lex", "@"], "root.lex", 16, ["  "]]
       ]
       child = [
         ["IN", nil, "child.lex", 2, []], ["WORD", "child", "child.lex", 2, ["  "]],
         ["NL", "\n", "child.lex", 7, []], ["IN", nil, "child.lex", 12, []],
-        ["INCLUDE", "child.lex", "child.lex", 12, ["    "]]
+        ["INCLUDE", ["child.lex", "@"], "child.lex", 12, ["    "]]
       ]
       leaf = [
         ["WORD", "leaf", "leaf.lex", 0, []], ["NL", "\n", "leaf.lex", 4, []], ["IN", nil, "leaf.lex", 9, []],

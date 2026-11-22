@@ -30,17 +30,20 @@ module Flexr
         return unless @__flexr_indentation
 
         @__flexr_indent_pairs = @__flexr_indentation.fetch(:brackets).to_h { |pair| pair.chars.map(&:b) }
-        @__flexr_indent_bracket_lengths = (@__flexr_indent_pairs.keys + @__flexr_indent_pairs.values).map(&:bytesize).uniq
+        @__flexr_indent_bracket_lexemes = @__flexr_indent_pairs.keys + @__flexr_indent_pairs.values
+        @__flexr_indent_bracket_lengths = @__flexr_indent_bracket_lexemes.map(&:bytesize).uniq
         reset_indentation
       end
 
-      def next_token(...)
-        return super unless @__flexr_indentation
+      def next_token(expect: nil)
+        return expect.nil? ? super() : super(expect: expect) unless @__flexr_indentation
+
+        expect = Configuration.expected_tokens!(expect) + [@__flexr_indentation.fetch(:newline)] unless expect.nil?
         return @__flexr_indent_queue.shift unless @__flexr_indent_queue.empty?
 
         loop do
           @__flexr_indent_bracket = @__flexr_indent_newline_width = nil
-          token = super
+          token = expect.nil? ? super() : super(expect: expect)
           unless token
             finish_indentation
             return @__flexr_indent_queue.shift unless @__flexr_indent_queue.empty?
@@ -75,6 +78,23 @@ module Flexr
 
           @__flexr_indent_queue << token
           return @__flexr_indent_queue.shift
+        end
+      end
+
+      def __flexr_layout_candidate?(expected, starting, ending)
+        return true if @__flexr_indent_candidate && @__flexr_indent_brackets.empty? &&
+          (expected.key?(@__flexr_indentation.fetch(:indent)) || expected.key?(@__flexr_indentation.fetch(:dedent)))
+
+        return false if @__flexr_indent_bracket_lexemes.empty?
+
+        starting = @more_start || starting
+        if ending
+          return false unless @__flexr_indent_bracket_lengths.include?(ending - starting)
+
+          @__flexr_indent_bracket_lexemes.include?(@buffer.byteslice(starting...ending).b)
+        else
+          byte = @buffer.getbyte(starting)
+          @__flexr_indent_bracket_lexemes.any? { |lexeme| lexeme.getbyte(0) == byte }
         end
       end
 

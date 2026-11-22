@@ -47,7 +47,7 @@ module Flexr
   end
 
   module DSL
-    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer) ?{ () [self: Lexer] -> untyped } -> nil
+    def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer, ?emits: (Symbol | Array[Symbol])?) ?{ () [self: Lexer] -> untyped } -> nil
     def pattern: (*pattern_operand) -> Pattern
     def upto: (pattern_operand) -> Pattern
     def state: (*(Symbol | String), ?inclusive: bool) { () [self: singleton(Lexer)] -> untyped } -> void
@@ -68,11 +68,11 @@ module Flexr
     extend DSL
 
     def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?chunk_size: Integer) -> void
-    def next_token: () -> token?
+    def next_token: (?expect: Array[Symbol]?) -> token?
     def tokens: (?channels: (:default | :all)) -> Array[token]
     def each_token: () -> Enumerator[token, self]
                   | () { (untyped, ?untyped) -> untyped } -> self
-    def racc_next_token: () -> [untyped, untyped]
+    def racc_next_token: (?expect: Array[Symbol]?) -> [untyped, untyped]
     def checkpoint: () -> Runtime::Checkpoint
     def restore: (Runtime::Checkpoint) -> self
     def seek: (Integer) -> self
@@ -86,6 +86,7 @@ module Flexr
     attr_writer on_error: error_handler?
     def input: () -> String
     def text: () -> String
+    def captures: () -> Hash[Symbol, String?]
     def text_bytesize: () -> Integer
     def last_location: () -> Runtime::Location
     def byte_pos: () -> Integer

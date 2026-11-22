@@ -143,7 +143,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E013` | `reject` is not supported | Use states and `less` |
 | `FLEXR-E014` | Regexp construct is not DFA-compatible | Follow the diagnostic alternative |
 | `FLEXR-E017` | Pattern is not statically resolvable | Rewrite as a static expression or use trusted `--eval` |
-| `FLEXR-E018` | Rule pattern, trailing context, channel, or priority is invalid | Use a supported pattern, a valid channel symbol, or an integer priority with a longest-match backend |
+| `FLEXR-E018` | A rule pattern, trailing context, channel, priority, or `emits:` annotation is invalid | Check the accepted values for the option named in the diagnostic |
 | `FLEXR-E019` | Prism is unavailable for generation | Install the generator dependencies |
 | `FLEXR-E020` | Generated artifact metadata is missing or incompatible | Regenerate with the installed flexr version |
 | `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |
@@ -212,20 +212,14 @@ escaped quotes and line feeds.
 For numbered backreferences, the help uses a capture with only two possible
 values. Rewrite `rule(/(a|b)\1/)` or `rule(/(a|b)\k<1>/)` as
 `rule(/(?:aa|bb)/)` and keep the action. This accepts `aa` and `bb`, while
-rejecting `ab` and `ba`. It reproduces the matched text; flexr does not expose
-capture values to actions. If the repeated text cannot be enumerated, split
-the rule into states and compare the matched text in actions instead.
+rejecting `ab` and `ba`. If the repeated text cannot be enumerated, split the
+rule into states and compare the matched text in actions.
 
 For a non-recursive subexpression call, the help shows
 `rule(/(a|b)\g<1>/)` becoming `rule(/[ab]{2}/)` with the same action.
 A call reuses the expression, not the previously captured text: this example
 accepts `aa`, `ab`, `ba`, and `bb`. Recursive calls need a parser or a state
 stack; they cannot be expanded by this example.
-
-For named captures used only for grouping, rewrite `rule(/(?<word>ab)/)` or
-`rule(/(?'word'ab)/)` as `rule(/(?:ab)/)` and keep the action. Backreferences
-and conditions that depend on the capture need a separate rewrite; removing
-the name alone does not preserve them.
 
 For the conditional example `rule(/(a)?(?(1)b|c)/)`, use `rule(/(?:ab|c)/)`
 with the same action. The original matches `ab` when the optional `a` was

@@ -22,7 +22,12 @@ module PublicApiTypecheck
   end
 end
 
-Flexr::Lexer.rule(/[0-9]+/) { emit :INTEGER, text.to_i }
+Flexr::Lexer.rule(/[0-9]+/, emits: [:INTEGER]) { emit :INTEGER, text.to_i }
+Flexr::Lexer.rule(/(?<value>[0-9]+)mm/) do
+  # @type var value: String?
+  value = captures[:value]
+  emit :LENGTH, value
+end
 Flexr::Lexer.state(:quoted) { rule(/x/, emit: :X) }
 Flexr::Lexer.all_states { rule(/ /, skip: true) }
 Flexr::Lexer.on_eof { skip }
@@ -66,7 +71,8 @@ location = lexer.last_location
 # @type var column: Integer?
 column = location.column_begin
 # @type var next_token: Flexr::token?
-next_token = lexer.next_token
+next_token = lexer.next_token(expect: [:INTEGER])
+lexer.racc_next_token(expect: [:INTEGER])
 lexer.each_token { |_token| nil }
 
 # @type var structured_token: Flexr::Runtime::Token

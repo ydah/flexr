@@ -2,6 +2,8 @@
 
 module Flexr
   module Runtime
+    EMPTY_CAPTURES = {}.freeze
+
     def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024,
                    max_lookahead_size: nil, max_buffer_size: 64 * 1024 * 1024,
                    max_state_stack: 1024, max_steps: nil, cancellation: nil, retain_input: true,
@@ -45,7 +47,9 @@ module Flexr
       @buffer.source
     end
 
-    def next_token
+    def next_token(expect: nil)
+      expected = Configuration.expected_tokens!(expect).to_h { |type| [type, true] } unless expect.nil?
+
       until @halted
         activate_pending_inputs if @__flexr_pending_inputs
         consume_step! if scan_steps_guarded?
@@ -76,10 +80,10 @@ module Flexr
         end
 
         @active_rule = nil
-        match = if @generated_scanner
+        match = if @generated_scanner && !expected
           scan_one
         else
-          (@interpreter ||= Runtime::Interpreter.new(self)).scan
+          (@interpreter ||= Runtime::Interpreter.new(self)).scan(expected)
         end
         unless match
           unless eof?
@@ -107,7 +111,11 @@ module Flexr
         @position = match.end_pos
         empty_match = match.end_pos == match.start_pos
         @active_rule = match.rule
-        execute(match.rule)
+        if match.capture
+          execute_with_captures(match)
+        else
+          execute(match.rule)
+        end
         finalize_more
         ensure_progress!(match, scan_state, empty_match: empty_match) unless
           @position > match.start_pos && @non_progress_signatures.empty?
@@ -148,8 +156,8 @@ module Flexr
       result
     end
 
-    def racc_next_token
-      token = next_token
+    def racc_next_token(expect: nil)
+      token = expect.nil? ? next_token : next_token(expect: expect)
       token ? [token[0], token[1]] : [false, "$end"]
     end
 
@@ -158,6 +166,8 @@ module Flexr
 
       @matched = @buffer.byteslice(@text_start, @match_end - @text_start)
     end
+
+    def captures = EMPTY_CAPTURES
 
     def text_bytesize
       @match_end - @text_start
