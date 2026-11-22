@@ -20,11 +20,11 @@ module JsonExample
         machine = self.class.__flexr_compiled.machines.fetch(@state)
         @__flexr_generated_scan_state = @state
         @__flexr_generated_scan_dfa = machine.dfa
-        @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
+        @__flexr_generated_scan_layout = __flexr_generated_direct_layout(@__flexr_generated_scan_dfa)
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
       end
       dfa = @__flexr_generated_scan_dfa
-      return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast
+      return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_layout
       position = byte_pos
       return nil unless valid_utf8_at?(position)
       return __flexr_generated_scan_simple(dfa, position) if @__flexr_generated_scan_simple
@@ -76,13 +76,7 @@ module JsonExample
       best
     end
     def __flexr_generated_scan_simple(dfa, position)
-      current = dfa.start
-      direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
-      ec = dfa.ec
-      accepts = dfa.accepts
-      rules = self.class.__flexr_rules
+      current, direct_nxt, direct_classes, ec, accepts, rules = @__flexr_generated_scan_layout
       source = buffer.stable_source
       guarded_steps = scan_steps_guarded?
       check_token_limit = token_limit_required?
@@ -205,12 +199,16 @@ module JsonExample
       @__flexr_generated_disabled_auto_accel ||= {}
       @__flexr_generated_disabled_auto_accel[region] = true
     end
-    def __flexr_generated_fast_path?(dfa)
+    def __flexr_generated_direct_layout(dfa)
       @__flexr_generated_fast_paths ||= {}
       return @__flexr_generated_fast_paths[dfa] if @__flexr_generated_fast_paths.key?(dfa)
-      rules = dfa.rule_ids.map { |rule_index| self.class.__flexr_rules.fetch(rule_index) }
-      @__flexr_generated_fast_paths[dfa] = self.class.__flexr_config.backend != :firstmatch &&
-        self.class.__flexr_config.options[:allow_empty_match] != true && rules.none?(&:trailing)
+      rules = self.class.__flexr_rules
+      active_rules = dfa.rule_ids.map { |rule_index| rules.fetch(rule_index) }
+      @__flexr_generated_fast_paths[dfa] = if self.class.__flexr_config.backend != :firstmatch &&
+          self.class.__flexr_config.options[:allow_empty_match] != true && active_rules.none?(&:trailing)
+        direct = dfa.direct
+        [dfa.start, direct.fetch(:nxt), direct.fetch(:classes), dfa.ec, dfa.accepts, rules].freeze
+      end
     end
     def __flexr_generated_simple_fast_path?(dfa)
       @__flexr_generated_simple_fast_paths ||= {}
