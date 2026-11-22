@@ -1,14 +1,26 @@
-# flexr
+<h1 align="center">
+  <img src="site/src/assets/flexr-logo.png" alt="flexr" width="160" height="160">
+</h1>
 
-<img src="site/src/assets/flexr-logo.png" alt="flexr logo" width="160" height="160">
+<p align="center">
+  <strong>A lexer generator for Ruby</strong>
+</p>
 
-[![Runtime](https://github.com/ydah/flexr/actions/workflows/runtime.yml/badge.svg)](https://github.com/ydah/flexr/actions/workflows/runtime.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+<p align="center">
+  <a href="https://rubygems.org/gems/flexr"><img src="https://img.shields.io/gem/v/flexr.svg" alt="Gem version"></a>
+  <a href="https://rubygems.org/gems/flexr"><img src="https://img.shields.io/gem/dt/flexr.svg" alt="Gem downloads"></a>
+  <a href="#compatibility-and-stability"><img src="https://img.shields.io/badge/Ruby-3.4%2B-CC342D.svg" alt="Ruby 3.4 or newer"></a>
+  <a href="https://github.com/ydah/flexr/actions/workflows/runtime.yml"><img src="https://github.com/ydah/flexr/actions/workflows/runtime.yml/badge.svg" alt="Runtime CI"></a>
+  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
 
-[Product site](https://ydah.github.io/flexr/) · [Playground](https://ydah.github.io/flexr/playground/) · [Documentation](docs/README.md)
+<p align="center">
+  <a href="https://ydah.github.io/flexr/">Product site</a> ·
+  <a href="https://ydah.github.io/flexr/playground/">Playground</a> ·
+  <a href="docs/README.md">Documentation</a>
+</p>
 
-Ruby-native lexer generator for parser authors who want ordinary Ruby
-specifications and deterministic generated output.
+---
 
 Write one specification, run it directly while developing, or generate Ruby
 for deployment when startup cost and build reproducibility matter. Both modes
