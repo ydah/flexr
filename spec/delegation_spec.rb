@@ -270,11 +270,12 @@ RSpec.describe "lexer delegation" do
         end
         [html, mode]
       end
-      script = <<~RUBY
+      runner = File.join(directory, "run_fixture.rb")
+      File.write(runner, <<~RUBY)
         require "json"
         require "stringio"
         load ARGV.fetch(0)
-        input = StringIO.new("plain<script>first second</script>tail")
+        input = StringIO.new($stdin.binmode.read)
         tokens = HtmlLexer.new(input, filename: "site.html", chunk_size: 1, retain_input: false).tokens
         puts JSON.generate(tokens.map do |token|
           trivia = token.leading_trivia.map { |item| [item.channel, item.location.byte_begin] }
@@ -283,11 +284,12 @@ RSpec.describe "lexer delegation" do
       RUBY
       expected = [["HTML", "plain", "site.html", 0, []], ["IDENT", "first", "site.html", 13, []],
                   ["IDENT", "second", "site.html", 19, [["spaces", 18]]], ["HTML", "tail", "site.html", 34, []]]
+      input = "plain<script>first second</script>tail"
       variants.each do |path, mode|
         command = [RbConfig.ruby]
         command.push("-Ilib") unless mode == :standalone
         env = mode == :standalone ? { "RUBYOPT" => nil, "RUBYLIB" => nil } : {}
-        stdout, stderr, status = Open3.capture3(env, *command, "-e", script, path)
+        stdout, stderr, status = Open3.capture3(env, *command, runner, path, stdin_data: input, binmode: true)
         expect(status).to be_success, stderr
         expect(JSON.parse(stdout)).to eq(expected)
       end
