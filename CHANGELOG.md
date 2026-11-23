@@ -13,6 +13,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Changed
 
+- Build lexer DFAs from regular-expression derivatives for runtime
+  compilation and static generation.
 - Compile UTF-8 Unicode properties from prebuilt automata, reducing setup time for lexers that use them.
 
 ### Fixed

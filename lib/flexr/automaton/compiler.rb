@@ -6,7 +6,9 @@ require_relative "keyword_tables"
 module Flexr
   module Automaton
     class Compiler
-      def initialize(spec, construction: :subset, retain_residuals: false)
+      DEFAULT_CONSTRUCTION = :derivative
+
+      def initialize(spec, construction: DEFAULT_CONSTRUCTION, retain_residuals: false)
         raise ArgumentError, "unknown DFA construction: #{construction.inspect}" unless %i[subset derivative].include?(construction)
 
         raise ArgumentError, "--residuals requires a longest-match backend" if retain_residuals && spec.backend == :firstmatch
@@ -42,8 +44,8 @@ module Flexr
         @pattern_universe_dfa = nil
         @state_limit = @spec.options.fetch(:max_dfa_states, 100_000)
         @state_limit = 100_000 unless @state_limit.is_a?(Integer) && @state_limit.positive?
-        directory = Flexr.cache_dir if @construction == :subset
-        @dfa_cache = directory && DfaCache.new(directory, @spec, @state_limit)
+        directory = Flexr.cache_dir unless @retain_residuals
+        @dfa_cache = directory && DfaCache.new(directory, @spec, @state_limit, construction: @construction)
         validate_rules
         state_names = effective_states
         machines = state_names.to_h do |state_name|
@@ -152,7 +154,9 @@ module Flexr
         if @construction == :derivative
           ordered = patterns.sort_by { |_, acceptance| acceptance_order(acceptance) }
           compiler = derivative_compiler
-          dfa = compiler.compile(ordered, retain_residuals: block_given?) { |state| enforce_state_limit!(state, operation) }
+          dfa = compiler.compile(ordered, retain_residuals: block_given?) do |state, derived_operation|
+            enforce_state_limit!(state, operation || derived_operation)
+          end
           yield compiler.residuals if block_given?
           return dfa
         end
@@ -215,7 +219,7 @@ module Flexr
           ending = Regexp::AST::Seq.new(children: [pattern_universe, operands.first], loc: nil)
           right = value_dfa(ending, expression)
         end
-        limit = ->(state) { enforce_state_limit!(state, expression) }
+        limit = ->(state, *) { enforce_state_limit!(state, expression) }
         product, overlap = if @construction == :derivative
           derive_pattern_product(left, right, operation, &limit)
         else
