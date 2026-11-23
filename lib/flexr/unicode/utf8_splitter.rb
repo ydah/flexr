@@ -3,6 +3,14 @@
 module Flexr
   module Unicode
     module Utf8Splitter
+      CONTINUATION = [0x80, 0xbf].freeze
+      FIRST_CONTINUATION = {
+        0xe0 => [0xa0, 0xbf].freeze,
+        0xed => [0x80, 0x9f].freeze,
+        0xf0 => [0x90, 0xbf].freeze,
+        0xf4 => [0x80, 0x8f].freeze
+      }.freeze
+
       module_function
 
       def split(lo, hi)
@@ -54,7 +62,9 @@ module Flexr
 
           if lo <= min_cp && max_cp <= hi
             rest = length - next_prefix.length
-            output << (next_prefix.map { |value| [value, value] } + Array.new(rest) { [0x80, 0xbf] })
+            suffix = Array.new(rest) { CONTINUATION.dup }
+            suffix[0] = FIRST_CONTINUATION.fetch(byte, CONTINUATION).dup if next_prefix.length == 1
+            output << (next_prefix.map { |value| [value, value] } + suffix)
           else
             walk(lo, hi, length, next_prefix, output)
           end
@@ -70,12 +80,7 @@ module Flexr
 
         bytes = prefix + Array.new(length - prefix.length, 0x80)
         high = prefix + Array.new(length - prefix.length, 0xbf)
-        if prefix.length == 1
-          bytes[1] = 0xa0 if length == 3 && prefix.first == 0xe0
-          high[1] = 0x9f if length == 3 && prefix.first == 0xed
-          bytes[1] = 0x90 if length == 4 && prefix.first == 0xf0
-          high[1] = 0x8f if length == 4 && prefix.first == 0xf4
-        end
+        bytes[1], high[1] = FIRST_CONTINUATION.fetch(prefix.first, CONTINUATION) if prefix.length == 1 && length > 1
         return [nil, nil] unless valid_prefix?(bytes, length) && valid_prefix?(high, length)
 
         [decode(bytes), decode(high)]
@@ -88,10 +93,7 @@ module Flexr
                    elsif first.between?(0xf0, 0xf4) then 4 end
         return false unless expected == length
         return false if bytes[1..].any? { |byte| !byte.between?(0x80, 0xbf) }
-        return false if length == 3 && first == 0xe0 && bytes[1] < 0xa0
-        return false if length == 3 && first == 0xed && bytes[1] > 0x9f
-        return false if length == 4 && first == 0xf0 && bytes[1] < 0x90
-        return false if length == 4 && first == 0xf4 && bytes[1] > 0x8f
+        return false if length > 1 && !bytes[1].between?(*FIRST_CONTINUATION.fetch(first, CONTINUATION))
         true
       end
 

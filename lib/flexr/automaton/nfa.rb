@@ -80,9 +80,20 @@ module Flexr
           dfa_fragment(@compile_difference.call(node))
         when Regexp::AST::EmbeddedDFA
           dfa_fragment(node.dfa)
+        when Regexp::AST::ByteAutomaton
+          byte_automaton_fragment(node.fragment)
         else
           raise CompileError, "cannot build NFA from #{node.class}"
         end
+      end
+
+      def byte_automaton_fragment(fragment)
+        offset = @nfa.states.length
+        fragment.state_count.times { @nfa.new_state }
+        fragment.edges.each_slice(4) do |from, lo, hi, to|
+          @nfa.transition(offset + from, lo, hi, offset + to)
+        end
+        [offset, offset + fragment.accept]
       end
 
       def dfa_fragment(dfa)
