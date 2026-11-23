@@ -113,4 +113,40 @@ RSpec.describe "derivative DFA construction" do
       compare(lexer)
     end
   end
+
+  it "uses derivative construction for intersection, difference, complement and upto" do
+    lexer = Class.new(Flexr::Lexer) do
+      letters = pattern(/[a-z]+/)
+      restricted = (letters & pattern(/[a-m]+/)) - "bad"
+      complement = !pattern("no")
+      rule(pattern("[") + restricted + pattern("]"), emit: :WORD)
+      rule(pattern("!") + complement, emit: :OTHER)
+      rule(pattern("#") + upto("aba"), emit: :DELIMITED)
+    end
+    reference = graphs(compile(lexer, :subset))
+    expect(Flexr::Automaton::DFAOperations).not_to receive(:product)
+
+    expect(graphs(compile(lexer, :derivative))).to eq(reference)
+  end
+
+  it "preserves pattern diagnostics and measured product sizes" do
+    lexer = Class.new(Flexr::Lexer) do
+      expanded = pattern(/(?:aaa)+/) & pattern(/(?:aaaaaaa)+/)
+      rule(expanded, emit: :MULTIPLE)
+      rule(pattern(/[ab]/) - "cat", emit: :LETTER)
+      rule(pattern(/[x-z]/) - "y", emit: :EDGE)
+    end
+    reference = compile(lexer, :subset)
+    derivative = compile(lexer, :derivative)
+    operations = ->(compiled) { compiled.stats.fetch(:initial).fetch(:pattern_operations) }
+    warnings = lambda do |compiled|
+      compiled.diagnostics.filter_map do |diagnostic|
+        [diagnostic.code, diagnostic.note] if %w[FLEXR-W011 FLEXR-W021].include?(diagnostic.code)
+      end
+    end
+
+    expect(operations.call(derivative)).to eq(operations.call(reference))
+    expect(warnings.call(derivative)).to eq(warnings.call(reference))
+    expect(warnings.call(derivative).map(&:first)).to contain_exactly("FLEXR-W011", "FLEXR-W021")
+  end
 end

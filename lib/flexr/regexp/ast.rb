@@ -13,6 +13,7 @@ module Flexr
       Repeat = Struct.new(:child, :minimum, :maximum, :loc, keyword_init: true)
       Absence = Struct.new(:child, :loc, keyword_init: true)
       Difference = Struct.new(:left, :right, :loc, :operation, keyword_init: true)
+      Intersection = Struct.new(:left, :right, :loc, keyword_init: true)
       EmbeddedDFA = Struct.new(:dfa)
       ByteAutomaton = Struct.new(:fragment)
       NamedCapture = Struct.new(:opening, :child, keyword_init: true)
@@ -32,13 +33,13 @@ module Flexr
           when "Star", "Absence" then "#{name}(#{child})"
           when "Repeat" then "Repeat(#{child}, #{minimum}, #{maximum || '∞'})"
           when "Seq", "Alt" then "#{name}(#{children.join(', ')})"
-          when "Difference" then "Difference(#{left}, #{right})"
+          when "Difference", "Intersection" then "#{name}(#{left}, #{right})"
           else super
           end
         end
       end
 
-      [Empty, Fail, ByteRange, CodepointRange, Seq, Alt, Star, Repeat, Absence, Difference,
+      [Empty, Fail, ByteRange, CodepointRange, Seq, Alt, Star, Repeat, Absence, Difference, Intersection,
        Anchor, TrailMark, CharClass].each do |node_class|
         node_class.include(Formatting)
       end
@@ -61,6 +62,7 @@ module Flexr
         when Alt then node.children.any? { |child| nullable?(child) }
         when Absence then !nullable?(node.child)
         when Difference then nullable?(node.left) && !nullable?(node.right)
+        when Intersection then nullable?(node.left) && nullable?(node.right)
         else false
         end
       end
