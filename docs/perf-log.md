@@ -672,6 +672,22 @@ loading flexr and configuring the cache.
 | First compilation and write | 0.656 s | 0.679 s |
 | Cache hit, median of five processes | 0.0012 s | 0.024 s |
 
+## 2026-11-23: Prebuilt UTF-8 property automata
+
+The Unicode identifier fixture above was rerun with the prebuilt data
+and the updated cache schema. Each median uses five fresh Ruby 4.0.9
+processes on arm64-darwin25. Every process checked the first token.
+
+| Cache state | Lexer setup | Total time |
+| --- | ---: | ---: |
+| Disabled, median | 0.138 s | 0.158 s |
+| First compilation and write | 0.147 s | 0.181 s |
+| Cache hit, median | 0.0017 s | 0.029 s |
+
+The decoded UTF-8 tables occupy 411,997 bytes. The asset includes ordinary,
+case-folded, negated, and negated case-folded variants for 225 property
+names. The automata were checked against the exact Unicode scalar ranges.
+
 ## 2026-11-23: Frozen and mutable workload baseline
 
 Ruby 4.0.9 on arm64-darwin25 measured the scanners from `f718499` using the

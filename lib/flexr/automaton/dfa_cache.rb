@@ -7,7 +7,7 @@ require_relative "../artifact_writer"
 module Flexr
   module Automaton
     class DfaCache
-      SCHEMA_VERSION = 1
+      SCHEMA_VERSION = 2
 
       def initialize(directory, spec, state_limit)
         @directory = directory

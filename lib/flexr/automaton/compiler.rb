@@ -11,7 +11,20 @@ module Flexr
       end
 
       def compile
+        @prebuilt_properties = true
+        compile_spec
+      rescue CompileError => e
+        raise unless @used_prebuilt_properties && e.diagnostic&.code == "FLEXR-E006"
+
+        @prebuilt_properties = false
+        compile_spec
+      end
+
+      private
+
+      def compile_spec
         started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        @used_prebuilt_properties = false
         @regexp_asts = {}
         @differences = {}
         @empty_absence_rules = {}
@@ -49,8 +62,6 @@ module Flexr
         compiled.diagnostics.concat(KeywordTables.diagnostics(compiled, @spec)) if @spec.options.key?(:keyword_tables)
         compiled
       end
-
-      private
 
       def effective_states
         names = [:initial]
@@ -137,10 +148,11 @@ module Flexr
 
       def compile_difference(node)
         @differences[node] ||= begin
+          operation = node.operation || "absence group"
           accept = Acceptance.new(rule_index: 0, pattern_index: 0)
-          left = determinize([[node.left, accept]], operation: "absence group")
-          right = determinize([[node.right, accept]], operation: "absence group")
-          difference = DFAOperations.difference(left, right) { |state| enforce_state_limit!(state, "absence group") }
+          left = determinize([[node.left, accept]], operation: operation)
+          right = determinize([[node.right, accept]], operation: operation)
+          difference = DFAOperations.difference(left, right) { |state| enforce_state_limit!(state, operation) }
           Minimizer.minimize(difference)
         end
       end
@@ -494,7 +506,11 @@ module Flexr
 
       def normalize_regexp(regexp, ast)
         encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
-        Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, options: regexp.options).normalize
+        normalizer = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding,
+                                            options: regexp.options, prebuilt_properties: @prebuilt_properties)
+        normalized = normalizer.normalize
+        @used_prebuilt_properties ||= normalizer.used_prebuilt_properties
+        normalized
       end
 
       def diagnostics_for(compiled, elapsed)
