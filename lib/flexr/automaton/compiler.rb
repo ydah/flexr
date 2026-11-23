@@ -6,11 +6,14 @@ require_relative "keyword_tables"
 module Flexr
   module Automaton
     class Compiler
-      def initialize(spec, construction: :subset)
+      def initialize(spec, construction: :subset, retain_residuals: false)
         raise ArgumentError, "unknown DFA construction: #{construction.inspect}" unless %i[subset derivative].include?(construction)
+
+        raise ArgumentError, "--residuals requires a longest-match backend" if retain_residuals && spec.backend == :firstmatch
 
         @spec = spec
         @construction = construction
+        @retain_residuals = retain_residuals && construction == :derivative
       end
 
       def compile
@@ -45,12 +48,15 @@ module Flexr
         state_names = effective_states
         machines = state_names.to_h do |state_name|
           rules = rules_for(state_name)
-          dfa = compile_machine(rules)
+          residuals = nil
+          retain = ->(descriptions) { residuals = descriptions } if @retain_residuals
+          dfa = compile_machine(rules, &retain)
           plans = Accel.whole_token_plans(dfa, rules) if
             @spec.backend != :firstmatch && @spec.options[:accel] == :strscan
           memo_states, recovery_states = Analysis.backup_memo_states(dfa) unless @spec.backend == :firstmatch
           [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans,
-                                   backup_memo_states: memo_states, backup_recovery_states: recovery_states)]
+                                   residuals: residuals, backup_memo_states: memo_states,
+                                   backup_recovery_states: recovery_states)]
         rescue CompileError => e
           e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
           raise
@@ -85,8 +91,8 @@ module Flexr
         end
       end
 
-      def compile_machine(rules)
-        return build_machine(rules) unless @dfa_cache
+      def compile_machine(rules, &)
+        return build_machine(rules, &) unless @dfa_cache
 
         resolved_patterns = rules.map do |rule|
           rule.patterns.map { |pattern| pattern.is_a?(Pattern) ? pattern : pattern_regexp(pattern) }
@@ -110,7 +116,7 @@ module Flexr
         dfa
       end
 
-      def build_machine(rules, resolved_patterns = nil)
+      def build_machine(rules, resolved_patterns = nil, &)
         @active_rules = rules
         normalized = []
         rules.each_with_index do |rule, rule_offset|
@@ -142,14 +148,17 @@ module Flexr
         end
         return empty_dfa if normalized.empty?
 
-        determinize(normalized)
+        determinize(normalized, &)
       end
 
       def determinize(patterns, operation: nil)
         if @construction == :derivative
           require_relative "derivative_compiler"
           ordered = patterns.sort_by { |_, acceptance| acceptance_order(acceptance) }
-          return DerivativeCompiler.new.compile(ordered) { |state| enforce_state_limit!(state, operation) }
+          compiler = DerivativeCompiler.new
+          dfa = compiler.compile(ordered, retain_residuals: block_given?) { |state| enforce_state_limit!(state, operation) }
+          yield compiler.residuals if block_given?
+          return dfa
         end
 
         nfa = NFABuilder.new(&method(:compile_difference)).build(patterns)

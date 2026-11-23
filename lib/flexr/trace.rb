@@ -30,12 +30,13 @@ module Flexr
 
     attr_reader :steps
 
-    def initialize(lexer)
+    def initialize(lexer, residuals: false)
       @lexer = lexer
       @steps = []
       @config = lexer.class.__flexr_config
       @compiled = lexer.class.__flexr_compiled
       @rules = lexer.class.__flexr_rules
+      @derivatives = compile_residuals if residuals
       @lexer.singleton_class.prepend(Actions)
       @lexer.instance_variable_set(:@flexr_trace, self)
     end
@@ -60,14 +61,16 @@ module Flexr
       else
         "longest"
       end
+      bytes = @lexer.buffer.byteslice(start...ending) if @derivatives
       yield
       pending = @lexer.instance_variable_get(:@pending)
-      bytes = @lexer.buffer.byteslice(start...ending)
+      bytes ||= @lexer.buffer.byteslice(start...ending)
       step = { byte_begin: start, byte_end: ending, next_byte: @lexer.byte_pos, state: state, next_state: @lexer.state,
                text: display_text(bytes), bytes: bytes.bytes, candidates: candidates,
                rule: rule.index, patterns: rule.patterns.map(&:inspect), reason: reason,
                action: pending ? "emit" : "skip", token: pending&.inspect }
       step[:channel] = rule.channel if rule.channel
+      step[:dfa_path] = residual_path(state, start, bytes) if @derivatives
       @steps << step
     end
 
@@ -100,13 +103,38 @@ module Flexr
         end.join(" ")
         target = step[:rule] ? "rule #{step[:rule]}" : step[:reason]
         target += " channel=#{step[:channel].inspect}" if step[:channel]
-        "@#{step[:byte_begin]} #{step[:text].inspect} state=#{step[:state]} " \
+        line = "@#{step[:byte_begin]} #{step[:text].inspect} state=#{step[:state]} " \
           "candidates: #{candidates} -> #{target} #{step[:action]} (#{step[:reason]}) " \
           "state=#{step[:next_state]}#{step[:token] && " #{step[:token]}"}"
+        step[:dfa_path]&.each do |entry|
+          line << "\n  @#{entry.fetch(:byte_offset)} DFA #{entry.fetch(:state)}: " \
+            "#{Automaton::DerivativeResiduals.render(entry.fetch(:residuals))}"
+        end
+        line
       end.join("\n")
     end
 
     private
+
+    def compile_residuals
+      spec = @lexer.class.__flexr_spec
+      spec.rules = spec.rules.map { |rule| rule.dup.tap { |copy| copy.capture_patterns = nil } }
+      Automaton::Compiler.new(spec, construction: :derivative, retain_residuals: true).compile
+    end
+
+    def residual_path(state_name, start, bytes)
+      machine = @derivatives.machines.fetch(state_name)
+      dfa = machine.dfa
+      state = dfa.start
+      entries = [{ byte_offset: start, state: state, residuals: machine.residuals.describe(state) }]
+      bytes.each_byte.with_index(1) do |byte, offset|
+        state = dfa.transition(state, byte)
+        break unless state
+
+        entries << { byte_offset: start + offset, state: state, residuals: machine.residuals.describe(state) }
+      end
+      entries
+    end
 
     def candidates_at(start)
       @config.backend == :firstmatch ? firstmatch_candidates(start) : dfa_candidates(start)

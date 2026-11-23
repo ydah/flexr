@@ -1,11 +1,14 @@
 # frozen_string_literal: true
 
 require_relative "derivative_terms"
+require_relative "derivative_residuals"
 
 module Flexr
   module Automaton
     class DerivativeCompiler
-      def compile(patterns, &state_limit)
+      attr_reader :residuals
+
+      def compile(patterns, retain_residuals: false, &state_limit)
         terms = DerivativeTerms.new
         start = patterns.each_with_index.to_h { |(body, _), index| [index, terms.from_ast(body)] }.freeze
         conditions = patterns.map(&:last)
@@ -34,7 +37,12 @@ module Flexr
 
         dfa = DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: count,
                       start: 0, rule_ids: accepts.flatten.map(&:rule_index))
-        Minimizer.minimize(dfa)
+        return Minimizer.minimize(dfa) unless retain_residuals
+
+        Minimizer.minimize(dfa) do |representatives|
+          vectors = representatives.map { |state| states.fetch(state) }
+          @residuals = DerivativeResiduals.new(terms.expressions, vectors, conditions)
+        end
       end
 
       private

@@ -139,6 +139,10 @@ module Flexr
         when "--verify"
           raise ArgumentError, "--verify is only valid for the skeleton command" unless command == :skeleton
           command_args[:verify] = true
+        when "--residuals"
+          raise ArgumentError, "--residuals is only valid for explain or trace" unless %i[explain trace].include?(command)
+
+          command_args[:residuals] = true
         when "--input", "--generated"
           raise ArgumentError, "#{argument} is only valid for the trace command" unless command == :trace
           if argument == "--generated"
@@ -196,12 +200,12 @@ module Flexr
       when :dot
         print_dot(spec, options, out)
       when :explain
-        print_explanation(spec, options, rule_number, out)
+        print_explanation(spec, options, rule_number, out, residuals: command_args[:residuals])
       when :trace
         if command_args.key?(:input) || command_args[:input_file]
           print_input_trace(spec, options, command_args, out)
         else
-          print_trace(spec, options, out)
+          print_trace(spec, options, out, residuals: command_args[:residuals])
         end
       when :skeleton
         print_skeleton(spec, options, out, verify: command_args[:verify])
@@ -383,9 +387,9 @@ module Flexr
       "\"#{escaped}\""
     end
 
-    def print_trace(spec, options, out)
+    def print_trace(spec, options, out, residuals: false)
       parsed = read_spec(spec)
-      compiled = compile(parsed, overrides: options.overrides)
+      compiled = compile(parsed, overrides: options.overrides, residuals: residuals)
       out.puts keyword_table_labels(parsed.config)
       out.puts backup_labels(compiled) if dfa_backend?(parsed, options)
       compiled.machines.each do |state_name, machine|
@@ -403,26 +407,28 @@ module Flexr
             "#{index}#{channel}" if channel
           end
           labels = " channels=[#{channels.join(', ')}]" unless channels.empty?
+          labels = "#{labels} residuals=[#{Automaton::DerivativeResiduals.render(machine.residuals.describe(state))}]" if machine.residuals
           out.puts "  #{state}: accepts=#{accepts.inspect} transitions=#{transitions.inspect}#{labels}"
         end
       end
       EXIT_OK
     end
 
-    def print_explanation(spec, options, rule_number, out)
+    def print_explanation(spec, options, rule_number, out, residuals: false)
       parsed = read_spec(spec)
       rules = parsed.rules
       rules = rules.select { |rule| rule.index == rule_number } if rule_number
       raise ArgumentError, "rule not found: #{rule_number}" if rules.empty? && rule_number
 
+      compiled = compile(parsed, overrides: options.overrides, residuals: residuals) if
+        residuals || (!rule_number && dfa_backend?(parsed, options))
       out.puts(rules.map { |rule| "rule #{rule.index}#{channel_label(rule)}#{priority_label(rule)}: #{rule.patterns.inspect}" })
       emitted = rules.filter_map do |rule|
         rule.action[1] if !rule.channel && rule.action.is_a?(Array) && rule.action.first == :emit
       end
       out.puts keyword_table_labels(parsed.config, among: emitted)
-      return EXIT_OK if rule_number || !dfa_backend?(parsed, options)
-
-      out.puts backup_labels(compile(parsed, overrides: options.overrides))
+      out.puts backup_labels(compiled) if compiled && !rule_number && dfa_backend?(parsed, options)
+      print_residuals(compiled, rule_number, out) if residuals && compiled
       EXIT_OK
     end
 
@@ -440,6 +446,19 @@ module Flexr
           "unbounded"
         end
         "state #{state.inspect}: maximum DFA backup: #{length}"
+      end
+    end
+
+    def print_residuals(compiled, rule_number, out)
+      compiled.machines.each do |state_name, machine|
+        next unless machine.residuals
+
+        machine.dfa.states.times do |state|
+          entries = machine.residuals.describe(state, rule: rule_number)
+          next if entries.empty?
+
+          out.puts "state #{state_name} DFA #{state}: #{Automaton::DerivativeResiduals.render(entries)}"
+        end
       end
     end
 
@@ -483,7 +502,7 @@ module Flexr
         end
       end
       input = trace_args[:input_file] ? File.binread(trace_args[:input_file]) : trace_args.fetch(:input)
-      trace = Trace.new(klass.new(input, filename: trace_args[:input_file]))
+      trace = Trace.new(klass.new(input, filename: trace_args[:input_file]), residuals: trace_args[:residuals])
       trace.run
       out.puts(options.format == :json ? JSON.pretty_generate(steps: trace.steps) : trace.render)
       EXIT_OK
@@ -520,7 +539,7 @@ module Flexr
       Source::PrismReader.new(source, path: spec).read
     end
 
-    def compile(parsed, overrides: {})
+    def compile(parsed, overrides: {}, residuals: false)
       klass = Class.new(Flexr::Lexer)
       config = parsed.config
       klass.backend(overrides.fetch(:backend, config.fetch(:backend, :table)))
@@ -544,6 +563,8 @@ module Flexr
         klass.__flexr_states.fetch(name.to_sym).location = value[:location]
       end
       parsed.rules.each { |rule| klass.__flexr_add_generated_rule(rule.to_h) }
+      return Automaton::Compiler.new(klass.__flexr_spec, construction: :derivative, retain_residuals: true).compile if residuals
+
       klass.compile!
     end
 
@@ -617,6 +638,7 @@ module Flexr
               --input STRING          trace input (executes SPEC actions)
               --input-file PATH       trace or benchmark input
               --generated             trace generated scanner
+              --residuals             show remaining DFA expressions (explain or trace)
               --verify                verify skeleton across all modes (executes SPEC actions)
               --target 2.0            report migration requirements (static check only)
               --dry-run               print the fixed spec without writing (fix only)
