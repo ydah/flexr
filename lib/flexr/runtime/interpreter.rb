@@ -51,7 +51,7 @@ module Flexr
         direct_nxt = direct&.fetch(:nxt)
         direct_classes = direct&.fetch(:classes)
         lazy = @lazy
-        memo_states = (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
+        memo_states = backup_memo_states_for(machine)
         source = @scan_source
         return scan_with_conditions(machine, position, nil, simple: true) unless
           source && !@lexer.scan_steps_guarded? && !@lexer.token_limit_required?
@@ -69,7 +69,10 @@ module Flexr
             transitions[state][ec[byte]]
           end
           unless target
-            target = dfa.transition(state, byte) if lazy && target.nil?
+            if lazy && target.nil?
+              target = dfa.transition(state, byte)
+              memo_states = backup_memo_states_for(machine)
+            end
             break unless target
           end
           state = target
@@ -101,8 +104,7 @@ module Flexr
 
       def scan_with_conditions(machine, position, expected, simple: false)
         buffer = @lexer.buffer
-        memo_states = (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
-        memo_states = nil if memo_states && @lexer.scan_steps_guarded?
+        memo_states = backup_memo_states_for(machine)
         state = machine.dfa.start
         best = nil
         cursor = position
@@ -129,6 +131,7 @@ module Flexr
           @lexer.consume_step!
           state = transition(machine.dfa, state, byte)
           break unless state
+          memo_states = backup_memo_states_for(machine) if @lazy
 
           cursor += 1
           acceptance = machine.dfa.accepts[state].first
@@ -142,6 +145,16 @@ module Flexr
           best = consider_acceptances(machine, state, cursor, position, buffer, best, expected, check_boundary: !simple)
         end
         best
+      end
+
+      def backup_memo_states_for(machine)
+        return if @lexer.scan_steps_guarded?
+
+        if @lazy
+          dfa = machine.dfa
+          return (@recover_backup && dfa.backup_recovery_states) || dfa.backup_memo_states
+        end
+        (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
       end
 
       def fast_path?(machine)

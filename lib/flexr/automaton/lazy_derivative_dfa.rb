@@ -3,7 +3,8 @@
 module Flexr
   module Automaton
     class LazyDerivativeDFA
-      attr_reader :start, :accepts, :ec, :class_count, :rule_ids, :transitions
+      attr_reader :start, :accepts, :ec, :class_count, :rule_ids, :transitions,
+                  :backup_memo_states, :backup_recovery_states
 
       def initialize(vector, conditions, terms, ec, class_count, &state_limit)
         @start = 0
@@ -34,7 +35,13 @@ module Flexr
         target = targets[class_id]
         if target.nil?
           target = @mutex.synchronize do
-            targets[class_id] = successor(state, class_id) if targets[class_id].nil?
+            if targets[class_id].nil?
+              state_count = states
+              targets[class_id] = successor(state, class_id)
+              if targets[class_id].is_a?(Integer) && targets[class_id] < state_count
+                @backup_memo_states, @backup_recovery_states = Analysis.backup_memo_states(self)
+              end
+            end
             targets[class_id]
           end
         end
