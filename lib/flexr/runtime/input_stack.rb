@@ -10,7 +10,8 @@ module Flexr
 
     def push_input(input, filename: nil)
       buffer = Buffer.new(input, chunk_size: @buffer.chunk_size, max_buffer_size: @buffer.max_buffer_size,
-                          retain_input: @retain_input, filename: filename)
+                          retain_input: @retain_input, freeze_input: @freeze_input, filename: filename)
+      input = buffer.source if input.is_a?(String)
       (@__flexr_pending_inputs ||= []) << [buffer, input, filename]
       nil
     end
