@@ -6,8 +6,11 @@ require_relative "keyword_tables"
 module Flexr
   module Automaton
     class Compiler
-      def initialize(spec)
+      def initialize(spec, construction: :subset)
+        raise ArgumentError, "unknown DFA construction: #{construction.inspect}" unless %i[subset derivative].include?(construction)
+
         @spec = spec
+        @construction = construction
       end
 
       def compile
@@ -36,7 +39,7 @@ module Flexr
         @pattern_universe_dfa = nil
         @state_limit = @spec.options.fetch(:max_dfa_states, 100_000)
         @state_limit = 100_000 unless @state_limit.is_a?(Integer) && @state_limit.positive?
-        directory = Flexr.cache_dir
+        directory = Flexr.cache_dir if @construction == :subset
         @dfa_cache = directory && DfaCache.new(directory, @spec, @state_limit)
         validate_rules
         state_names = effective_states
@@ -141,6 +144,12 @@ module Flexr
       end
 
       def determinize(patterns, operation: nil)
+        if @construction == :derivative
+          require_relative "derivative_compiler"
+          ordered = patterns.sort_by { |_, acceptance| acceptance_order(acceptance) }
+          return DerivativeCompiler.new.compile(ordered) { |state| enforce_state_limit!(state, operation) }
+        end
+
         nfa = NFABuilder.new(&method(:compile_difference)).build(patterns)
         ec, class_count = nfa.byte_classes.build
         subset_construction(nfa, ec, class_count, operation: operation)
@@ -394,9 +403,11 @@ module Flexr
         rules = each_state_id(set).with_object([]) do |state, result|
           result.concat(nfa.states[state].accepts)
         end
-        rules.uniq.sort_by do |acceptance|
-          [-@priorities.fetch(acceptance.rule_index, 0), acceptance.rule_index, acceptance.pattern_index]
-        end
+        rules.uniq.sort_by { |acceptance| acceptance_order(acceptance) }
+      end
+
+      def acceptance_order(acceptance)
+        [-@priorities.fetch(acceptance.rule_index, 0), acceptance.rule_index, acceptance.pattern_index]
       end
 
       def each_state_id(set)

@@ -1,0 +1,50 @@
+# frozen_string_literal: true
+
+require_relative "derivative_terms"
+
+module Flexr
+  module Automaton
+    class DerivativeCompiler
+      def compile(patterns, &state_limit)
+        terms = DerivativeTerms.new
+        start = patterns.each_with_index.to_h { |(body, _), index| [index, terms.from_ast(body)] }.freeze
+        conditions = patterns.map(&:last)
+        ec, count = terms.byte_classes.build
+        representatives = ec.each_index.uniq { |byte| ec.fetch(byte) }
+        states = [start]
+        ids = { start => 0 }
+        transitions = []
+        accepts = []
+
+        index = 0
+        while index < states.length
+          vector = states.fetch(index)
+          accepts << vector.filter_map { |pattern, term| conditions.fetch(pattern) if terms.nullable?(term) }.uniq
+          transitions << representatives.each_with_index.map do |byte, class_id|
+            successor = advance(vector, terms, byte, class_id)
+            next if successor.empty?
+
+            ids[successor] ||= begin
+              state_limit.call(states.length)
+              states.push(successor).length - 1
+            end
+          end
+          index += 1
+        end
+
+        dfa = DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: count,
+                      start: 0, rule_ids: accepts.flatten.map(&:rule_index))
+        Minimizer.minimize(dfa)
+      end
+
+      private
+
+      def advance(vector, terms, byte, class_id)
+        vector.each_with_object({}) do |(pattern, term), residuals|
+          residual = terms.derivative(term, byte, class_id)
+          residuals[pattern] = residual unless residual == DerivativeTerms::FAIL
+        end.freeze
+      end
+    end
+  end
+end

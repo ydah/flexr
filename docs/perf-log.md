@@ -665,3 +665,28 @@ processes on arm64-darwin25. Every process checked the first token.
 The decoded UTF-8 tables occupy 411,997 bytes. The asset includes ordinary,
 case-folded, negated, and negated case-folded variants for 225 property
 names. The automata were checked against the exact Unicode scalar ranges.
+
+## 2026-11-23: Compare DFA construction by derivatives
+
+```sh
+ruby -Ilib benchmark/derivative_compile.rb
+```
+
+The comparison uses Ruby 4.0.9 on arm64-darwin25, disables the DFA disk
+cache, and alternates the order of subset and derivative compilation.
+Each value is the median of seven runs after warmup. The timer covers
+compiling the parsed specification and excludes reading the source.
+
+| Workload | Subset construction | Derivative construction |
+| --- | ---: | ---: |
+| json | 5.93 ms | 6.20 ms |
+| toml | 12.58 ms | 10.45 ms |
+| graphql | 11.28 ms | 8.32 ms |
+| sql | 48.52 ms | 45.61 ms |
+| ruby_subset | 5.49 ms | 4.37 ms |
+| unicode_identifier | 139.17 ms | 164.57 ms |
+
+The test corpus compares minimized graphs byte for byte, allowing
+different state numbers and byte class partitions. Acceptance labels
+include rule and pattern indices in priority order and anchor
+conditions. Trailing-context DFAs are compared separately.

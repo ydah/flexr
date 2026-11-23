@@ -145,7 +145,7 @@ module Flexr
       Generated.artifact_metadata
     end
 
-    def compile_parsed(parsed)
+    def compile_parsed(parsed, construction: :subset)
       states = parsed.states.each_with_index.to_h do |(name, value), index|
         [name.to_sym, IR::State.new(name: name.to_sym, inclusive: value[:inclusive], id: index, location: value[:location])]
       end
@@ -165,7 +165,7 @@ module Flexr
         declared_tokens: parsed.config[:declared_tokens], states: states, rules: rules,
         eof_rules: parsed.config[:eof_rules] || {}, verbatim: parsed.source
       )
-      compiled = Automaton::Compiler.new(spec).compile
+      compiled = Automaton::Compiler.new(spec, construction: construction).compile
       @resolved_backend = resolve_backend(spec.backend, compiled)
       parsed.rules.each do |rule|
         compiled_rule = spec.rules.fetch(rule.index)
