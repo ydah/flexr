@@ -696,3 +696,28 @@ With derivatives as the runtime default, requiring flexr, defining a lexer
 with `/\p{L}[\p{L}\p{N}_]*/`, and scanning one identifier took 176 ms
 with the disk cache disabled and 25 ms with a populated cache. Each figure
 is the median of five fresh Ruby 4.0.9 processes on the same machine.
+
+## 2026-11-23: Construct runtime DFA transitions on demand
+
+The Unicode identifier fixture took 180.2 ms with eager derivatives and
+19.4 ms with on-demand derivatives. Both measurements use five fresh
+Ruby 4.0.9 processes on arm64-darwin25, with the disk cache disabled. The
+timer covers requiring flexr, defining the lexer, and checking the first
+token.
+
+These ratios compare warm on-demand runtime throughput with eager runtime
+throughput. Each ratio divides the median of three on-demand runs by the
+median of three eager runs. Runs alternate which compiler goes first.
+The [workload matrix](https://github.com/ydah/flexr/pull/105) checks identical
+typed tokens across runtime, generated, and standalone modes in each cell.
+
+| Workload | Frozen interpreter | Frozen YJIT | Frozen ZJIT | Mutable interpreter | Mutable YJIT | Mutable ZJIT |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| JSON | 1.042 | 1.064 | 1.017 | 1.006 | 1.112 | 0.996 |
+| TOML | 1.072 | 1.250 | 1.063 | 1.072 | 1.133 | 1.123 |
+| GraphQL | 1.088 | 1.181 | 1.065 | 1.051 | 1.068 | 1.015 |
+| SQL | 1.102 | 1.241 | 1.095 | 1.062 | 1.175 | 1.077 |
+| Ruby subset | 1.089 | 1.179 | 1.059 | 1.038 | 1.132 | 1.048 |
+
+Mutable JSON on ZJIT measured 0.996 in the full matrix and 1.016 in a
+separate seven-run comparison with the same implementation.

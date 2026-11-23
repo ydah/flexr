@@ -104,3 +104,4 @@ MUST rules are required. For a SHOULD rule, explain any exception in the pull re
 | [Insert reusable rules at each explicit use site](20261122_expand_reusable_rules_explicitly.md) | `use` fixes the expansion position so reusable declarations participate in the same tie-breaking rules as local ones. |
 | [Preserve first-match order when importing oedipus_lex](20261122_import_oedipus_firstmatch.md) | The explicit import mode reports unsupported constructs before writing a specification. |
 | [Build lexer DFAs from regular-expression derivatives](20261123_derivative_dfa_construction.md) | A derivative state records each rule's remaining byte language and preserves the lexer's token selection contract. |
+| [Construct uncached runtime DFA transitions as input reaches them](20261123_on_demand_runtime_dfa.md) | Uncached table and direct scanners reuse transitions discovered during scanning. Inspection and caching use complete tables. |

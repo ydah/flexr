@@ -16,7 +16,7 @@ module Flexr
       raise ArgumentError, "max_steps must be non-negative" if max_steps&.to_i&.negative?
       raise ArgumentError, "cancellation must respond to call" if cancellation && !cancellation.respond_to?(:call)
 
-      self.class.compile!
+      self.class.__flexr_compile_runtime!
       config = self.class.__flexr_config
       @buffer = Runtime::Buffer.new(
         input, chunk_size: chunk_size, max_buffer_size: max_buffer_size,

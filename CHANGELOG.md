@@ -13,6 +13,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Changed
 
+- Build uncached runtime table and direct DFA transitions on demand.
+  The default DFA state limit can be reached while scanning.
 - Build lexer DFAs from regular-expression derivatives for runtime
   compilation and static generation.
 - Compile UTF-8 Unicode properties from prebuilt automata, reducing setup time for lexers that use them.

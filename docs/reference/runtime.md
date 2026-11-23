@@ -3,6 +3,17 @@
 `Flexr::Lexer` includes the runtime methods below. Runtime mode and generated
 mode expose the same consumer-facing methods.
 
+## Runtime compilation
+
+With the disk cache disabled, runtime `:table` and `:direct` lexers validate
+their specification at initialization and construct DFA transitions as
+they encounter input. Lexer instances of the same class reuse transitions.
+The default DFA state limit can be reached while scanning.
+
+`Lexer.compile!`, `Lexer.dfa`, and `Lexer.recognizer` request the complete
+graph. The disk cache, explicitly enabled acceleration, automatic
+backend selection, and explicit DFA state limits also use complete tables.
+
 ## Compilation cache
 
 Set `Flexr.cache_dir` before compiling a specification to reuse compiled
