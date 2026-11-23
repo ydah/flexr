@@ -659,6 +659,50 @@ Runtime, generated, and standalone produced identical frozen-input
 token sequences on all three engines for the five stock workloads
 and the three direct variants.
 
+## Optional lexer feature costs
+
+Run the feature benchmark on a quiet machine. Each case uses the same
+input and checks emitted token types and values with and without the
+feature in both runtime and generated scanners. It reports bytes per
+second and time spent preparing each lexer. This includes static
+generation for the generated scanner and runtime compilation for the
+runtime scanner. The throughput measurement excludes both.
+
+```sh
+ruby -Ilib benchmark/feature_costs.rb --iterations 10 > feature-baseline.json
+ruby -Ilib benchmark/feature_costs.rb --iterations 10 --baseline feature-baseline.json
+```
+
+Capture the baseline on the revision before changing a feature. Run the
+same benchmark script against both revisions by pointing `-I` at each
+revision's `lib` directory. Keep the machine, Ruby build, JIT, and input
+mode fixed. The benchmark refuses baseline results with different input
+or token output. Use `--input-mode mutable` to benchmark mutable strings.
+
+The regression check compares the scanners that leave the feature unused.
+Each must reach at least 99% of its baseline throughput. The report shows
+which feature and scanner failed. The measurements with the feature
+enabled quantify its cost for the fixture without affecting that check.
+
+On 2026-11-23, Ruby 4.0.9 on arm64-darwin25 measured these ranges with
+three warmup scans and three samples of three timed scans. The range
+covers frozen and mutable inputs on the interpreter, YJIT, and ZJIT.
+The ratios compare throughput with the feature enabled to throughput
+of the fixture that leaves it unused. All 54 comparisons matched the
+token stream.
+
+| Feature | Runtime | Generated |
+| --- | ---: | ---: |
+| Captures | 0.13× to 0.36× | 0.44× to 0.89× |
+| Channels | 0.46× to 0.92× | 0.70× to 0.98× |
+| `expect:` | 0.34× to 0.75× | 0.30× to 2.03× |
+| Keyword tables | 0.98× to 1.01× | 0.98× to 1.04× |
+| Rule priority | 1.00× to 1.09× | 0.96× to 1.02× |
+| Pattern algebra | 0.96× to 1.01× | 0.83× to 1.06× |
+| Delegation | 0.08× to 0.18× | 0.15× to 0.50× |
+| Indentation | 0.53× to 0.86× | 0.64× to 0.82× |
+| `push_input` | 0.21× to 0.50× | 0.28× to 0.69× |
+
 ## 2026-11-23: Frozen and mutable workload baseline
 
 Ruby 4.0.9 on arm64-darwin25 measured the scanners from `f718499` using the
