@@ -14,14 +14,31 @@ require "flexr"
 
 module GraphqlExample
   class Lexer < Flexr::Lexer
-    Flexr::Generated.install_compiled!(self, { artifact: {schema_version: 2, compiler_version: "<compiler-version>", runtime_abi_version: 2, unicode_version: "15.1.0"}, rules: [{ index: 0, patterns: [/[ \t\r\n,]+/], pattern_conditions: [[0, 0, false, false]], trailing: nil, action: :skip, states: [:initial], bol_only: false, end_anchor: nil }, { index: 1, patterns: [/#[^\n]*/], pattern_conditions: [[1, 0, false, false]], trailing: nil, action: :skip, states: [:initial], bol_only: false, end_anchor: nil }, { index: 2, patterns: [/[A-Za-z_][A-Za-z_0-9]*/], pattern_conditions: [[2, 0, false, false]], trailing: nil, action: [:emit, :NAME], states: [:initial], bol_only: false, end_anchor: nil }, { index: 3, patterns: [/-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/], pattern_conditions: [[3, 0, false, false]], trailing: nil, action: [:emit, :NUMBER], states: [:initial], bol_only: false, end_anchor: nil }, { index: 4, patterns: [/"(?:\\.|[^"\\\r\n])*"/], pattern_conditions: [[4, 0, false, false]], trailing: nil, action: [:emit, :STRING], states: [:initial], bol_only: false, end_anchor: nil }, { index: 5, patterns: [/\.\.\./], pattern_conditions: [[5, 0, false, false]], trailing: nil, action: [:emit, :SPREAD], states: [:initial], bol_only: false, end_anchor: nil }, { index: 6, patterns: [/\{/], pattern_conditions: [[6, 0, false, false]], trailing: nil, action: [:emit, :LBRACE], states: [:initial], bol_only: false, end_anchor: nil }, { index: 7, patterns: [/\}/], pattern_conditions: [[7, 0, false, false]], trailing: nil, action: [:emit, :RBRACE], states: [:initial], bol_only: false, end_anchor: nil }, { index: 8, patterns: [/\(/], pattern_conditions: [[8, 0, false, false]], trailing: nil, action: [:emit, :LPAREN], states: [:initial], bol_only: false, end_anchor: nil }, { index: 9, patterns: [/\)/], pattern_conditions: [[9, 0, false, false]], trailing: nil, action: [:emit, :RPAREN], states: [:initial], bol_only: false, end_anchor: nil }, { index: 10, patterns: [/\[/], pattern_conditions: [[10, 0, false, false]], trailing: nil, action: [:emit, :LBRACKET], states: [:initial], bol_only: false, end_anchor: nil }, { index: 11, patterns: [/\]/], pattern_conditions: [[11, 0, false, false]], trailing: nil, action: [:emit, :RBRACKET], states: [:initial], bol_only: false, end_anchor: nil }, { index: 12, patterns: [/:/], pattern_conditions: [[12, 0, false, false]], trailing: nil, action: [:emit, :COLON], states: [:initial], bol_only: false, end_anchor: nil }, { index: 13, patterns: [/=/], pattern_conditions: [[13, 0, false, false]], trailing: nil, action: [:emit, :EQUAL], states: [:initial], bol_only: false, end_anchor: nil }, { index: 14, patterns: [/!/], pattern_conditions: [[14, 0, false, false]], trailing: nil, action: [:emit, :BANG], states: [:initial], bol_only: false, end_anchor: nil }, { index: 15, patterns: [/\$/], pattern_conditions: [[15, 0, false, false]], trailing: nil, action: [:emit, :DOLLAR], states: [:initial], bol_only: false, end_anchor: nil }, { index: 16, patterns: [/@/], pattern_conditions: [[16, 0, false, false]], trailing: nil, action: [:emit, :AT], states: [:initial], bol_only: false, end_anchor: nil }, { index: 17, patterns: [/\|/], pattern_conditions: [[17, 0, false, false]], trailing: nil, action: [:emit, :PIPE], states: [:initial], bol_only: false, end_anchor: nil }, { index: 18, patterns: [/&/], pattern_conditions: [[18, 0, false, false]], trailing: nil, action: [:emit, :AMP], states: [:initial], bol_only: false, end_anchor: nil }], backend: :table, token_kind: :array, encoding: Encoding::UTF_8, declared_tokens: [:NAME, :STRING, :NUMBER, :SPREAD, :LBRACE, :RBRACE, :LPAREN, :RPAREN, :LBRACKET, :RBRACKET, :COLON, :EQUAL, :BANG, :DOLLAR, :AT, :PIPE, :AMP], options: {}, eof_rules: {  }, states: [], inclusive_states: {initial: true}, compiled: { machines: { :initial => { state_name: :initial, dfa: {accepts: [[], [[0, 0, false, false]], [[14, 0, false, false]], [], [[1, 0, false, false]], [[15, 0, false, false]], [[18, 0, false, false]], [[8, 0, false, false]], [[9, 0, false, false]], [], [], [[3, 0, false, false]], [[3, 0, false, false]], [[12, 0, false, false]], [[13, 0, false, false]], [[16, 0, false, false]], [[2, 0, false, false]], [[10, 0, false, false]], [[11, 0, false, false]], [[6, 0, false, false]], [[17, 0, false, false]], [[7, 0, false, false]], [[4, 0, false, false]], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [[5, 0, false, false]], [[3, 0, false, false]], [], [[3, 0, false, false]]], ec: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 23, 23, 23, 23, 23, 23, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 29, 29, 30, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 32, 33, 34, 35, 36, 37, 38, 38, 38, 38, 39, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 41, 42, 43, 44, 44, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 48, 48, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 50, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 52, 53, 53, 54, 55, 55, 55, 56, 57, 57, 57, 57, 57, 57, 57, 57, 57, 57, 57], class_count: 58, state_count: 45, start: 0, rule_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18], packed: {base: [0, 43, 0, 44, 19, 0, 0, 0, 0, 28, 5, 82, 83, 0, 0, 0, 87, 0, 0, 0, 0, 0, 0, 83, 8, 9, 12, 17, 32, 35, 15, 41, 36, 96, 62, 68, 99, 39, 7, 97, 130, 0, 128, 132, 134], default: [nil, nil, nil, 3, 4, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 3, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil], next: [nil, 1, 1, nil, 1, nil, 1, 2, 3, 4, 5, nil, 6, nil, 7, 8, nil, nil, 1, 9, 10, nil, 11, 12, 13, 38, 14, 41, 15, 16, 16, 16, 17, nil, 18, nil, 16, nil, 16, 16, 16, 19, 20, 21, 1, 1, nil, 1, nil, 1, 11, 12, 22, 3, 3, 3, 24, 24, 24, 24, 26, 1, 24, 24, nil, nil, nil, nil, 31, 32, 33, 34, 33, 35, 36, 37, nil, 23, 26, 26, 26, 26, 26, 31, 33, nil, 4, 4, 4, nil, nil, nil, nil, 24, 25, 26, 27, 26, 28, 29, 30, nil, 39, 39, nil, 12, 12, 31, 31, 16, 16, nil, 40, 40, 33, 33, 16, 16, 16, 42, 42, 40, 40, 16, nil, 16, 16, 16, nil, nil, nil, nil, 24, 25, 26, 27, 26, 28, 29, 30, nil, 31, 31, 31, 33, 33, 33, 43, nil, 43, 42, 42, 44, 44, 44, 44, 44, 44, 40, nil, nil, nil, nil, nil, nil, nil, nil, 40], check: [nil, 0, 0, nil, 0, nil, 0, 0, 0, 0, 0, nil, 0, nil, 0, 0, nil, nil, 0, 0, 0, 4, 0, 0, 0, 10, 0, 38, 0, 0, 0, 0, 0, nil, 0, nil, 0, nil, 0, 0, 0, 0, 0, 0, 1, 1, 3, 1, 3, 1, 9, 9, 3, 24, 24, 24, 25, 26, 26, 26, 30, 1, 27, 27, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 28, 28, 29, 29, 29, 32, 37, 23, 31, 31, 31, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 11, 12, nil, 12, 12, 34, 34, 16, 16, nil, 11, 12, 35, 35, 16, 16, 16, 39, 39, 11, 12, 16, nil, 16, 16, 16, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 33, 33, 33, 36, 36, 36, 40, nil, 40, 42, 42, 40, 40, 43, 43, 44, 44, 42, nil, nil, nil, nil, nil, nil, nil, nil, 42]}} } }, states: [:initial], stats: {initial: {states: 45, classes: 58, accepting_states: 22}}, diagnostics: [] } })
+    Flexr::Generated.install_compiled!(self, { artifact: {schema_version: 2, compiler_version: "<compiler-version>", runtime_abi_version: 2, unicode_version: "15.1.0"}, rules: [{ index: 0, patterns: [/[ \t\r\n,]+/], pattern_conditions: [[0, 0, false, false]], trailing: nil, action: :skip, states: [:initial], bol_only: false, end_anchor: nil }, { index: 1, patterns: [/#[^\n]*/], pattern_conditions: [[1, 0, false, false]], trailing: nil, action: :skip, states: [:initial], bol_only: false, end_anchor: nil }, { index: 2, patterns: [/[A-Za-z_][A-Za-z_0-9]*/], pattern_conditions: [[2, 0, false, false]], trailing: nil, action: [:emit, :NAME], states: [:initial], bol_only: false, end_anchor: nil }, { index: 3, patterns: [/-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/], pattern_conditions: [[3, 0, false, false]], trailing: nil, action: [:emit, :NUMBER], states: [:initial], bol_only: false, end_anchor: nil }, { index: 4, patterns: [/"(?:\\.|[^"\\\r\n])*"/], pattern_conditions: [[4, 0, false, false]], trailing: nil, action: [:emit, :STRING], states: [:initial], bol_only: false, end_anchor: nil }, { index: 5, patterns: [/\.\.\./], pattern_conditions: [[5, 0, false, false]], trailing: nil, action: [:emit, :SPREAD], states: [:initial], bol_only: false, end_anchor: nil }, { index: 6, patterns: [/\{/], pattern_conditions: [[6, 0, false, false]], trailing: nil, action: [:emit, :LBRACE], states: [:initial], bol_only: false, end_anchor: nil }, { index: 7, patterns: [/\}/], pattern_conditions: [[7, 0, false, false]], trailing: nil, action: [:emit, :RBRACE], states: [:initial], bol_only: false, end_anchor: nil }, { index: 8, patterns: [/\(/], pattern_conditions: [[8, 0, false, false]], trailing: nil, action: [:emit, :LPAREN], states: [:initial], bol_only: false, end_anchor: nil }, { index: 9, patterns: [/\)/], pattern_conditions: [[9, 0, false, false]], trailing: nil, action: [:emit, :RPAREN], states: [:initial], bol_only: false, end_anchor: nil }, { index: 10, patterns: [/\[/], pattern_conditions: [[10, 0, false, false]], trailing: nil, action: [:emit, :LBRACKET], states: [:initial], bol_only: false, end_anchor: nil }, { index: 11, patterns: [/\]/], pattern_conditions: [[11, 0, false, false]], trailing: nil, action: [:emit, :RBRACKET], states: [:initial], bol_only: false, end_anchor: nil }, { index: 12, patterns: [/:/], pattern_conditions: [[12, 0, false, false]], trailing: nil, action: [:emit, :COLON], states: [:initial], bol_only: false, end_anchor: nil }, { index: 13, patterns: [/=/], pattern_conditions: [[13, 0, false, false]], trailing: nil, action: [:emit, :EQUAL], states: [:initial], bol_only: false, end_anchor: nil }, { index: 14, patterns: [/!/], pattern_conditions: [[14, 0, false, false]], trailing: nil, action: [:emit, :BANG], states: [:initial], bol_only: false, end_anchor: nil }, { index: 15, patterns: [/\$/], pattern_conditions: [[15, 0, false, false]], trailing: nil, action: [:emit, :DOLLAR], states: [:initial], bol_only: false, end_anchor: nil }, { index: 16, patterns: [/@/], pattern_conditions: [[16, 0, false, false]], trailing: nil, action: [:emit, :AT], states: [:initial], bol_only: false, end_anchor: nil }, { index: 17, patterns: [/\|/], pattern_conditions: [[17, 0, false, false]], trailing: nil, action: [:emit, :PIPE], states: [:initial], bol_only: false, end_anchor: nil }, { index: 18, patterns: [/&/], pattern_conditions: [[18, 0, false, false]], trailing: nil, action: [:emit, :AMP], states: [:initial], bol_only: false, end_anchor: nil }], backend: :table, token_kind: :array, encoding: Encoding::UTF_8, declared_tokens: [:NAME, :STRING, :NUMBER, :SPREAD, :LBRACE, :RBRACE, :LPAREN, :RPAREN, :LBRACKET, :RBRACKET, :COLON, :EQUAL, :BANG, :DOLLAR, :AT, :PIPE, :AMP], options: {}, eof_rules: {  }, states: [], inclusive_states: {initial: true}, compiled: { machines: { :initial => { state_name: :initial, dfa: {accepts: [[], [[0, 0, false, false]], [[14, 0, false, false]], [], [[1, 0, false, false]], [[15, 0, false, false]], [[18, 0, false, false]], [[8, 0, false, false]], [[9, 0, false, false]], [], [], [[3, 0, false, false]], [[3, 0, false, false]], [[12, 0, false, false]], [[13, 0, false, false]], [[16, 0, false, false]], [[2, 0, false, false]], [[10, 0, false, false]], [[11, 0, false, false]], [[6, 0, false, false]], [[17, 0, false, false]], [[7, 0, false, false]], [[4, 0, false, false]], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [[5, 0, false, false]], [[3, 0, false, false]], [], [[3, 0, false, false]]], ec: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 23, 23, 23, 23, 23, 23, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 29, 29, 30, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 32, 33, 34, 35, 36, 37, 38, 38, 38, 38, 39, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 41, 42, 43, 44, 44, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 48, 48, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 50, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 52, 53, 53, 54, 55, 55, 55, 56, 57, 57, 57, 57, 57, 57, 57, 57, 57, 57, 57], class_count: 58, state_count: 45, start: 0, rule_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18], packed: {base: [0, 43, 0, 44, 19, 0, 0, 0, 0, 28, 5, 82, 83, 0, 0, 0, 87, 0, 0, 0, 0, 0, 0, 83, 8, 9, 12, 17, 32, 35, 15, 41, 36, 96, 62, 68, 99, 39, 7, 97, 130, 0, 128, 132, 134], default: [nil, nil, nil, 3, 4, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 3, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil], next: [nil, 1, 1, nil, 1, nil, 1, 2, 3, 4, 5, nil, 6, nil, 7, 8, nil, nil, 1, 9, 10, nil, 11, 12, 13, 38, 14, 41, 15, 16, 16, 16, 17, nil, 18, nil, 16, nil, 16, 16, 16, 19, 20, 21, 1, 1, nil, 1, nil, 1, 11, 12, 22, 3, 3, 3, 24, 24, 24, 24, 26, 1, 24, 24, nil, nil, nil, nil, 31, 32, 33, 34, 33, 35, 36, 37, nil, 23, 26, 26, 26, 26, 26, 31, 33, nil, 4, 4, 4, nil, nil, nil, nil, 24, 25, 26, 27, 26, 28, 29, 30, nil, 39, 39, nil, 12, 12, 31, 31, 16, 16, nil, 40, 40, 33, 33, 16, 16, 16, 42, 42, 40, 40, 16, nil, 16, 16, 16, nil, nil, nil, nil, 24, 25, 26, 27, 26, 28, 29, 30, nil, 31, 31, 31, 33, 33, 33, 43, nil, 43, 42, 42, 44, 44, 44, 44, 44, 44, 40, nil, nil, nil, nil, nil, nil, nil, nil, 40], check: [nil, 0, 0, nil, 0, nil, 0, 0, 0, 0, 0, nil, 0, nil, 0, 0, nil, nil, 0, 0, 0, 4, 0, 0, 0, 10, 0, 38, 0, 0, 0, 0, 0, nil, 0, nil, 0, nil, 0, 0, 0, 0, 0, 0, 1, 1, 3, 1, 3, 1, 9, 9, 3, 24, 24, 24, 25, 26, 26, 26, 30, 1, 27, 27, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 28, 28, 29, 29, 29, 32, 37, 23, 31, 31, 31, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 11, 12, nil, 12, 12, 34, 34, 16, 16, nil, 11, 12, 35, 35, 16, 16, 16, 39, 39, 11, 12, 16, nil, 16, 16, 16, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 33, 33, 33, 36, 36, 36, 40, nil, 40, 42, 42, 40, 40, 43, 43, 44, 44, 42, nil, nil, nil, nil, nil, nil, nil, nil, 42]}}, backup_recovery_states: [nil, nil, nil, true, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, true, true, true, true, true, true, true, true, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil] } }, states: [:initial], stats: {initial: {states: 45, classes: 58, accepting_states: 22}}, diagnostics: [] } })
     def scan_one
       if @__flexr_generated_scan_state != @state
         machine = self.class.__flexr_compiled.machines.fetch(@state)
         @__flexr_generated_scan_state = @state
         @__flexr_generated_scan_dfa = machine.dfa
+        @__flexr_generated_backup_capable = machine.respond_to?(:backup_memo_states)
+        if @__flexr_generated_backup_capable
+          recovery = __flexr_recovers_unmatched? && machine.backup_recovery_states
+          @__flexr_generated_backup = recovery || machine.backup_memo_states
+        end
         @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
+        @__flexr_generated_recover_simple = @__flexr_generated_scan_simple && @__flexr_generated_backup
+        @__flexr_generated_scan_simple = false if @__flexr_generated_recover_simple
+        if @__flexr_generated_scan_simple
+          dfa = @__flexr_generated_scan_dfa
+          @__flexr_generated_layouts ||= {}.compare_by_identity
+          @__flexr_generated_scan_rows = (@__flexr_generated_layouts[dfa] ||= [dfa.start, dfa.ec, dfa.transitions.to_a.freeze, dfa.accepts, self.class.__flexr_rules].freeze)
+          @__flexr_generated_winners ||= {}.compare_by_identity
+          @__flexr_generated_scan_winners = (@__flexr_generated_winners[dfa] ||= dfa.accepts.map do |entries|
+            acceptance = entries.first
+            self.class.__flexr_rules.fetch(acceptance.rule_index) if acceptance
+          end.freeze)
+        end
       end
       dfa = @__flexr_generated_scan_dfa
       return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast
@@ -30,11 +47,8 @@ module GraphqlExample
       return __flexr_generated_scan_simple(dfa, position) if @__flexr_generated_scan_simple
       cursor = position
       current = dfa.start
-      direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
-      ec = dfa.ec
-      source = buffer.stable_source
+      memo_states = @__flexr_generated_backup
+      source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
       guarded_steps = scan_steps_guarded?
       token_start = more_text_start || position
       token_limit = max_token_size
@@ -42,8 +56,9 @@ module GraphqlExample
       best = nil
       accel_mode = @accel_mode
       accelerate = accel_mode != :none && !(accel_mode == :auto && @__flexr_generated_auto_accel_off)
+      accelerate = false if @__flexr_generated_recover_simple && source && !guarded_steps && !check_token_limit && accel_mode == :auto
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
-        if accelerate
+        if accelerate && (guarded_steps || !memo_states&.[](current))
           region = __flexr_generated_acceleration_region(dfa, current)
           acceptance = dfa.accepts[current].first
           token_rule = acceptance&.rule_index
@@ -56,13 +71,7 @@ module GraphqlExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        current = dfa.transition(current, byte)
         break unless current
         cursor += 1
         resource_acceptance = dfa.accepts[current].first
@@ -71,37 +80,42 @@ module GraphqlExample
           size = cursor - token_start
           defer_token_size_check!(size, rule: resource_rule) if size > token_limit
         end
+        if !resource_acceptance && memo_states&.[](current)
+          suffix = __flexr_backup_suffix(dfa, memo_states, current, cursor, position)
+          break if suffix == false
+          if suffix
+            current, cursor = suffix
+          end
+        end
         best = __flexr_generated_acceptance(dfa, current, position, cursor, best)
       end
       best
     end
     def __flexr_generated_scan_simple(dfa, position)
-      current = dfa.start
-      direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
-      ec = dfa.ec
-      accepts = dfa.accepts
-      rules = self.class.__flexr_rules
-      source = buffer.stable_source
-      guarded_steps = scan_steps_guarded?
-      check_token_limit = token_limit_required?
+      current, ec, transitions, accepts, rules = @__flexr_generated_scan_rows
+      source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
+      guarded_steps = @max_steps || @cancellation
+      check_token_limit = @token_limit_required
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
+        winners = @__flexr_generated_scan_winners
         while (byte = source.getbyte(cursor))
-          current = dfa.transition(current, byte)
+          current = transitions[current][ec[byte]]
           break unless current
           cursor += 1
-          acceptance = accepts[current].first
+          acceptance = winners[current]
           next unless acceptance
-          rule = rules.fetch(acceptance.rule_index)
-          best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
-          best.rule = rule
-          best.start_pos = position
-          best.end_pos = cursor
-          best.total_end_pos = cursor
+          winner = acceptance
+          winner_end = cursor
         end
+        return unless winner
+        rule = winner
+        best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
+        best.rule = rule
+        best.start_pos = position
+        best.end_pos = winner_end
+        best.total_end_pos = winner_end
         return best
       end
       token_start = more_text_start || position
@@ -120,13 +134,7 @@ module GraphqlExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        current = dfa.transition(current, byte)
         break unless current
         cursor += 1
         acceptance = accepts[current].first
@@ -166,7 +174,7 @@ module GraphqlExample
           return matched ? cursor : nil if buffer.eof_loaded?
           return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)
         end
-        segment = buffer.source
+        segment = @__flexr_generated_backup_capable ? buffer.__send__(:acceleration_source) : buffer.source
         segment_position = cursor - buffer.base_offset
         if segment.encoding == ::Encoding::UTF_8 && region.utf8_regexp
           regexp = region.utf8_regexp
