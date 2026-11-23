@@ -75,8 +75,6 @@ RSpec.describe "compiler diagnostic locations" do
       '/foo\Bbar/' => 'rule(/foobar/)',
       '/\Ga/' => 'rule(/a/)',
       '/\Aa/' => 'rule(/^a/)',
-      '/a\z/' => 'rule(/a$/)',
-      '/a\Z/' => 'rule(/a$/)',
       '/[\A]/' => 'rule(/[A]/)',
       '/[\B]/' => 'rule(/[B]/)',
       '/[\G]/' => 'rule(/[G]/)',

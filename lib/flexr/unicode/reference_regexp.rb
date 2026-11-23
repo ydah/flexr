@@ -14,16 +14,23 @@ module Flexr
         nil
       end
 
-      def compiled(pattern, encoding:, options: nil, unicode: false, anchored: false, following_lf: false)
+      def compiled(pattern, encoding:, options: nil, unicode: false, anchored: false, following_lf: false, invalid_eof: false)
         effective_options = options.nil? ? pattern.options : options
-        key = [pattern.source, effective_options, encoding, unicode, anchored, following_lf]
+        key = [pattern.source, effective_options, encoding, unicode, anchored, following_lf, invalid_eof]
         return CACHE[key] if CACHE.key?(key)
 
         captures = !pattern.names.empty?
         binary = captures && encoding == Encoding::BINARY
         parser = Regexp::Parser.new(pattern.source, options: effective_options, encoding: encoding, unicode: unicode,
                                    preserve_captures: captures)
-        source = source_for(parser.parse, binary: binary)
+        ast = parser.parse
+        if invalid_eof
+          Regexp::AST.anchors(ast).each do |anchor|
+            anchor.kind = :before_lf if anchor.kind == :line_end
+            anchor.kind = :never if %i[eof final_eol].include?(anchor.kind)
+          end
+        end
+        source = source_for(ast, binary: binary)
         if anchored
           ending = following_lf ? '(?=\n\z)' : '\z'
           source = "\\A(?:#{source})#{ending}"
@@ -35,7 +42,8 @@ module Flexr
 
       def source_for(node, binary: false)
         case node
-        when Regexp::AST::Empty, Regexp::AST::Anchor then ""
+        when Regexp::AST::Empty then ""
+        when Regexp::AST::Anchor then anchor_source(node.kind)
         when Regexp::AST::Fail then "(?!)"
         when Regexp::AST::NotNextLineFeed then '(?!\n)'
         when Regexp::AST::Lookahead
@@ -64,11 +72,22 @@ module Flexr
         when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, binary: binary)})"
         when Regexp::AST::Absence
           child = source_for(node.child, binary: binary)
-          return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child) && !Regexp::AST.lookahead?(node.child)
+          return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child) && !Regexp::AST.right_context?(node.child)
 
           "(?~(?:#{child}))"
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"
+        end
+      end
+
+      def anchor_source(kind)
+        case kind
+        when :line_end then "$"
+        when :eof then '\z'
+        when :final_eol then '\Z'
+        when :before_lf then '(?=\n)'
+        when :never then "(?!)"
+        else ""
         end
       end
 

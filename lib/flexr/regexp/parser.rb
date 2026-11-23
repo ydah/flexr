@@ -123,7 +123,14 @@ module Flexr
         end
 
         if consume?("\\")
-          return parse_linebreak(starting) if consume?("R")
+          case current
+          when "R"
+            advance
+            return parse_linebreak(starting)
+          when "z", "Z"
+            kind = advance == "z" ? :eof : :final_eol
+            return AST::Anchor.new(kind: kind, loc: span(starting))
+          end
 
           parse_escape
           return AST::CharClass.new(ranges: @last_ranges, negated: false, loc: span(starting)) if @last_ranges
@@ -537,47 +544,27 @@ module Flexr
       end
 
       def validate_anchor_positions(node)
-        anchors = anchor_nodes(node)
+        anchors = AST.anchors(node)
         return if anchors.empty?
 
-        sequence = flatten_sequence(node)
-        allowed = [sequence.first, sequence.last].compact
-        boundaries_valid = if sequence.length == 1 && sequence.first.is_a?(AST::Anchor)
-          %i[bol eol].include?(sequence.first.kind)
-        else
-          (!sequence.first.is_a?(AST::Anchor) || sequence.first.kind == :bol) &&
-            (!sequence.last.is_a?(AST::Anchor) || sequence.last.kind == :eol)
-        end
-        valid = !anchor_nested_in_alternative?(node) && anchors.all? { |anchor| allowed.include?(anchor) } && boundaries_valid
-        return if valid
+        trailing = node.is_a?(AST::Seq) ? node.children.reverse_each.find { |part| !part.is_a?(AST::Empty) } : node
+        anchors.each { |anchor| anchor.kind = :line_end if anchor.kind == :eol && !anchor.equal?(trailing) }
+
+        beginnings = anchors.select { |anchor| anchor.kind == :bol }
+        return if beginnings.empty? || (beginnings.one? && beginnings.first.equal?(flatten_sequence(node).first))
 
         raise_diagnostic(
-          diagnostic("FLEXR-E009", "anchors are only valid at the outermost pattern boundaries",
-                     help: "split alternatives into separate rules or move ^/$ outside the alternation")
+          diagnostic("FLEXR-E009", "the beginning-of-line anchor is only valid at the outermost pattern start",
+                     help: "split alternatives into separate rules or move ^ to the start of the pattern")
         )
       end
 
       def flatten_sequence(node)
         return [] if node.is_a?(AST::Empty)
         return node.children.flat_map { |child| flatten_sequence(child) } if node.is_a?(AST::Seq)
+        return flatten_sequence(node.child) if node.is_a?(AST::NamedCapture)
 
         [node]
-      end
-
-      def anchor_nodes(node)
-        return [node] if node.is_a?(AST::Anchor)
-        return anchor_nodes(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat) || node.is_a?(AST::Absence) || node.is_a?(AST::Lookahead)
-        return [] unless node.respond_to?(:children)
-
-        node.children.flat_map { |child| anchor_nodes(child) }
-      end
-
-      def anchor_nested_in_alternative?(node)
-        return node.children.any? { |child| anchor_nodes(child).any? } if node.is_a?(AST::Alt)
-        return anchor_nested_in_alternative?(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat)
-        return false unless node.respond_to?(:children)
-
-        node.children.any? { |child| anchor_nested_in_alternative?(child) }
       end
 
       def reject_postfix_quantifier

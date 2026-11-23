@@ -2,9 +2,9 @@
 
 module Flexr
   module Runtime
-    class ContextualRegexp < Data.define(:regexp, :instructions, :entry)
-      def initialize(regexp:, instructions:, entry:)
-        super(regexp: regexp.freeze, instructions: instructions.each(&:freeze).freeze, entry: entry)
+    class ContextualRegexp < Data.define(:regexp, :invalid_eof, :instructions, :entry)
+      def initialize(regexp:, instructions:, entry:, invalid_eof: nil)
+        super(regexp: regexp.freeze, invalid_eof: invalid_eof&.freeze, instructions: instructions.each(&:freeze).freeze, entry: entry)
       end
 
       def match(lexer, rule, starting, ending: nil)
@@ -12,14 +12,15 @@ module Flexr
         return unless cursor.walk(entry, starting, ending)
 
         subject = cursor.subject
-        return regexp.match(subject) unless ending
+        reference = (invalid_eof if cursor.invalid_end?) || regexp
+        return reference.match(subject) unless ending
 
         offset = ending - starting
         # Constrain Ruby's ordered capture replay to the endpoint chosen by the DFA.
         suffix_size = subject.byteslice(offset..).length
         groups, remainder = suffix_size.divmod(10_000)
         suffix = (".{10000}" * groups) + ".{#{remainder}}"
-        ::Regexp.new("#{regexp.source}(?=(?m:#{suffix})\\z)", regexp.options).match(subject)
+        ::Regexp.new("#{reference.source}(?=(?m:#{suffix})\\z)", reference.options).match(subject)
       end
 
       class Cursor
@@ -32,13 +33,16 @@ module Flexr
           @instructions = instructions
           @utf8 = lexer.utf8_input?
           @loaded_to = ending || starting
-          @terminal = false
         end
 
         AssertionInput = Data.define(:cursor, :origin) do
           def getbyte(position)
-            cursor.read(position, origin)
+            cursor.read(position, origin, raw: true)
           end
+        end
+
+        def invalid_end?
+          @terminal == :invalid
         end
 
         def subject
@@ -102,24 +106,26 @@ module Flexr
           nil
         end
 
-        def read(position, assertion_origin)
-          if position >= @loaded_to
-            return if @terminal
-
+        def read(position, assertion_origin, raw: false)
+          if position >= @loaded_to && !@terminal
             byte = @buffer.getbyte(position)
             if byte && (!@utf8 || @buffer.valid_utf8_at?(position))
               @loaded_to = position + (@utf8 ? @buffer.utf8_character_length(position) : 1)
             else
-              @terminal = true
-              return
+              @terminal = byte ? :invalid : :eof
             end
           end
+          return if position >= @loaded_to && !(raw && invalid_end?)
+
+          byte = @buffer.getbyte(position)
+          return unless byte
+
           @lexer.consume_step!
           if assertion_origin
             from = @ending ? [assertion_origin, @ending].max : assertion_origin
             @lexer.ensure_lookahead_size!(position - from + 1, rule: @rule)
           end
-          @buffer.getbyte(position)
+          byte
         end
 
         private

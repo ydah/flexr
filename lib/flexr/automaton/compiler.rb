@@ -193,8 +193,8 @@ module Flexr
         when :literal
           regexp = pattern_regexp(pattern.operands.first)
           ast = parse_regexp(regexp)
-          if contains_anchor?(ast)
-            diagnostic = Diagnostics.error("FLEXR-E009", "anchors are not allowed inside pattern values",
+          if contains_left_anchor?(ast)
+            diagnostic = Diagnostics.error("FLEXR-E009", "the beginning-of-line anchor is not allowed inside pattern values",
                                            help: "use an anchored regexp directly as a rule pattern")
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
           end
@@ -358,23 +358,24 @@ module Flexr
         else
           Regexp::AST::Seq.new(children: children, loc: nil)
         end
-        if contains_anchor?(body)
+        if contains_left_anchor?(body)
           diagnostic = Diagnostics.error(
-            "FLEXR-E009", "anchors are only valid at the outermost pattern boundaries",
-            help: "split alternatives into separate rules or move ^/$ outside the alternation"
+            "FLEXR-E009", "the beginning-of-line anchor is only valid at the outermost pattern start",
+            help: "split alternatives into separate rules or move ^ to the start of the pattern"
           )
           raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
         end
         [body, bol_only, end_anchor]
       end
 
-      def contains_anchor?(node)
-        return true if node.is_a?(Regexp::AST::Anchor)
-        return contains_anchor?(node.child) if
-          node.is_a?(Regexp::AST::Repeat) || node.is_a?(Regexp::AST::Star) || node.is_a?(Regexp::AST::Absence)
+      def contains_left_anchor?(node)
+        return node.kind == :bol if node.is_a?(Regexp::AST::Anchor)
+        return contains_left_anchor?(node.child) if
+          node.is_a?(Regexp::AST::Repeat) || node.is_a?(Regexp::AST::Star) || node.is_a?(Regexp::AST::Absence) ||
+            node.is_a?(Regexp::AST::Lookahead) || node.is_a?(Regexp::AST::NamedCapture)
         return false unless node.respond_to?(:children)
 
-        node.children.any? { |child| contains_anchor?(child) }
+        node.children.any? { |child| contains_left_anchor?(child) }
       end
 
       def subset_construction(nfa, ec, class_count, operation:)
@@ -500,13 +501,13 @@ module Flexr
                                              help: "use backend :table, :direct, or :auto")
               raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
             end
-            lookahead = Regexp::AST.lookahead?(ast)
-            if lookahead && (@spec.backend == :firstmatch || !regexp.names.empty?)
+            right_context = Regexp::AST.right_context?(ast)
+            if right_context && (@spec.backend == :firstmatch || !regexp.names.empty?)
               contexts = rule.contextual_patterns ||= []
               contexts[index] = prepare_contextual_regexp(rule, regexp, ast)
             end
             prepare_capture_pattern(rule, index, regexp) unless regexp.names.empty?
-            next if @spec.options[:allow_empty_match] || lookahead
+            next if @spec.options[:allow_empty_match] || right_context
             next unless has_absence ? Regexp::AST.nullable?(ast) : regexp.match?("")
 
             reject_empty_match!(Diagnostics.rule_label(rule))
@@ -519,16 +520,26 @@ module Flexr
 
       def prepare_contextual_regexp(rule, regexp, ast)
         @active_rules = [rule]
+        _, _, terminal_line_end = strip_anchors(ast)
         encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
         unless regexp.names.empty?
           ast = Regexp::Parser.new(regexp.source, encoding: encoding, options: regexp.options,
                                    unicode: @spec.options[:unicode] == true, preserve_captures: true).parse
         end
         body = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, prebuilt_properties: false).normalize
-        reference = Unicode::ReferenceRegexp.compiled(regexp, encoding: encoding, unicode: @spec.options[:unicode] == true)
-        reference = ::Regexp.new("\\A(?:#{reference.source})", reference.options)
+        options = { encoding: encoding, unicode: @spec.options[:unicode] == true }
+        reference = contextual_reference(regexp, options, terminal_line_end ? "$" : "")
+        if Regexp::AST.anchors(ast).any? { |anchor| anchor.kind != :bol }
+          before_lf = terminal_line_end ? '(?=\n)' : ""
+          invalid_eof = contextual_reference(regexp, options.merge(invalid_eof: true), before_lf)
+        end
         compiler = ContextualRegexpCompiler.new { |state| enforce_state_limit!(state, "regexp context") }
-        compiler.compile(body, reference)
+        compiler.compile(body, reference, invalid_eof: invalid_eof)
+      end
+
+      def contextual_reference(regexp, options, ending)
+        reference = Unicode::ReferenceRegexp.compiled(regexp, **options)
+        ::Regexp.new("\\A(?:#{reference.source})#{ending}", reference.options)
       end
 
       def prepare_capture_pattern(rule, index, regexp)
@@ -575,7 +586,7 @@ module Flexr
         return unless rule.trailing.is_a?(::Regexp)
 
         ast = parse_regexp(rule.trailing)
-        return unless Regexp::AST.absence?(ast) || Regexp::AST.next_byte_assertion?(ast) || Regexp::AST.lookahead?(ast)
+        return unless Regexp::AST.absence?(ast) || Regexp::AST.next_byte_assertion?(ast) || Regexp::AST.right_context?(ast)
         @active_rules = [rule]
         body, bol_only, end_anchor = strip_anchors(ast)
         condition = Acceptance.new(rule_index: 0, pattern_index: 0, bol_only: bol_only, end_anchor: end_anchor)

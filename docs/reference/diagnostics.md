@@ -136,7 +136,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E005` | A rule can match an empty string | Make it consuming or opt into `allow_empty_match` |
 | `FLEXR-E006` | DFA state limit exceeded | Raise `max_dfa_states` or split rules |
 | `FLEXR-E007` | Bounded repetition exceeds 1000 | Use a smaller bound or split the rule |
-| `FLEXR-E009` | Anchor is not at an outermost boundary | Move `^` / `$` or split alternatives |
+| `FLEXR-E009` | The beginning-of-line anchor is outside the start of the outermost rule pattern | Move `^` or split alternatives |
 | `FLEXR-E010` | Prism reported source syntax errors | Fix Ruby syntax in the specification |
 | `FLEXR-E011` | Encoding is not UTF-8 or binary | Change `encoding` |
 | `FLEXR-E012` | Runtime token exceeded the size limit | Raise `max_token_size` or split the token |
@@ -230,13 +230,12 @@ keep the action. Every flexr rule already starts matching at the current
 lexer position, including after earlier tokens. A `\G` inside a larger
 pattern needs a separate rewrite.
 
-For input without line feeds, `rule(/\Aa/)` can become `rule(/^a/)`, and
-`rule(/a\z/)` or `rule(/a\Z/)` can become `rule(/a$/)`. Keep the action.
-This requires a guarantee about the entire input, not just the token pattern.
+For input without line feeds, `rule(/\Aa/)` can become `rule(/^a/)` with
+the same action. This requires a guarantee about the entire input.
+Ruby's `^` can also match after a line feed. Keep multiline input on
+a state-based rule if it needs to distinguish the start of the source
+from the start of a line.
 [Ruby's line and string anchors](https://docs.ruby-lang.org/en/4.0/Regexp.html)
-differ when line feeds occur: `^` can match after a line feed, `$` can match
-before one, and `\Z` also permits a final line feed. Do not apply these
-examples to multiline input.
 
 For the match-reset example `rule(/a\Kb/) { emit :B }` in `:initial`, the help
 splits the prefix and suffix into separate rules:

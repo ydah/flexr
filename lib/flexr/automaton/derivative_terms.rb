@@ -32,6 +32,7 @@ module Flexr
         when Regexp::AST::Fail then FAIL
         when Regexp::AST::NotNextLineFeed
           guard(end_conditions.fetch(EndContext::EOF | EndContext::OTHER), EMPTY)
+        when Regexp::AST::Anchor then right_anchor(node.kind)
         when Regexp::AST::NamedCapture then from_ast(node.child)
         when Regexp::AST::Lookahead
           @explicit_lookahead = true
@@ -145,6 +146,18 @@ module Flexr
         return FAIL if row == false
 
         intern(:suffix_graph, [id, state], graph.eof.fetch(state) ? UNIVERSE : FAIL)
+      end
+
+      def right_anchor(kind)
+        @explicit_lookahead = true
+        conditions = end_conditions
+        predicate = case kind
+        when :eof then EMPTY
+        when :eol, :line_end then conditions.fetch(EndContext::EOL)
+        when :final_eol then union([EMPTY, intern(:byte, [0x0a, 0x0a], FAIL)])
+        else raise CompileError, "cannot derive the #{kind} anchor"
+        end
+        guard(predicate, EMPTY)
       end
 
       def end_conditions
