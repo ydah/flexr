@@ -217,6 +217,7 @@ module Flexr
         rule.states.freeze
         rule.pattern_conditions&.each(&:freeze)
         rule.pattern_conditions&.freeze
+        rule.capture_patterns&.each { |variant| variant.freeze if variant.is_a?(Array) }
         rule.capture_patterns&.freeze
         rule.freeze
       end

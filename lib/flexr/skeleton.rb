@@ -181,7 +181,7 @@ module Flexr
         byte = bytes.getbyte(offset)
         if encoding_state.zero?
           dfa.accepts.fetch(current).each do |acceptance|
-            next if acceptance.end_anchor && byte && byte != 0x0a
+            next if acceptance.end_anchor && !acceptance.valid_end?(byte)
 
             rule_bodies << { rule: acceptance.rule_index, bytes: offset }
           end

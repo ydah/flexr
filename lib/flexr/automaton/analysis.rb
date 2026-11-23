@@ -43,7 +43,11 @@ module Flexr
             next unless next_second
 
             next_input = input + byte.chr(Encoding::BINARY)
-            next_first_seen = first_seen || accepting?(first, next_first)
+            next_first_seen = if first.context_dependent_end?
+              first_seen || accepting?(first, first_state, byte)
+            else
+              first_seen || accepting?(first, next_first)
+            end
             return next_input if next_first_seen && accepting?(second, next_second) && !accepting?(first, next_first)
 
             key = [next_first, next_second, next_first_seen]
@@ -58,11 +62,60 @@ module Flexr
 
       def joint_byte_representatives(first, second)
         representatives = {}
+        split_line_feed = first.context_dependent_end? || second.context_dependent_end?
         256.times do |byte|
           key = [first.ec[byte], second.ec[byte]]
+          key << (byte == 0x0a) if split_line_feed
           representatives[key] ||= byte
         end
         representatives.values.sort_by { |byte| [byte.between?(32, 126) ? 0 : 1, byte] }
+      end
+
+      def contextual_winners(dfa)
+        bytes = joint_byte_representatives(dfa, dfa).map { |byte| [byte, EndContext.for_byte(byte)] }
+        [true, false].flat_map do |bol|
+          winners = dfa.accepts.map do |labels|
+            [nil, 0x0a, 0x20].to_h do |byte|
+              winner = labels.find { |label| (bol || !label.bol_only) && label.valid_end?(byte) }
+              [EndContext.for_byte(byte), winner&.rule_index]
+            end
+          end
+          rejecting = rejecting_suffixes(dfa, winners, bytes)
+          winners.each_with_index.flat_map do |row, state|
+            before_byte = bytes.filter_map do |byte, context|
+              target = dfa.transition(state, byte)
+              row.fetch(context) if target.nil? || rejecting[target]
+            end
+            before_byte << row.fetch(EndContext::EOF)
+          end.compact
+        end.uniq
+      end
+
+      # A shorter match can win only if the rest of the scan finds no match.
+      def rejecting_suffixes(dfa, winners, bytes)
+        parents = Array.new(dfa.states) { [] }
+        queue = []
+        rejecting = Array.new(dfa.states, false)
+        winners.each_with_index do |row, state|
+          targets = bytes.reject { |_, context| row.fetch(context) }.map { |byte, _| dfa.transition(state, byte) }.uniq
+          if row.fetch(EndContext::EOF).nil? || targets.include?(nil)
+            rejecting[state] = true
+            queue << state
+          else
+            targets.each { |target| parents.fetch(target) << state }
+          end
+        end
+        cursor = 0
+        while cursor < queue.length
+          parents.fetch(queue.fetch(cursor)).each do |parent|
+            next if rejecting[parent]
+
+            rejecting[parent] = true
+            queue << parent
+          end
+          cursor += 1
+        end
+        rejecting
       end
 
       def shadowing_examples(dfa, rule_indices, include_empty: false, include_unshadowed: false)
@@ -78,6 +131,7 @@ module Flexr
         while cursor < queue.length
           state = queue.fetch(cursor).first
           accepts = dfa.accepts.fetch(state)
+          accepts = accepts.select { |label| label.valid_end?(nil) } if dfa.context_dependent_end?
           winner = accepts.first&.rule_index
           if (include_empty || cursor.positive?) && winner
             shadowed = accepts.map(&:rule_index).uniq.select do |index|
@@ -177,7 +231,7 @@ module Flexr
           if encoding != Encoding::UTF_8 || input.byteslice(0, cursor).force_encoding(encoding).valid_encoding?
             dfa.accepts.fetch(state).each do |acceptance|
               next if acceptance.bol_only && !at_line_start
-              next if acceptance.end_anchor && cursor < input.bytesize && input.getbyte(cursor) != 0x0a
+              next if acceptance.end_anchor && !acceptance.valid_end?(input.getbyte(cursor))
 
               matches << [acceptance.rule_index, cursor - offset]
             end
@@ -228,8 +282,8 @@ module Flexr
         length
       end
 
-      def accepting?(dfa, state)
-        state && !dfa.accepts.fetch(state).empty?
+      def accepting?(dfa, state, following_byte = nil)
+        state && dfa.accepts.fetch(state).any? { |acceptance| !acceptance.end_anchor || acceptance.valid_end?(following_byte) }
       end
     end
   end

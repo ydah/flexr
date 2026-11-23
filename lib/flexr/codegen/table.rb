@@ -29,6 +29,7 @@ module Flexr
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         captures = compiled.rules.any?(&:capture_patterns)
+        contextual_end = compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? }
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
         fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
         lines << "#{indent}def scan_one"
@@ -255,6 +256,7 @@ module Flexr
         end
         lines << "#{indent}end"
         lines << "#{indent}def __flexr_generated_simple_fast_path?(dfa)"
+        lines << "#{indent}  return false if dfa.context_dependent_end?" if contextual_end
         lines << "#{indent}  @__flexr_generated_simple_fast_paths ||= {}"
         lines << "#{indent}  return @__flexr_generated_simple_fast_paths[dfa] if @__flexr_generated_simple_fast_paths.key?(dfa)"
         lines << "#{indent}  rules = dfa.rule_ids.map { |rule_index| self.class.__flexr_rules.fetch(rule_index) }"
@@ -265,15 +267,18 @@ module Flexr
         lines << "#{indent}def __flexr_generated_acceptance(dfa, state, start_position, cursor, best)"
         lines << "#{indent}  dfa.accepts[state].each do |acceptance|"
         lines << "#{indent}    next if acceptance.bol_only && !beginning_of_line?"
-        lines << "#{indent}    next if acceptance.end_anchor && !(buffer.eof?(cursor) || buffer.getbyte(cursor) == 0x0a)"
+        next_byte_check = if contextual_end
+          "!acceptance.valid_end?(buffer.getbyte(cursor))"
+        else
+          "!(buffer.eof?(cursor) || buffer.getbyte(cursor) == 0x0a)"
+        end
+        lines << "#{indent}    next if acceptance.end_anchor && #{next_byte_check}"
         lines << "#{indent}    rule = self.class.__flexr_rules.fetch(acceptance.rule_index)"
         lines << "#{indent}    next if best && cursor < best.total_end_pos"
         lines << "#{indent}    next if best && cursor == best.total_end_pos &&"
         priority_check = compiled.rules.any? { |rule| !rule.priority.zero? }
         lines << "#{indent}      #{priority_check ? 'rule.loses_priority_tie?(best.rule)' : 'rule.index > best.rule.index'}"
-        if captures
-          lines << "#{indent}    next if best && cursor == best.end_pos && rule.equal?(best.rule) && rule.capture_patterns"
-        end
+        lines << "#{indent}    next if best && cursor == best.end_pos && rule.equal?(best.rule) && rule.capture_patterns" if captures
         lines << "#{indent}    best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
         lines << "#{indent}    best.rule = rule"
         lines << "#{indent}    best.start_pos = start_position"

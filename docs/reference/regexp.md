@@ -16,7 +16,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `\d`, `\w`, `\s` | Supported | Unicode-aware with `option :unicode` in UTF-8 |
 | `\h`, `\H` | Supported | Hexadecimal digits and their complement |
 | Octal escapes such as `\011` | Supported | Match bytes in binary mode and complete encoded characters in UTF-8 |
-| `\R` | Unsupported | Use the standalone line-break rule shown by `FLEXR-E014` for the specification's encoding |
+| `\R` | Supported | Recognizes CRLF as one atomic line break |
 | Lookahead / lookbehind | Unsupported | Use `followed_by:` for trailing positive lookahead; other forms need rules or states; `FLEXR-E014` |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
 | `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
@@ -58,6 +58,14 @@ In UTF-8, consecutive escaped bytes can form a multibyte character. For
 example, `\303\251` and `\303\xA9` both match `é`. In binary mode, `\377`
 matches the byte `0xff`.
 [Ruby's regexp escape syntax](https://docs.ruby-lang.org/ja/4.0/doc/spec=2fregexp.html)
+
+## Line breaks
+
+`\R` matches CRLF, CR, LF, vertical tab, or form feed. In UTF-8 it also
+matches U+0085, U+2028, and U+2029. CRLF is atomic. For example, `/\R\n/`
+accepts CRLF followed by an additional LF. A CR followed by LF belongs to
+the pair even when the LF falls beyond the end of a candidate token.
+See [Ruby's line break syntax](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Shorthand+Character+Classes).
 
 ## Absence groups
 

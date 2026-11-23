@@ -24,7 +24,7 @@ module Flexr
         index = 0
         while index < states.length
           vector = states.fetch(index)
-          accepts << vector.filter_map { |pattern, term| conditions.fetch(pattern) if terms.nullable?(term) }.uniq
+          accepts << terms.accepting_conditions(vector, conditions)
           transitions << representatives.each_with_index.map do |byte, class_id|
             successor = advance(vector, terms, byte, class_id)
             next if successor.empty?

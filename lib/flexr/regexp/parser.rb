@@ -123,6 +123,8 @@ module Flexr
         end
 
         if consume?("\\")
+          return parse_linebreak(starting) if consume?("R")
+
           parse_escape
           return AST::CharClass.new(ranges: @last_ranges, negated: false, loc: span(starting)) if @last_ranges
           return AST::ByteRange.new(lo: @last_byte, hi: @last_byte, loc: span(starting)) if @escaped_byte
@@ -433,13 +435,6 @@ module Flexr
         when "z", "Z"
           raise unsupported("\\#{char}",
                             "for input without line feeds, rewrite rule(/a\\#{char}/) as rule(/a$/); keep the action; line boundaries differ from string boundaries")
-        when "R"
-          example = if @encoding == Encoding::BINARY
-            'rule(/\r\n|[\n\v\f\r]/n)'
-          else
-            'rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/)'
-          end
-          raise unsupported("\\R", "for a standalone line-break token, use #{example}; keep the action")
         when "K"
           raise unsupported("\\K",
                             'for /a\Kb/ in :initial, use rule(/a/, followed_by: /b/) { begin_state :suffix }; state(:suffix) { rule(/b/) { begin_state :initial; emit :B } }; keep the action on the suffix rule after returning to :initial; choose an unused state name')
@@ -460,13 +455,26 @@ module Flexr
         when "k"
           read_until(">") if consume?("<")
           reject_backreference("backreferences")
-        when *LITERAL_ESCAPES
+        when "R", *LITERAL_ESCAPES
           @escaped_value = true
           @last_codepoint = char.ord
         else
           raise unsupported("unknown escape \\#{char}",
                             'if q is literal, rewrite rule(/\q/) as rule(/q/); otherwise use a supported escape; keep the action')
         end
+      end
+
+      def parse_linebreak(starting)
+        location = span(starting)
+        cr = AST::CodepointRange.new(lo: 0x0d, hi: 0x0d, loc: location)
+        lf = AST::CodepointRange.new(lo: 0x0a, hi: 0x0a, loc: location)
+        condition = AST::NotNextLineFeed.new(loc: location)
+        crlf = AST::Seq.new(children: [cr, lf], loc: location)
+        lone_cr = AST::Seq.new(children: [cr, condition], loc: location)
+        ranges = [[0x0a, 0x0c]]
+        ranges.push([0x85, 0x85], [0x2028, 0x2029]) unless @encoding == Encoding::BINARY
+        singles = AST::CharClass.new(ranges: ranges, negated: false, loc: location)
+        AST::Alt.new(children: [crlf, lone_cr, singles], loc: location)
       end
 
       def parse_numbered_escape(first)

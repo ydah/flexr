@@ -32,6 +32,7 @@ module Flexr
         case kind
         when :empty then "ε"
         when :fail then "∅"
+        when :not_next_lf then '(?!\n)'
         when :byte then byte_range(*parts)
         when :sequence then parts.map { |part| expression(part) }.join
         when :union then "(?:#{parts.map { |part| expression(part) }.join('|')})"

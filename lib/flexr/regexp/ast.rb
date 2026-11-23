@@ -18,6 +18,7 @@ module Flexr
       ByteAutomaton = Struct.new(:fragment)
       NamedCapture = Struct.new(:opening, :child, keyword_init: true)
       Anchor = Struct.new(:kind, :loc, keyword_init: true)
+      NotNextLineFeed = Struct.new(:loc, keyword_init: true)
       TrailMark = Struct.new(:rule_id, :loc, keyword_init: true)
       CharClass = Struct.new(:ranges, :negated, :loc, keyword_init: true)
       Property = Module.new
@@ -26,7 +27,7 @@ module Flexr
         def to_s
           name = self.class.name.split("::").last
           case name
-          when "Empty", "Fail" then name
+          when "Empty", "Fail", "NotNextLineFeed" then name
           when "ByteRange" then "ByteRange(#{lo}..#{hi})"
           when "CodepointRange" then "CodepointRange(#{lo}..#{hi})"
           when "Anchor" then "Anchor(#{kind})"
@@ -40,7 +41,7 @@ module Flexr
       end
 
       [Empty, Fail, ByteRange, CodepointRange, Seq, Alt, Star, Repeat, Absence, Difference, Intersection,
-       Anchor, TrailMark, CharClass].each do |node_class|
+       Anchor, NotNextLineFeed, TrailMark, CharClass].each do |node_class|
         node_class.include(Formatting)
       end
 
@@ -53,9 +54,18 @@ module Flexr
         end
       end
 
+      def self.next_byte_assertion?(node)
+        case node
+        when NotNextLineFeed then true
+        when Seq, Alt then node.children.any? { |child| next_byte_assertion?(child) }
+        when Star, Repeat, Absence, NamedCapture then next_byte_assertion?(node.child)
+        else false
+        end
+      end
+
       def self.nullable?(node)
         case node
-        when Empty, Anchor, Star then true
+        when Empty, Anchor, NotNextLineFeed, Star then true
         when Repeat then node.minimum.zero? || nullable?(node.child)
         when NamedCapture then nullable?(node.child)
         when Seq then node.children.all? { |child| nullable?(child) }

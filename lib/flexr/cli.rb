@@ -345,7 +345,7 @@ module Flexr
             rule = compiled.rules.fetch(acceptance.rule_index)
             pattern = rule.patterns.fetch(acceptance.pattern_index)
             description = pattern.is_a?(Pattern) ? "#{rule.index} #{pattern.inspect}" : rule.index
-            "#{description}#{channel_label(rule)}#{priority_label(rule)}"
+            "#{description}#{channel_label(rule)}#{priority_label(rule)}#{next_byte_label(acceptance)}"
           end.uniq.join(",")
           label = "#{node_name}\naccept=#{label}" unless label.empty?
           attributes = dot_node_attributes(label, accepting: accepting, accelerated: accelerated_states[state])
@@ -357,6 +357,17 @@ module Flexr
       end
       out.puts "}"
       EXIT_OK
+    end
+
+    def next_byte_label(acceptance)
+      mask = acceptance.end_anchor
+      return "" unless mask.is_a?(Integer)
+
+      names = []
+      names << "EOF" if mask.anybits?(Automaton::EndContext::EOF)
+      names << "LF" if mask.anybits?(Automaton::EndContext::LF)
+      names << "byte other than LF" if mask.anybits?(Automaton::EndContext::OTHER)
+      " (next = #{names.join(' or ')})"
     end
 
     def dot_node_attributes(label, accepting:, accelerated:)

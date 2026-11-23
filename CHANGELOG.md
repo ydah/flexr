@@ -7,6 +7,7 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Use `\R` to match line breaks, including atomic CRLF pairs.
 - Use Ruby-style octal escapes in regexp rules and character classes, including
   UTF-8 sequences such as `\303\251` and binary bytes such as `\377`.
 - Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes. Set it to `nil` to disable the cache.

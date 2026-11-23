@@ -129,6 +129,35 @@ RSpec.describe "runtime and generated parity" do
     expect(outcomes_for(source, "OctalParityLexer", [input], streaming: true).values).to all(eq(expected))
   end
 
+  it "uses the following LF when replaying captures from a CR token" do
+    source = <<~'RUBY'
+      require "flexr"
+      class LinebreakCaptureLexer < Flexr::Lexer
+        rule(/(?<atomic>\R)|(?<literal>\r)/, followed_by: /\n/) do
+          emit :BREAK, [captures[:atomic], captures[:literal]]
+        end
+        rule(/\n/, skip: true)
+      end
+    RUBY
+    expected = [[["BREAK", [nil, "\r"]]]]
+    expect(outcomes_for(source, "LinebreakCaptureLexer", ["\r\n"], streaming: true).values).to all(eq(expected))
+  end
+
+  %i[table direct].each do |backend|
+    it "keeps CRLF atomic in streamed #{backend} scanners" do
+      source = <<~'RUBY'.sub("BACKEND", backend.to_s)
+        require "flexr"
+        class LinebreakParityLexer < Flexr::Lexer
+          backend :BACKEND
+          rule(/\R\n/, emit: :PAIR)
+          rule(/[\r\n]/, emit: :BYTE)
+        end
+      RUBY
+      expected = [[["BYTE", "\r"], ["BYTE", "\n"], ["PAIR", "\r\n\n"]]]
+      expect(outcomes_for(source, "LinebreakParityLexer", ["\r\n\r\n\n"], streaming: true).values).to all(eq(expected))
+    end
+  end
+
   %i[table direct auto].each do |backend|
     it "ends absence comments at the first close in every #{backend} scanner" do
       source = <<~'RUBY'.sub("BACKEND", backend.to_s)

@@ -295,24 +295,6 @@ The example does not cover Unicode graphemes or `\X` inside larger patterns.
 Unicode graphemes need separate segmentation, such as Ruby's
 [`String#each_grapheme_cluster`](https://docs.ruby-lang.org/en/4.0/String.html#method-i-each_grapheme_cluster).
 
-For `\R`, the help chooses a standalone line-break rule for the specification's
-encoding. In UTF-8, use:
-
-```ruby
-rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/) { emit :NEWLINE }
-```
-
-This covers the [line breaks recognized by Ruby's `\R`](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Shorthand+Character+Classes).
-With `encoding Encoding::BINARY`, the example uses only ASCII line breaks:
-
-```ruby
-rule(/\r\n|[\n\v\f\r]/n) { emit :NEWLINE }
-```
-
-CRLF comes first so that `firstmatch` also consumes the pair as one token.
-Apply these examples as separate token rules. Replacing `\R` inside a larger
-expression can change how the surrounding pattern matches.
-
 ## Warnings
 
 | Code | Meaning | First fix to try |
