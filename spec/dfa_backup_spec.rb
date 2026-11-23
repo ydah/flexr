@@ -3,12 +3,15 @@
 require "stringio"
 
 RSpec.describe "DFA backup analysis" do
-  def backup_for(*patterns)
+  def dfa_for(*patterns)
     lexer = Class.new(Flexr::Lexer) do
       patterns.each { |pattern| rule(pattern, emit: :TOKEN) }
     end
-    dfa = lexer.compile!.machines.fetch(:initial).dfa
-    Flexr::Automaton::Analysis.backup(dfa)
+    lexer.compile!.machines.fetch(:initial).dfa
+  end
+
+  def backup_for(*patterns)
+    Flexr::Automaton::Analysis.backup(dfa_for(*patterns))
   end
 
   it "reports zero when a successful transition after acceptance always accepts again" do
@@ -45,6 +48,26 @@ RSpec.describe "DFA backup analysis" do
 
   it "counts UTF-8 transitions in bytes" do
     expect(backup_for(/x/, /xéz/)).to have_attributes(maximum_bytes: 2, example: nil, cycle: nil)
+  end
+
+  it "selects nonaccepting cycle states and excludes bounded branches from the failure table" do
+    dfa = dfa_for(/a/, /a*b/, /az{3}x/)
+    states, = Flexr::Automaton::Analysis.backup_memo_states(dfa)
+    after_a = dfa.transition(dfa.start, "a".ord)
+    after_aa = dfa.transition(after_a, "a".ord)
+    after_az = dfa.transition(after_a, "z".ord)
+
+    expect(states[after_a]).to be_falsey
+    expect(states[after_aa]).to be true
+    expect(states[after_az]).to be_falsey
+  end
+
+  it "adds cycles before the first acceptance when scanning can recover from an unmatched byte" do
+    dfa = dfa_for(/a*b/)
+    states, recovery_states = Flexr::Automaton::Analysis.backup_memo_states(dfa)
+
+    expect(states).to be_nil
+    expect(recovery_states[dfa.transition(dfa.start, "a".ord)]).to be true
   end
 
   context "when inspecting a lexer specification" do

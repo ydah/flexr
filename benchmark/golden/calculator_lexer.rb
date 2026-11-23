@@ -34,7 +34,7 @@ module CalculatorExample
       direct_nxt = direct&.fetch(:nxt)
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
-      source = buffer.stable_source
+      source = @__flexr_stable_scan_source || buffer.stable_source
       guarded_steps = scan_steps_guarded?
       token_start = more_text_start || position
       token_limit = max_token_size
@@ -82,26 +82,30 @@ module CalculatorExample
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
       accepts = dfa.accepts
+      transitions = dfa.transitions
       rules = self.class.__flexr_rules
-      source = buffer.stable_source
-      guarded_steps = scan_steps_guarded?
-      check_token_limit = token_limit_required?
+      source = @__flexr_stable_scan_source || buffer.stable_source
+      guarded_steps = @max_steps || @cancellation
+      check_token_limit = @token_limit_required
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
         while (byte = source.getbyte(cursor))
-          current = dfa.transition(current, byte)
+          current = transitions[current][ec[byte]]
           break unless current
           cursor += 1
           acceptance = accepts[current].first
           next unless acceptance
-          rule = rules.fetch(acceptance.rule_index)
-          best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
-          best.rule = rule
-          best.start_pos = position
-          best.end_pos = cursor
-          best.total_end_pos = cursor
+          winner = acceptance
+          winner_end = cursor
         end
+        return unless winner
+        rule = rules.fetch(winner.rule_index)
+        best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
+        best.rule = rule
+        best.start_pos = position
+        best.end_pos = winner_end
+        best.total_end_pos = winner_end
         return best
       end
       token_start = more_text_start || position

@@ -222,6 +222,19 @@ oversized match. `max_lookahead_size` separately bounds trailing context, and
 `max_buffer_size` bounds bytes retained at one time. `max_steps` and
 `cancellation` bound CPU work cooperatively.
 
+For ordinary longest-match scanning, flexr reuses failed DFA continuations
+on frozen strings and append-only IO. The lexer keeps these records with
+the input's buffer, so it can reuse them after a shorter match or after
+returning from a pushed input. Records behind the active window expire as
+the scanner advances. A checkpoint can still be restored while the
+required bytes are retained.
+
+The optimization applies to DFA body traversal. Trailing context and
+rule actions can read additional bytes. The scanner uses direct traversal
+when a caller can mutate the backing string or configures a step limit or
+cancellation callback. Regenerate existing generated and standalone
+lexers to pick up the optimization.
+
 ## Input stack
 
 `push_input(input, filename: nil)` accepts a `String` or an object responding

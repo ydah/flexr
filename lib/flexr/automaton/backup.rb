@@ -17,7 +17,7 @@ module Flexr
       end
 
       def analyze
-        roots = reachable_states.select { |state| @accepting[state] }.flat_map { |state| @extensions[state] }.uniq
+        roots = backup_roots
         return Result.new(0, nil, nil) if roots.empty?
 
         order = finishing_order(roots)
@@ -28,7 +28,25 @@ module Flexr
         Result.new(nil, prefix.freeze, shortest_cycle(state).freeze)
       end
 
+      def memo_states
+        roots = backup_roots
+        body = cyclic_states_from(roots)
+        recovery = cyclic_states_from(roots + [@dfa.start]) unless @accepting[@dfa.start]
+        [body, recovery == body ? nil : recovery]
+      end
+
       private
+
+      def backup_roots
+        reachable_states.select { |state| @accepting[state] }.flat_map { |state| @extensions[state] }.uniq
+      end
+
+      def cyclic_states_from(roots)
+        return if roots.empty?
+
+        cycles = cycle_states(finishing_order(roots))
+        cycles.freeze if cycles.any?
+      end
 
       def reachable_states
         seen = Array.new(@dfa.states)

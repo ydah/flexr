@@ -17,14 +17,21 @@ module ToyLang
     DIGIT = /[0-9]/
     IDENT = /[A-Za-z_]/
 
-    Flexr::Generated.install_compiled!(self, { artifact: {schema_version: 2, compiler_version: "<compiler-version>", runtime_abi_version: 2, unicode_version: "15.1.0"}, rules: [{ index: 0, patterns: [/[ \t\r\n]+/], pattern_conditions: [[0, 0, false, false]], trailing: nil, action: :skip, states: [:initial], bol_only: false, end_anchor: nil }, { index: 1, patterns: [/(?-imx:[0-9])+/], pattern_conditions: [[1, 0, false, false]], trailing: nil, action: :__flexr_generated_method, states: [:initial], bol_only: false, end_anchor: nil }, { index: 2, patterns: [/(?-imx:[A-Za-z_])[A-Za-z_0-9]*/], pattern_conditions: [[2, 0, false, false]], trailing: nil, action: :__flexr_generated_method, states: [:initial], bol_only: false, end_anchor: nil }, { index: 3, patterns: [/\+/], pattern_conditions: [[3, 0, false, false]], trailing: nil, action: :__flexr_generated_method, states: [:initial], bol_only: false, end_anchor: nil }, { index: 4, patterns: [/"(?:\\.|[^"\\])*"/], pattern_conditions: [[4, 0, false, false]], trailing: nil, action: proc{ emit :STRING, text[1...-1] }, states: [:initial], bol_only: false, end_anchor: nil }], backend: :table, token_kind: :array, encoding: Encoding::UTF_8, declared_tokens: [:INT, :IDENT, :PLUS, :STRING], options: {}, eof_rules: {  }, states: [], inclusive_states: {initial: true}, compiled: { machines: { :initial => { state_name: :initial, dfa: {accepts: [[], [[0, 0, false, false]], [], [[3, 0, false, false]], [[1, 0, false, false]], [[2, 0, false, false]], [[4, 0, false, false]], [], [], [], [], [], [], [], []], ec: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 10, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 15, 16, 17, 17, 18, 19, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 25, 25, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 27, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 29, 30, 30, 31, 32, 32, 32, 33, 34, 34, 34, 34, 34, 34, 34, 34, 34, 34, 34], class_count: 35, state_count: 15, start: 0, rule_ids: [0, 1, 2, 3, 4], packed: {base: [0, 15, 7, 0, 1, 30, 0, 41, 2, 3, 23, 29, 30, 33, 0], default: [nil, nil, 2, nil, nil, nil, nil, 2, nil, nil, nil, nil, nil, nil, nil], next: [nil, 1, 1, nil, 1, nil, 1, nil, 2, nil, 3, nil, 4, 4, 5, 6, 1, 1, 5, 1, 5, 1, 10, 7, 2, 2, 2, 8, nil, nil, nil, nil, nil, 8, 9, 10, 11, 10, 12, 13, 14, nil, 5, nil, 5, 8, 8, 8, 5, nil, 5, 8, 8, 10, 10, 10, 10, 10, nil, nil, nil, nil, nil, nil, nil, nil, nil, 8, 9, 10, 11, 10, 12, 13, 14, nil], check: [nil, 0, 0, nil, 0, nil, 0, nil, 0, nil, 0, nil, 0, 4, 0, 2, 1, 1, 0, 1, 0, 1, 14, 2, 8, 8, 8, 9, nil, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5, 7, 5, 10, 10, 10, 5, nil, 5, 11, 11, 12, 12, 13, 13, 13, nil, nil, nil, nil, nil, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]}} } }, states: [:initial], stats: {initial: {states: 15, classes: 35, accepting_states: 5}}, diagnostics: [] } })
+    Flexr::Generated.install_compiled!(self, { artifact: {schema_version: 2, compiler_version: "<compiler-version>", runtime_abi_version: 2, unicode_version: "15.1.0"}, rules: [{ index: 0, patterns: [/[ \t\r\n]+/], pattern_conditions: [[0, 0, false, false]], trailing: nil, action: :skip, states: [:initial], bol_only: false, end_anchor: nil }, { index: 1, patterns: [/(?-imx:[0-9])+/], pattern_conditions: [[1, 0, false, false]], trailing: nil, action: :__flexr_generated_method, states: [:initial], bol_only: false, end_anchor: nil }, { index: 2, patterns: [/(?-imx:[A-Za-z_])[A-Za-z_0-9]*/], pattern_conditions: [[2, 0, false, false]], trailing: nil, action: :__flexr_generated_method, states: [:initial], bol_only: false, end_anchor: nil }, { index: 3, patterns: [/\+/], pattern_conditions: [[3, 0, false, false]], trailing: nil, action: :__flexr_generated_method, states: [:initial], bol_only: false, end_anchor: nil }, { index: 4, patterns: [/"(?:\\.|[^"\\])*"/], pattern_conditions: [[4, 0, false, false]], trailing: nil, action: proc{ emit :STRING, text[1...-1] }, states: [:initial], bol_only: false, end_anchor: nil }], backend: :table, token_kind: :array, encoding: Encoding::UTF_8, declared_tokens: [:INT, :IDENT, :PLUS, :STRING], options: {}, eof_rules: {  }, states: [], inclusive_states: {initial: true}, compiled: { machines: { :initial => { state_name: :initial, dfa: {accepts: [[], [[0, 0, false, false]], [], [[3, 0, false, false]], [[1, 0, false, false]], [[2, 0, false, false]], [[4, 0, false, false]], [], [], [], [], [], [], [], []], ec: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 10, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 15, 16, 17, 17, 18, 19, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 25, 25, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 27, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 29, 30, 30, 31, 32, 32, 32, 33, 34, 34, 34, 34, 34, 34, 34, 34, 34, 34, 34], class_count: 35, state_count: 15, start: 0, rule_ids: [0, 1, 2, 3, 4], packed: {base: [0, 15, 7, 0, 1, 30, 0, 41, 2, 3, 23, 29, 30, 33, 0], default: [nil, nil, 2, nil, nil, nil, nil, 2, nil, nil, nil, nil, nil, nil, nil], next: [nil, 1, 1, nil, 1, nil, 1, nil, 2, nil, 3, nil, 4, 4, 5, 6, 1, 1, 5, 1, 5, 1, 10, 7, 2, 2, 2, 8, nil, nil, nil, nil, nil, 8, 9, 10, 11, 10, 12, 13, 14, nil, 5, nil, 5, 8, 8, 8, 5, nil, 5, 8, 8, 10, 10, 10, 10, 10, nil, nil, nil, nil, nil, nil, nil, nil, nil, 8, 9, 10, 11, 10, 12, 13, 14, nil], check: [nil, 0, 0, nil, 0, nil, 0, nil, 0, nil, 0, nil, 0, 4, 0, 2, 1, 1, 0, 1, 0, 1, 14, 2, 8, 8, 8, 9, nil, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5, 7, 5, 10, 10, 10, 5, nil, 5, 11, 11, 12, 12, 13, 13, 13, nil, nil, nil, nil, nil, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]}}, backup_recovery_states: [nil, nil, true, nil, nil, nil, nil, true, true, true, true, true, true, true, true] } }, states: [:initial], stats: {initial: {states: 15, classes: 35, accepting_states: 5}}, diagnostics: [] } })
     def scan_one
       if @__flexr_generated_scan_state != @state
         machine = self.class.__flexr_compiled.machines.fetch(@state)
         @__flexr_generated_scan_state = @state
         @__flexr_generated_scan_dfa = machine.dfa
+        @__flexr_generated_backup_capable = machine.respond_to?(:backup_memo_states)
+        if @__flexr_generated_backup_capable
+          recovery = __flexr_recovers_unmatched? && machine.backup_recovery_states
+          @__flexr_generated_backup = recovery || machine.backup_memo_states
+        end
         @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
+        @__flexr_generated_recover_simple = @__flexr_generated_scan_simple && @__flexr_generated_backup
+        @__flexr_generated_scan_simple = false if @__flexr_generated_recover_simple
       end
       dfa = @__flexr_generated_scan_dfa
       return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast
@@ -37,7 +44,8 @@ module ToyLang
       direct_nxt = direct&.fetch(:nxt)
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
-      source = buffer.stable_source
+      memo_states = @__flexr_generated_backup
+      source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
       guarded_steps = scan_steps_guarded?
       token_start = more_text_start || position
       token_limit = max_token_size
@@ -45,8 +53,9 @@ module ToyLang
       best = nil
       accel_mode = @accel_mode
       accelerate = accel_mode != :none && !(accel_mode == :auto && @__flexr_generated_auto_accel_off)
+      accelerate = false if @__flexr_generated_recover_simple && source && !guarded_steps && !check_token_limit && accel_mode == :auto
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
-        if accelerate
+        if accelerate && (guarded_steps || !memo_states&.[](current))
           region = __flexr_generated_acceleration_region(dfa, current)
           acceptance = dfa.accepts[current].first
           token_rule = acceptance&.rule_index
@@ -74,6 +83,13 @@ module ToyLang
           size = cursor - token_start
           defer_token_size_check!(size, rule: resource_rule) if size > token_limit
         end
+        if !resource_acceptance && memo_states&.[](current)
+          suffix = __flexr_backup_suffix(dfa, memo_states, current, cursor, position)
+          break if suffix == false
+          if suffix
+            current, cursor = suffix
+          end
+        end
         best = __flexr_generated_acceptance(dfa, current, position, cursor, best)
       end
       best
@@ -85,26 +101,30 @@ module ToyLang
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
       accepts = dfa.accepts
+      transitions = dfa.transitions
       rules = self.class.__flexr_rules
-      source = buffer.stable_source
-      guarded_steps = scan_steps_guarded?
-      check_token_limit = token_limit_required?
+      source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
+      guarded_steps = @max_steps || @cancellation
+      check_token_limit = @token_limit_required
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
         while (byte = source.getbyte(cursor))
-          current = dfa.transition(current, byte)
+          current = transitions[current][ec[byte]]
           break unless current
           cursor += 1
           acceptance = accepts[current].first
           next unless acceptance
-          rule = rules.fetch(acceptance.rule_index)
-          best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
-          best.rule = rule
-          best.start_pos = position
-          best.end_pos = cursor
-          best.total_end_pos = cursor
+          winner = acceptance
+          winner_end = cursor
         end
+        return unless winner
+        rule = rules.fetch(winner.rule_index)
+        best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
+        best.rule = rule
+        best.start_pos = position
+        best.end_pos = winner_end
+        best.total_end_pos = winner_end
         return best
       end
       token_start = more_text_start || position
@@ -169,7 +189,7 @@ module ToyLang
           return matched ? cursor : nil if buffer.eof_loaded?
           return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)
         end
-        segment = buffer.source
+        segment = @__flexr_generated_backup_capable ? buffer.__send__(:acceleration_source) : buffer.source
         segment_position = cursor - buffer.base_offset
         if segment.encoding == ::Encoding::UTF_8 && region.utf8_regexp
           regexp = region.utf8_regexp

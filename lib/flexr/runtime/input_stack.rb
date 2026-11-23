@@ -4,7 +4,7 @@ module Flexr
   module Runtime
     INPUT_STACK_FIELDS = (CHECKPOINT_FIELDS + %i[
       @buffer @filename @string_input @stable_input_end @valid_utf8_input @simple_location_input
-      @token_limit_required @__flexr_input_id
+      @token_limit_required @__flexr_input_id @__flexr_stable_scan_source
     ]).freeze
     private_constant :INPUT_STACK_FIELDS
 

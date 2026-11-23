@@ -18,10 +18,11 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 - Take a frozen snapshot of mutable String inputs at `Lexer.new` and
   `push_input`. Pass `freeze_input: false` to borrow the original String.
-
-### Changed
-
-- Compile UTF-8 Unicode properties from prebuilt automata, reducing setup time for lexers that use them.
+- Compile UTF-8 Unicode properties from prebuilt automata, reducing setup
+  time for lexers that use them.
+- Reuse failed longest-match scans so overlapping rules such as `/a/` and
+  `/a*b/` can tokenize a long run of `a` in linear time. Regenerate existing
+  scanners to use the optimization.
 
 ### Fixed
 
