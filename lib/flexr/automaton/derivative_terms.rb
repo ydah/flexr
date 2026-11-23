@@ -6,11 +6,11 @@ module Flexr
       FAIL = 0
       EMPTY = 1
 
-      attr_reader :byte_classes
+      attr_reader :byte_classes, :expressions
 
       def initialize
         @byte_classes = ByteClassSet.new
-        @terms = []
+        @expressions = []
         @ids = {}
         @nullable = []
         @derivatives = []
@@ -52,8 +52,8 @@ module Flexr
       def intern(kind, arguments, nullable)
         key = [kind, *arguments].freeze
         @ids[key] ||= begin
-          id = @terms.length
-          @terms << key
+          id = @expressions.length
+          @expressions << key
           @nullable << nullable
           id
         end
@@ -61,7 +61,7 @@ module Flexr
 
       def flattened(kind, ids)
         ids.flat_map do |id|
-          term = @terms.fetch(id)
+          term = @expressions.fetch(id)
           term.first == kind ? term.drop(1) : [id]
         end
       end
@@ -99,7 +99,7 @@ module Flexr
       end
 
       def negate(id)
-        term = @terms.fetch(id)
+        term = @expressions.fetch(id)
         return term.fetch(1) if term.first == :negate
 
         intern(:negate, [id], !nullable?(id))
@@ -116,7 +116,7 @@ module Flexr
       end
 
       def derive(id, byte, class_id)
-        kind, *parts = @terms.fetch(id)
+        kind, *parts = @expressions.fetch(id)
         case kind
         when :empty, :fail then FAIL
         when :byte then byte.between?(*parts) ? EMPTY : FAIL

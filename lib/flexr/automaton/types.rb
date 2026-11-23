@@ -9,6 +9,6 @@ module Flexr
     end
 
     CompiledSpec = Struct.new(:machines, :rules, :states, :stats, :diagnostics, keyword_init: true)
-    Machine = Struct.new(:dfa, :state_name, :whole_tokens, keyword_init: true)
+    Machine = Struct.new(:dfa, :state_name, :whole_tokens, :residuals, keyword_init: true)
   end
 end

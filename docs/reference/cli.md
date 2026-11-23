@@ -55,6 +55,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--input STRING` | Literal input, including an empty string | Trace |
 | `--input-file PATH` | Input file | Trace and bench |
 | `--generated` | Run the generated scanner | Input trace |
+| `--residuals` | Show remaining DFA expressions | Explain and trace |
 | `--verify` | Execute the generated cases in all three modes | Skeleton |
 | `--from oedipus_lex` | Select the oedipus_lex `.rex` dialect | Import |
 | `--parser PARSER` | `lrama` or `racc` | New project |
@@ -84,6 +85,7 @@ Options:
       --input STRING          trace input (executes SPEC actions)
       --input-file PATH       trace or benchmark input
       --generated             trace generated scanner
+      --residuals             show remaining DFA expressions (explain or trace)
       --verify                verify skeleton across all modes (executes SPEC actions)
       --target 2.0            report migration requirements (static check only)
       --dry-run               print the fixed spec without writing (fix only)
@@ -116,6 +118,29 @@ The name must start with a letter or digit and may also contain hyphens and
 underscores. Choose a name that is available. Follow the generated README or
 the [calculator parser tutorial](../tutorial/build-a-calculator-parser.md)
 to install dependencies, build the parser, and run the tests.
+
+## DFA residuals
+
+```sh
+flexr explain lexer.flexr.rb --rule 0 --residuals
+flexr trace lexer.flexr.rb --residuals
+flexr trace lexer.flexr.rb --input 'abbc' --residuals --format json
+```
+
+A residual describes the bytes a rule can still match after the DFA has read
+a prefix. After a rule like `/ab*c/` reads `a`, its residual is `b*c`.
+Entries identify the rule and pattern by their zero-based indices.
+`ε` means the empty string. For a reused DFA fragment, `DFA[fragment][state]`
+identifies the remainder within that fragment. Anchor and trailing-context
+checks still apply when the lexer selects a rule.
+
+With `--residuals`, explain lists residuals by lexical state and minimized
+DFA state. Use `--rule` to limit the listing to one rule. Trace without input
+adds residuals to the state transition table. With input, it adds a path from
+the start of each matched step through its matched bytes. The JSON
+`dfa_path` field includes each entry's `byte_offset`, `state`, and
+`residuals`. Each residual has a `rule`, `pattern`, and `expression`.
+These views require a longest-match backend.
 
 ## Input trace
 

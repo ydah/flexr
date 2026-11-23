@@ -5,14 +5,14 @@ module Flexr
     module Minimizer
       module_function
 
-      def minimize(dfa)
+      def minimize(dfa, &)
         dead = dfa.states
         rows = dfa.transitions.map { |row| row.map { |destination| destination.nil? ? dead : destination } }
         rows << Array.new(dfa.class_count, dead)
         partitions = initial_partitions(dfa, dead)
         predecessors = predecessor_index(rows, dfa.class_count)
         partitions = refine(partitions, predecessors, dfa.class_count)
-        rebuild(dfa, partitions, dead)
+        rebuild(dfa, partitions, dead, &)
       end
 
       def initial_partitions(dfa, dead)
@@ -75,6 +75,7 @@ module Flexr
         start_group = groups.fetch(dfa.start)
         representatives = partitions.map { |partition| partition.find { |state| state != dead } }
         order = reachable_groups(dfa, groups, representatives, start_group, dead_group)
+        yield order.map { |group| representatives.fetch(group) } if block_given?
         index = order.each_with_index.to_h
         transitions = order.map do |group|
           representative = representatives.fetch(group)

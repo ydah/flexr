@@ -8,6 +8,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 ### Added
 
 - Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes. Set it to `nil` to disable the cache.
+- Use `--residuals` with `flexr explain` or `flexr trace` to see what a
+  longest-match rule can still match at each DFA state.
 
 ### Changed
 
