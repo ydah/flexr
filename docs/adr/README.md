@@ -103,3 +103,5 @@ MUST rules are required. For a SHOULD rule, explain any exception in the pull re
 | [Delegate the exact captured source range to a child lexer](20261122_capture_delegation.md) | Child tokens retain host source coordinates and enter the host stream after the child scan succeeds. |
 | [Insert reusable rules at each explicit use site](20261122_expand_reusable_rules_explicitly.md) | `use` fixes the expansion position so reusable declarations participate in the same tie-breaking rules as local ones. |
 | [Preserve first-match order when importing oedipus_lex](20261122_import_oedipus_firstmatch.md) | The explicit import mode reports unsupported constructs before writing a specification. |
+| [Take a frozen snapshot of each mutable String input by default](20261123_snapshot_string_inputs.md) | A stable input lets scanners reuse work by byte position. Callers can opt out when they need live edits. |
+| [Run ordinary longest-match scanning in linear time](20261123_linear_longest_match.md) | Cache failed DFA continuations at byte offsets so later tokens avoid rescanning the same suffix. |
