@@ -183,6 +183,26 @@ RSpec.describe "longest-match backup" do
     end
   end
 
+  it "starts memoizing generated failures when an error handler is installed after scanning began" do
+    Dir.mktmpdir("flexr-recovery-backup") do |dir|
+      source = File.join(dir, "lexer.flexr.rb")
+      File.write(source, <<~RUBY)
+        class RecoveryBackupFixture < Flexr::Lexer
+          rule(/x*b/, emit: :LONG)
+        end
+      RUBY
+      namespace = Module.new
+      namespace.module_eval(Flexr::Generator.new(source).generate, source)
+      input = "b#{'x' * 512}".freeze
+      lexer = namespace::RecoveryBackupFixture.new(input)
+      expect(lexer.next_token).to eq([:LONG, "b"])
+      lexer.on_error = ->(_error) { :skip }
+
+      reads = count_byte_reads(input) { expect(lexer.tokens).to be_empty }
+      expect(reads).to be <= 512 * 8
+    end
+  end
+
   [[:table, false], [:direct, false], [:table, true], [:direct, true]].each do |backend, standalone|
     it "uses the same linear scan with #{backend} generation and standalone=#{standalone}" do
       Dir.mktmpdir("flexr-linear-scan") do |dir|

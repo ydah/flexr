@@ -96,20 +96,13 @@ module JsonExample
       check_token_limit = token_limit_required?
       cursor = position
       best = nil
-      if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
+      frozen_fast = source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
+      if frozen_fast && !memo_states
         while (byte = source.getbyte(cursor))
           current = direct_nxt[(current * direct_classes) + ec[byte]]
           break if current < 0
           cursor += 1
           acceptance = accepts[current].first
-          if !acceptance && memo_states&.[](current)
-            suffix = __flexr_backup_suffix(dfa, memo_states, current, cursor, position)
-            break if suffix == false
-            if suffix
-              current, cursor = suffix
-              acceptance = accepts[current].first
-            end
-          end
           next unless acceptance
           rule = rules.fetch(acceptance.rule_index)
           best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
@@ -122,7 +115,7 @@ module JsonExample
       end
       token_start = more_text_start || position
       token_limit = max_token_size
-      accelerate = @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)
+      accelerate = !frozen_fast && @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
         if accelerate && (guarded_steps || !memo_states&.[](current))
           region = __flexr_generated_acceleration_region(dfa, current)
