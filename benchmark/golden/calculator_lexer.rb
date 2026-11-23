@@ -85,8 +85,8 @@ module CalculatorExample
       transitions = dfa.transitions
       rules = self.class.__flexr_rules
       source = @__flexr_stable_scan_source || buffer.stable_source
-      guarded_steps = scan_steps_guarded?
-      check_token_limit = token_limit_required?
+      guarded_steps = @max_steps || @cancellation
+      check_token_limit = @token_limit_required
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
@@ -96,13 +96,16 @@ module CalculatorExample
           cursor += 1
           acceptance = accepts[current].first
           next unless acceptance
-          rule = rules.fetch(acceptance.rule_index)
-          best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
-          best.rule = rule
-          best.start_pos = position
-          best.end_pos = cursor
-          best.total_end_pos = cursor
+          winner = acceptance
+          winner_end = cursor
         end
+        return unless winner
+        rule = rules.fetch(winner.rule_index)
+        best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
+        best.rule = rule
+        best.start_pos = position
+        best.end_pos = winner_end
+        best.total_end_pos = winner_end
         return best
       end
       token_start = more_text_start || position

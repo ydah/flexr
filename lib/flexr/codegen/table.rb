@@ -127,8 +127,8 @@ module Flexr
           lines << "#{indent}  rules = self.class.__flexr_rules"
         end
         lines.concat(scan_source(indent, memoized))
-        lines << "#{indent}  guarded_steps = scan_steps_guarded?"
-        lines << "#{indent}  check_token_limit = token_limit_required?"
+        lines << "#{indent}  guarded_steps = @max_steps || @cancellation"
+        lines << "#{indent}  check_token_limit = @token_limit_required"
         lines << "#{indent}  cursor = position"
         lines << "#{indent}  best = nil"
         frozen_fast = "source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)"
@@ -153,14 +153,17 @@ module Flexr
         lines << "#{indent}      acceptance = accepts[current].first"
         lines.concat(backup_suffix("#{indent}      ", "acceptance", update: true)) if memoized_body
         lines << "#{indent}      next unless acceptance"
-        lines << "#{indent}      rule = rules.fetch(acceptance.rule_index)"
-        lines << "#{indent}      best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
-        lines << "#{indent}      best.rule = rule"
-        lines << "#{indent}      best.start_pos = position"
-        lines << "#{indent}      best.end_pos = cursor"
-        lines << "#{indent}      best.total_end_pos = cursor"
-        lines << "#{indent}      best.capture = rule.capture_patterns&.[](acceptance.pattern_index)" if captures
+        lines << "#{indent}      winner = acceptance"
+        lines << "#{indent}      winner_end = cursor"
         lines << "#{indent}    end"
+        lines << "#{indent}    return unless winner"
+        lines << "#{indent}    rule = rules.fetch(winner.rule_index)"
+        lines << "#{indent}    best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
+        lines << "#{indent}    best.rule = rule"
+        lines << "#{indent}    best.start_pos = position"
+        lines << "#{indent}    best.end_pos = winner_end"
+        lines << "#{indent}    best.total_end_pos = winner_end"
+        lines << "#{indent}    best.capture = rule.capture_patterns&.[](winner.pattern_index)" if captures
         lines << "#{indent}    return best"
         lines << "#{indent}  end"
         lines << "#{indent}  token_start = more_text_start || position"
