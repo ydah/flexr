@@ -3,6 +3,12 @@
 Notable changes to flexr, newest first. Release dates use Japan Standard Time
 (UTC+09:00).
 
+## Unreleased
+
+### Added
+
+- Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes. Set it to `nil` to disable the cache.
+
 ## [2.2.0](https://github.com/ydah/flexr/compare/v2.1.0...v2.2.0)
 
 ### Added

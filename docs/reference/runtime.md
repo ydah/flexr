@@ -3,6 +3,25 @@
 `Flexr::Lexer` includes the runtime methods below. Runtime mode and generated
 mode expose the same consumer-facing methods.
 
+## Compilation cache
+
+Set `Flexr.cache_dir` before compiling a specification to reuse compiled
+DFA tables in later Ruby processes.
+
+```ruby
+require "flexr"
+
+Flexr.cache_dir = "tmp/flexr-cache"
+```
+
+The cache starts disabled. Set `Flexr.cache_dir = nil` to disable it again.
+Missing, corrupt, or inaccessible entries fall back to compilation.
+
+Flexr keys each table by its patterns, rule priority, encoding and DFA
+state limit, as well as the flexr and Unicode versions. It still validates
+the current specification and uses its actions and diagnostics. Cache
+files can be deleted at any time.
+
 ## Initialization
 
 ```ruby

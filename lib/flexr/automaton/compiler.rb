@@ -23,6 +23,8 @@ module Flexr
         @pattern_universe_dfa = nil
         @state_limit = @spec.options.fetch(:max_dfa_states, 100_000)
         @state_limit = 100_000 unless @state_limit.is_a?(Integer) && @state_limit.positive?
+        directory = Flexr.cache_dir
+        @dfa_cache = directory && DfaCache.new(directory, @spec, @state_limit)
         validate_rules
         state_names = effective_states
         machines = state_names.to_h do |state_name|
@@ -68,13 +70,39 @@ module Flexr
       end
 
       def compile_machine(rules)
+        return build_machine(rules) unless @dfa_cache
+
+        resolved_patterns = rules.map do |rule|
+          rule.patterns.map { |pattern| pattern.is_a?(Pattern) ? pattern : pattern_regexp(pattern) }
+        end
+        key = @dfa_cache.key(rules, resolved_patterns)
+        if (entry = @dfa_cache.read(key))
+          dfa, conditions, empty_absence = entry
+          rules.zip(conditions).each do |rule, values|
+            rule.pattern_conditions = values.map do |rule_index, pattern_index, bol_only, end_anchor|
+              Acceptance.new(rule_index: rule_index, pattern_index: pattern_index, bol_only: bol_only, end_anchor: end_anchor)
+            end
+          end
+          empty_absence.each { |index| @empty_absence_rules[index] = true }
+          return dfa
+        end
+
+        dfa = build_machine(rules, resolved_patterns)
+        conditions = rules.map { |rule| rule.pattern_conditions.map(&:to_a) }
+        empty_absence = rules.filter_map { |rule| rule.index if @empty_absence_rules[rule.index] }
+        @dfa_cache.write(key, dfa, conditions, empty_absence)
+        dfa
+      end
+
+      def build_machine(rules, resolved_patterns = nil)
         @active_rules = rules
         normalized = []
-        rules.each do |rule|
+        rules.each_with_index do |rule, rule_offset|
           rule.pattern_conditions = []
           first_pattern = normalized.length
           contains_absence = false
-          rule.patterns.each_with_index do |pattern, pattern_index|
+          patterns = resolved_patterns ? resolved_patterns.fetch(rule_offset) : rule.patterns
+          patterns.each_with_index do |pattern, pattern_index|
             if pattern.is_a?(Pattern)
               body = Regexp::AST::EmbeddedDFA.new(@pattern_dfas.fetch([rule.index, pattern_index]))
               bol_only = end_anchor = false

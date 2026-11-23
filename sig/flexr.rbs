@@ -32,6 +32,8 @@ module Flexr
 
   def self.compile_pattern: (pattern, ?options: Hash[Symbol, untyped], ?encoding: Encoding?) -> _CompiledPattern
   def self.parse_pattern: ((String | ::Regexp), ?options: Hash[Symbol, untyped]) -> untyped
+  def self.cache_dir: () -> String?
+  def self.cache_dir=: (String?) -> String?
 
   class Pattern
     def |: (pattern_operand) -> Pattern
