@@ -462,23 +462,6 @@ module Flexr
       end
     end
 
-    def dfa_backend?(parsed, options)
-      options.overrides.fetch(:backend, parsed.config[:backend]) != :firstmatch
-    end
-
-    def backup_labels(compiled)
-      compiled.machines.map do |state, machine|
-        backup = Automaton::Analysis.backup(machine.dfa)
-        bytes = backup.maximum_bytes
-        length = if bytes
-          "#{bytes} #{bytes == 1 ? 'byte' : 'bytes'}"
-        else
-          "unbounded"
-        end
-        "state #{state.inspect}: maximum DFA backup: #{length}"
-      end
-    end
-
     def channel_label(rule)
       " channel=#{rule.channel.inspect}" if rule.channel
     end
