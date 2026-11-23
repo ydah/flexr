@@ -177,6 +177,8 @@ RSpec.describe "longest-match backup" do
         load ARGV.fetch(0)
         lexer = GuardedBackupFixture.new("xxxxxxxxb", error_mode: :token, cancellation: ->(scanner) { scanner.steps == 3 })
         abort "wrong token or step count" unless lexer.tokens == [[:LONG, "xxxxxxxxb"]] && lexer.steps == 11
+        ordinary = GuardedBackupFixture.new("xxxxxxxxb")
+        abort "wrong ordinary tokens" unless ordinary.tokens == [[:LONG, "xxxxxxxxb"]]
       RUBY
       _, stderr, status = Open3.capture3({ "RUBYOPT" => nil, "RUBYLIB" => nil }, RbConfig.ruby, "-Ilib", "-e", runner, output)
       expect(status).to be_success, stderr

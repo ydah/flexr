@@ -173,7 +173,7 @@ module Flexr
         lines << "#{indent}  token_limit = max_token_size"
         lines << "#{indent}  accelerate = @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)"
         lines << "#{indent}  while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)"
-        lines << "#{indent}    if #{accelerate}"
+        lines << "#{indent}    if #{memoized_body ? accelerate : 'accelerate'}"
         lines << "#{indent}      region = __flexr_generated_acceleration_region(dfa, current)"
         lines << "#{indent}      acceptance = accepts[current].first"
         lines << "#{indent}      accelerated_end = __flexr_generated_accelerate(region, cursor, acceptance&.rule_index, position) if region"
