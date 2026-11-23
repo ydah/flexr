@@ -446,6 +446,11 @@ task "direct:verify" do
 end
 
 task "unicode:verify" do
+  require_relative "tools/gen_unicode_automata"
+
+  abort "vendored UTF-8 automata are stale (run ruby tools/gen_unicode_automata.rb)" unless
+    FlexrVerification.normalized_source(File.binread(Flexr::Unicode::PropertyAutomata::PATH)) == UnicodeAutomataGenerator.generate
+
   splitter = Flexr::Unicode::Utf8Splitter
   properties = Flexr::Unicode::Data::PROPERTIES
   abort "unexpected vendored Unicode version" unless Flexr::Unicode::VERSION == "15.1.0"

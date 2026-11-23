@@ -31,6 +31,8 @@ module PublicApiTypecheck
   end
 end
 
+Flexr.cache_dir = "tmp/flexr-cache"
+Flexr.cache_dir = nil
 Flexr::Lexer.rule(/[0-9]+/, emits: [:INTEGER]) { emit :INTEGER, text.to_i }
 Flexr::Lexer.rule(/(?<value>[0-9]+)mm/) do
   # @type var value: String?
