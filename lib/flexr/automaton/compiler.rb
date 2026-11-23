@@ -55,7 +55,10 @@ module Flexr
           dfa = compile_machine(rules, lazy: lazy, &retain)
           plans = Accel.whole_token_plans(dfa, rules) if
             @spec.backend != :firstmatch && @spec.options[:accel] == :strscan
-          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans, residuals: residuals)]
+          memo_states, recovery_states = Analysis.backup_memo_states(dfa) unless @spec.backend == :firstmatch
+          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans,
+                                   residuals: residuals, backup_memo_states: memo_states,
+                                   backup_recovery_states: recovery_states)]
         rescue CompileError => e
           e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
           raise
@@ -589,7 +592,10 @@ module Flexr
                               help: "remove it, reorder the rules, or make its language distinct",
                               note: example&.fetch(:note) || empty_absence_note(rule))
         end)
-        diagnostics.concat(overlap_diagnostics(compiled, rules_by_index)) if @spec.options[:warn_level] == :all
+        if @spec.options[:warn_level] == :all
+          diagnostics.concat(overlap_diagnostics(compiled, rules_by_index))
+          diagnostics.concat(backup_diagnostics(compiled)) unless @spec.backend == :firstmatch
+        end
 
         @spec.states.each do |state_name, state|
           next if state_name == :initial
@@ -659,6 +665,17 @@ module Flexr
                                               help: "use generated mode for production startup")
         end
         diagnostics
+      end
+
+      def backup_diagnostics(compiled)
+        compiled.machines.filter_map do |state, machine|
+          backup = Analysis.backup(machine.dfa)
+          next unless backup.unbounded?
+
+          Diagnostics.warning("FLEXR-W023", "state #{state.inspect} has unbounded DFA backup",
+                              location: @spec.states.fetch(state).location,
+                              note: "body DFA example: #{backup.example.inspect} followed by repetitions of #{backup.cycle.inspect}")
+        end
       end
 
       def empty_absence_note(rule)

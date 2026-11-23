@@ -46,6 +46,7 @@ Lexer.new(input,
   max_steps: nil,
   cancellation: nil,
   retain_input: true,
+  freeze_input: true,
   chunk_size: 64 * 1024)
 ```
 
@@ -56,6 +57,12 @@ or `:panic`; unknown values raise `ArgumentError` at initialization.
 leaves the step count unbounded; `cancellation` may be a callable accepting
 zero arguments or the lexer. Size limits are non-negative, and `chunk_size`
 must be positive.
+
+The lexer takes a frozen snapshot of each mutable String at initialization
+or when `push_input` queues it. It reuses an already frozen String.
+Pass `freeze_input: false` to borrow the supplied mutable String. With
+`retain_input: false`, compaction can detach the retained window from that
+String. IO continues to read in chunks.
 
 ## Consumption
 
@@ -225,6 +232,19 @@ match; `input` and `binary_input` then expose only the retained window.
 oversized match. `max_lookahead_size` separately bounds trailing context, and
 `max_buffer_size` bounds bytes retained at one time. `max_steps` and
 `cancellation` bound CPU work cooperatively.
+
+For ordinary longest-match scanning, flexr reuses failed DFA continuations
+on frozen strings and append-only IO. The lexer keeps these records with
+the input's buffer, so it can reuse them after a shorter match or after
+returning from a pushed input. Records behind the active window expire as
+the scanner advances. A checkpoint can still be restored while the
+required bytes are retained.
+
+The optimization applies to DFA body traversal. Trailing context and
+rule actions can read additional bytes. The scanner uses direct traversal
+when a caller can mutate the backing string or configures a step limit or
+cancellation callback. Regenerate existing generated and standalone
+lexers to pick up the optimization.
 
 ## Input stack
 

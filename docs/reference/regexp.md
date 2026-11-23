@@ -15,7 +15,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `/i`, `/m`, `/x`, `/n` | Supported | Inline forms are supported where Ruby permits them |
 | `\d`, `\w`, `\s` | Supported | Unicode-aware with `option :unicode` in UTF-8 |
 | `\h`, `\H` | Supported | Hexadecimal digits and their complement |
-| Octal escapes such as `\011` | Unsupported | Use a hexadecimal escape such as `\x09` |
+| Octal escapes such as `\011` | Supported | Match bytes in binary mode and complete encoded characters in UTF-8 |
 | `\R` | Unsupported | Use the standalone line-break rule shown by `FLEXR-E014` for the specification's encoding |
 | Lookahead / lookbehind | Unsupported | Use `followed_by:` for trailing positive lookahead; other forms need rules or states; `FLEXR-E014` |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
@@ -45,6 +45,19 @@ is explicitly enabled, in which case flexr advances to guarantee progress.
 Repetition remains a symbolic AST node until NFA construction, avoiding large
 intermediate trees. In `{n,m}`, `m` must be at least `n`; explicit bounds may
 not exceed 1000. `{n,}` uses an unbounded loop after the required copies.
+
+## Octal byte escapes
+
+`\011` and `\x09` both match a tab. An octal escape consumes up to three
+octal digits. Begin with `\0` for an unambiguous escape outside a character
+class when the value fits in that form. Ruby interprets decimal forms such as
+`\1` and `\10` as backreferences when they refer to captures, and flexr
+reports `FLEXR-E014` for those references.
+
+In UTF-8, consecutive escaped bytes can form a multibyte character. For
+example, `\303\251` and `\303\xA9` both match `é`. In binary mode, `\377`
+matches the byte `0xff`.
+[Ruby's regexp escape syntax](https://docs.ruby-lang.org/ja/4.0/doc/spec=2fregexp.html)
 
 ## Absence groups
 

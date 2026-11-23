@@ -22,6 +22,16 @@ module CalculatorExample
         @__flexr_generated_scan_dfa = machine.dfa
         @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
+        if @__flexr_generated_scan_simple
+          dfa = @__flexr_generated_scan_dfa
+          @__flexr_generated_layouts ||= {}.compare_by_identity
+          @__flexr_generated_scan_rows = (@__flexr_generated_layouts[dfa] ||= [dfa.start, dfa.ec, dfa.transitions.to_a.freeze, dfa.accepts, self.class.__flexr_rules].freeze)
+          @__flexr_generated_winners ||= {}.compare_by_identity
+          @__flexr_generated_scan_winners = (@__flexr_generated_winners[dfa] ||= dfa.accepts.map do |entries|
+            acceptance = entries.first
+            self.class.__flexr_rules.fetch(acceptance.rule_index) if acceptance
+          end.freeze)
+        end
       end
       dfa = @__flexr_generated_scan_dfa
       return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast
@@ -30,11 +40,7 @@ module CalculatorExample
       return __flexr_generated_scan_simple(dfa, position) if @__flexr_generated_scan_simple
       cursor = position
       current = dfa.start
-      direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
-      ec = dfa.ec
-      source = buffer.stable_source
+      source = @__flexr_stable_scan_source || buffer.stable_source
       guarded_steps = scan_steps_guarded?
       token_start = more_text_start || position
       token_limit = max_token_size
@@ -56,13 +62,7 @@ module CalculatorExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        current = dfa.transition(current, byte)
         break unless current
         cursor += 1
         resource_acceptance = dfa.accepts[current].first
@@ -76,32 +76,30 @@ module CalculatorExample
       best
     end
     def __flexr_generated_scan_simple(dfa, position)
-      current = dfa.start
-      direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
-      ec = dfa.ec
-      accepts = dfa.accepts
-      rules = self.class.__flexr_rules
-      source = buffer.stable_source
-      guarded_steps = scan_steps_guarded?
-      check_token_limit = token_limit_required?
+      current, ec, transitions, accepts, rules = @__flexr_generated_scan_rows
+      source = @__flexr_stable_scan_source || buffer.stable_source
+      guarded_steps = @max_steps || @cancellation
+      check_token_limit = @token_limit_required
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
+        winners = @__flexr_generated_scan_winners
         while (byte = source.getbyte(cursor))
-          current = dfa.transition(current, byte)
+          current = transitions[current][ec[byte]]
           break unless current
           cursor += 1
-          acceptance = accepts[current].first
+          acceptance = winners[current]
           next unless acceptance
-          rule = rules.fetch(acceptance.rule_index)
-          best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
-          best.rule = rule
-          best.start_pos = position
-          best.end_pos = cursor
-          best.total_end_pos = cursor
+          winner = acceptance
+          winner_end = cursor
         end
+        return unless winner
+        rule = winner
+        best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
+        best.rule = rule
+        best.start_pos = position
+        best.end_pos = winner_end
+        best.total_end_pos = winner_end
         return best
       end
       token_start = more_text_start || position
@@ -120,13 +118,7 @@ module CalculatorExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        current = dfa.transition(current, byte)
         break unless current
         cursor += 1
         acceptance = accepts[current].first

@@ -53,15 +53,10 @@ RSpec.describe "regexp engine contracts" do
     expect { Flexr::Regexp::Parser.new("\\.").parse }.not_to raise_error
   end
 
-  it "shows literal rewrite examples for octal and unknown escapes" do
-    {
-      '\\011' => ['rule(/\\x09/)', 'rule(/\\011/)'],
-      '\\q' => ['rule(/q/)', "if q is literal"]
-    }.each do |source, expected|
-      expect { Flexr::Regexp::Parser.new(source).parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-        expect(error.diagnostic.code).to eq("FLEXR-E014")
-        expect(error.diagnostic.help).to include(*expected, "keep the action")
-      end
+  it "shows a literal rewrite example for an unknown escape" do
+    expect { Flexr::Regexp::Parser.new('\\q').parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.help).to include('rule(/q/)', "if q is literal", "keep the action")
     end
 
     expect(Flexr.compile_pattern(/\x09/).accept?("\t")).to be(true)
@@ -373,15 +368,57 @@ RSpec.describe "regexp engine contracts" do
     end
   end
 
-  it "treats an octal character-class escape separately from a backreference" do
-    expect { Flexr.parse_pattern(/[\1]/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-      expect(error.diagnostic.code).to eq("FLEXR-E014")
-      expect(error.diagnostic.help).to include('rule(/[\x01]/)', "character code", "keep the action")
-      expect(error.diagnostic.help).not_to include("capture limited", "aa|bb")
+  it "agrees with Ruby on octal escapes and the digits that follow them" do
+    {
+      /\011+/ => %W[\t \t\t 011],
+      /\0/ => ["\0", "0"],
+      /\018/ => ["\x018", "\x0e"],
+      /\08/ => ["\x008", "\b"],
+      /\10/ => ["\b", "10"],
+      /\18/ => ["\x018", "\x10"],
+      /\1234/ => %w[S4 S],
+      /\89/ => %w[89 9],
+      /\0 11/x => ["\x0011", "\t"],
+      /[\1-\3\89]/ => ["\x01", "\x02", "\x03", "\x04", "1", "8", "9"],
+      /\303\251+/ => ["é", "éé", "Ã©", "e"],
+      /\xC3\251|\303\xA9/ => %w[é e],
+      /[\303\250-\303\252]/ => %w[é ê ë],
+      /[\200-\377]/n => ["\x80".b, "\xff".b, "\x7f".b],
+      /\377/n => ["\xff".b, "\xef".b],
+      /[\101\300]/ni => ["A".b, "a".b, "\xc0".b, "\xe0".b],
+      /\101\300/ni => ["A\xc0".b, "a\xc0".b, "A\xe0".b],
+      /\101/i => %w[A a b]
+    }.each do |pattern, inputs|
+      full_match = Regexp.new("\\A(?:#{pattern.source})\\z", pattern.options)
+      dfa = Flexr.compile_pattern(pattern)
+      inputs.each do |input|
+        expect(dfa.accept?(input)).to eq(full_match.match?(input)), "#{pattern.inspect} on #{input.inspect}"
+      end
     end
-    dfa = Flexr.compile_pattern(Regexp.new('[\x01]'))
-    expect(dfa.accept?("\x01")).to be(true)
-    expect(dfa.accept?("1")).to be(false)
+  end
+
+  it "distinguishes numbered references from octal escapes using preceding captures" do
+    captures = "(a)" * 10
+    reference = Regexp.new("#{captures}\\10")
+    expect { Flexr.compile_pattern(reference) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E014")
+      expect(error.diagnostic.help).to include("capture limited")
+    end
+    expect(Flexr.compile_pattern(Regexp.new("\\10#{captures}")).accept?("\b#{'a' * 10}")).to be(true)
+    expect(Flexr.compile_pattern(Regexp.new("#{captures}\\010")).accept?("#{'a' * 10}\b")).to be(true)
+
+    source = "#{'(a)' * 1001}\\1001"
+    expect(Regexp.new("\\A(?:#{source})\\z").match?("#{'a' * 1001}@1")).to be(true)
+    ast = Flexr::Regexp::Parser.new(source).parse
+    expect(ast.children.last(2).map(&:lo)).to eq("@1".bytes)
+  end
+
+  it "rejects an oversized octal byte and incomplete UTF-8 in raw parser sources" do
+    ['\400', '\303', '\303\101'].each do |source|
+      expect { Flexr::Regexp::Parser.new(source).parse }.to raise_error(Flexr::CompileError) do |error|
+        expect(error.diagnostic.code).to eq("FLEXR-E001")
+      end
+    end
   end
 
   it "compiles Unicode properties into the DFA with longest-match semantics" do
