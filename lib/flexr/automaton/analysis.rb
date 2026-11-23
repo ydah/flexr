@@ -18,6 +18,12 @@ module Flexr
         end
       end
 
+      def backup(dfa)
+        require_relative "backup"
+
+        BackupAnalysis.new(dfa).analyze
+      end
+
       def self_loop_set(dfa, state)
         Accel.self_loop_set(dfa, state)
       end

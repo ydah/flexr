@@ -181,6 +181,28 @@ actually enabled and marks unavailable builds explicitly. It does not replace
 the baseline with a different engine's measurements. Use
 `ruby benchmark/matrix.rb --input-file PATH --iterations 3` for a custom input.
 
+### Fixed workload matrix
+
+Use `--workloads` to run the same corpus bytes as frozen and mutable strings
+for JSON, TOML, GraphQL, SQL, and the Ruby subset. Each result records the
+specification and input hashes, the input mode, and the measured Ruby engine.
+Before reporting a cell, the harness compares complete tokens from runtime,
+generated, and standalone scanners. The standalone check runs in a separate
+Ruby process. Parity checks run outside the timed scans.
+
+```sh
+ruby -Ilib benchmark/matrix.rb --workloads --iterations 10
+FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 10
+```
+
+The gate takes the median of three generated/runtime samples for every cell.
+A ratio below `1.0` or an unavailable engine fails the check and identifies
+its workload, input mode, and engine in the JSON report. Run this gate on
+the reference machine. For a single custom input, pass `--input-mode frozen`
+or `--input-mode mutable` to select the String mode explicitly.
+
+### Scan phase profiling
+
 `bundle exec rake bench:profile` provides an optional TracePoint profile without
 an extra gem. It excludes class loading and compilation after a warm-up run and
 reports non-overlapping time in scanning, actions, token handling, locations,
@@ -649,3 +671,48 @@ loading flexr and configuring the cache.
 | Disabled, median of three processes | 0.649 s | 0.665 s |
 | First compilation and write | 0.656 s | 0.679 s |
 | Cache hit, median of five processes | 0.0012 s | 0.024 s |
+
+## 2026-11-23: Frozen and mutable workload baseline
+
+Ruby 4.0.9 on arm64-darwin25 measured the scanners from `f718499` using the
+fixed workload matrix. Each cell is the median of three samples, each with
+three warmup and three timed scans. The values show generated/runtime
+throughput for frozen input followed by mutable input. All 30 cells matched
+complete tokens across runtime, generated, and standalone lexers.
+
+| Workload | Interpreter | YJIT | ZJIT |
+|---|---:|---:|---:|
+| json | 1.219x / 1.144x | 1.230x / 0.587x | 1.119x / 0.238x |
+| toml | 0.797x / 0.918x | 0.592x / 0.426x | 0.867x / 0.241x |
+| graphql | 0.872x / 0.960x | 0.654x / 0.454x | 0.904x / 0.278x |
+| sql | 0.844x / 0.932x | 0.647x / 0.415x | 0.886x / 0.246x |
+| ruby_subset | 0.841x / 0.944x | 0.672x / 0.442x | 0.903x / 0.252x |
+
+The `1.0x` gate passed in 4 of 30 cells. The lowest ratio was
+`0.238x`. Use this matrix to locate slow workloads and compare changes on
+the same machine.
+
+```sh
+FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 3
+```
+
+## 2026-11-23: Snapshot mutable String input
+
+The same Ruby 4.0.9 machine and fixed workload matrix compared mutable
+inputs before and after taking one frozen snapshot per lexer. Each cell
+is the median of three samples with three warmup and three timed scans per
+sample. Runtime, generated, and standalone token parity passed in all 30
+cells, including frozen inputs. This table shows the generated/runtime
+ratios for inputs supplied as mutable Strings.
+
+| Workload | Interpreter | YJIT | ZJIT |
+|---|---:|---:|---:|
+| json | 1.144x to 1.215x | 0.587x to 1.221x | 0.238x to 1.109x |
+| toml | 0.918x to 0.810x | 0.426x to 0.592x | 0.241x to 0.871x |
+| graphql | 0.960x to 0.874x | 0.454x to 0.665x | 0.278x to 0.918x |
+| sql | 0.932x to 0.849x | 0.415x to 0.652x | 0.246x to 0.883x |
+| ruby_subset | 0.944x to 0.842x | 0.442x to 0.659x | 0.252x to 0.902x |
+
+All six JSON cells met the `1.0x` threshold. Across the full matrix the
+lowest ratio was `0.592x`. The other four workloads still need
+attention before the gate can pass.
