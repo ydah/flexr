@@ -5,6 +5,12 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ## Unreleased
 
+### Added
+
+- Inspect DFA backup bounds per lexical state with `flexr explain`, `trace`,
+  and `dot`. Use `flexr check --warn all` to see a repeatable example for
+  states where the number of bytes read after an acceptance is unbounded.
+
 ### Changed
 
 - Take a frozen snapshot of mutable String inputs at `Lexer.new` and `push_input`. Pass `freeze_input: false` to borrow the original String.
