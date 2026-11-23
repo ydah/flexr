@@ -33,7 +33,7 @@ module Flexr
         return unless (witness = @witnesses[rule])
 
         state, suffix = witness
-        prefix = prefix_to(state)
+        return unless (prefix = prefix_to(state))
         bytes = []
         while suffix
           byte, suffix = suffix
@@ -127,6 +127,8 @@ module Flexr
           end
           parents
         end
+        return unless @parents.key?(target)
+
         bytes = []
         while (parent = @parents.fetch(target))
           target, byte = parent

@@ -62,7 +62,7 @@ RSpec.describe "adversarial boundary coverage" do
       [%w[^ $].join, "^a$", "\\p{L}", "\\P{Nd}", "(?-mix:a)"].each do |pattern|
         expect { described_class.new(pattern).parse }.not_to raise_error
       end
-      expect { described_class.new("a^b").parse }.to raise_error(Flexr::CompileError)
+      expect(described_class.new("a^b").parse.children[1].kind).to eq(:line_start)
       expect(described_class.new("[[:^alpha:]]").parse).not_to be_nil
     end
   end
@@ -386,7 +386,7 @@ RSpec.describe "adversarial boundary coverage" do
     end
 
     anchored = Class.new(Flexr::Lexer) do
-      rule(/a(?:^)/) { skip }
+      rule(pattern(/^a/)) { skip }
     end
     expect { anchored.compile! }.to raise_error(Flexr::CompileError) do |error|
       expect(error.diagnostic.code).to eq("FLEXR-E009")

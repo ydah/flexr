@@ -30,7 +30,7 @@ module Flexr
             else
               streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp), limit: :token, rule: rule)
             end
-            next unless match&.begin(0)&.zero?
+            next unless match && (context || match.begin(0).zero?)
             next if expected && !expected_rule?(rule, expected, buffer, position, position + match[0].bytesize)
 
             [match, condition]

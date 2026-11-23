@@ -127,6 +127,9 @@ module Flexr
           when "R"
             advance
             return parse_linebreak(starting)
+          when "A"
+            advance
+            return AST::Anchor.new(kind: :source_start, loc: span(starting))
           when "z", "Z"
             kind = advance == "z" ? :eof : :final_eol
             return AST::Anchor.new(kind: kind, loc: span(starting))
@@ -434,9 +437,6 @@ module Flexr
         when "G"
           raise unsupported("\\G",
                             'at the start of a rule, rewrite rule(/\Ga/) as rule(/a/); keep the action; rules already match at the current lexer position; interior \G needs a separate rewrite')
-        when "A"
-          raise unsupported("\\A",
-                            'for input without line feeds, rewrite rule(/\Aa/) as rule(/^a/); keep the action; line boundaries differ from string boundaries')
         when "z", "Z"
           raise unsupported("\\#{char}",
                             "for input without line feeds, rewrite rule(/a\\#{char}/) as rule(/a$/); keep the action; line boundaries differ from string boundaries")
@@ -550,21 +550,8 @@ module Flexr
         trailing = node.is_a?(AST::Seq) ? node.children.reverse_each.find { |part| !part.is_a?(AST::Empty) } : node
         anchors.each { |anchor| anchor.kind = :line_end if anchor.kind == :eol && !anchor.equal?(trailing) }
 
-        beginnings = anchors.select { |anchor| anchor.kind == :bol }
-        return if beginnings.empty? || (beginnings.one? && beginnings.first.equal?(flatten_sequence(node).first))
-
-        raise_diagnostic(
-          diagnostic("FLEXR-E009", "the beginning-of-line anchor is only valid at the outermost pattern start",
-                     help: "split alternatives into separate rules or move ^ to the start of the pattern")
-        )
-      end
-
-      def flatten_sequence(node)
-        return [] if node.is_a?(AST::Empty)
-        return node.children.flat_map { |child| flatten_sequence(child) } if node.is_a?(AST::Seq)
-        return flatten_sequence(node.child) if node.is_a?(AST::NamedCapture)
-
-        [node]
+        leading = node.is_a?(AST::Seq) ? node.children.find { |part| !part.is_a?(AST::Empty) } : node
+        anchors.each { |anchor| anchor.kind = :line_start if anchor.kind == :bol && !anchor.equal?(leading) }
       end
 
       def reject_postfix_quantifier

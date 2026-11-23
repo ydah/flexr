@@ -36,7 +36,7 @@ module Flexr
         end
 
         buffer = @lexer.buffer
-        state = machine.dfa.start
+        state = @lexer.__flexr_dfa_start(machine.dfa, position)
         best = nil
         cursor = position
         best = consider_acceptances(machine, state, cursor, position, buffer, best, expected) if @config.options[:allow_empty_match]
@@ -156,7 +156,7 @@ module Flexr
         return @fast_paths[machine.dfa] if @fast_paths.key?(machine.dfa)
 
         rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
-        @fast_paths[machine.dfa] = !@config.options[:allow_empty_match] && !machine.dfa.context_dependent_end? &&
+        @fast_paths[machine.dfa] = !@config.options[:allow_empty_match] && !machine.dfa.starts && !machine.dfa.context_dependent_end? &&
           rules.none?(&:trailing) && rules.none?(&:capture_patterns) &&
           rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
       end
@@ -165,7 +165,7 @@ module Flexr
         return 0 unless rule.trailing
 
         dfa = rule.trailing_dfa || trailing_dfa(rule.trailing)
-        state = dfa.start
+        state = @lexer.__flexr_dfa_start(dfa, position)
         cursor = position
         longest = 0 if trailing_accept?(dfa, state, buffer, cursor, position, rule)
         while buffer.ensure_available?(cursor + 1)

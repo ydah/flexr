@@ -2,9 +2,10 @@
 
 module Flexr
   module Runtime
-    class ContextualRegexp < Data.define(:regexp, :invalid_eof, :instructions, :entry)
-      def initialize(regexp:, instructions:, entry:, invalid_eof: nil)
-        super(regexp: regexp.freeze, invalid_eof: invalid_eof&.freeze, instructions: instructions.each(&:freeze).freeze, entry: entry)
+    class ContextualRegexp < Data.define(:regexp, :invalid_eof, :instructions, :entry, :left_context)
+      def initialize(regexp:, instructions:, entry:, invalid_eof: nil, left_context: false)
+        super(regexp: regexp.freeze, invalid_eof: invalid_eof&.freeze,
+              instructions: instructions.each(&:freeze).freeze, entry: entry, left_context: left_context)
       end
 
       def match(lexer, rule, starting, ending: nil)
@@ -13,14 +14,21 @@ module Flexr
 
         subject = cursor.subject
         reference = (invalid_eof if cursor.invalid_end?) || regexp
-        return reference.match(subject) unless ending
+        origin = 0
+        # Ruby only needs the previous byte's line-break status to replay these anchors.
+        if left_context && starting.positive?
+          prefix = lexer.beginning_of_line? ? "\n" : " "
+          subject = prefix + subject
+          origin = 1
+        end
+        return reference.match(subject, origin) unless ending
 
-        offset = ending - starting
+        offset = origin + ending - starting
         # Constrain Ruby's ordered capture replay to the endpoint chosen by the DFA.
         suffix_size = subject.byteslice(offset..).length
         groups, remainder = suffix_size.divmod(10_000)
         suffix = (".{10000}" * groups) + ".{#{remainder}}"
-        ::Regexp.new("#{reference.source}(?=(?m:#{suffix})\\z)", reference.options).match(subject)
+        ::Regexp.new("#{reference.source}(?=(?m:#{suffix})\\z)", reference.options).match(subject, origin)
       end
 
       class Cursor
@@ -85,6 +93,21 @@ module Flexr
                 break unless first.valid_end_at?(input, position)
 
                 address = second
+              when :context_predicate
+                input = AssertionInput.new(cursor: self, origin: assertion_origin || position)
+                at_line_start = @lexer.__flexr_beginning_of_line_at?(position, @starting)
+                context = Automaton::LeftContext.at(position, at_line_start)
+                break unless first.fetch(context)&.valid_end_at?(input, position)
+
+                address = second
+              when :left_anchor
+                if first == :source_start
+                  break unless position.zero?
+                elsif position.positive?
+                  break unless @lexer.__flexr_beginning_of_line_at?(position, @starting)
+                  break unless read(position, assertion_origin || position, raw: true)
+                end
+                address = second
               when :span
                 input = AssertionInput.new(cursor: self, origin: assertion_origin)
                 append_span_ends(pending, first, input, second, position, ending, loop_position)
@@ -131,7 +154,7 @@ module Flexr
         private
 
         def append_span_ends(pending, dfa, input, following, position, ending, loop_position)
-          state = dfa.start
+          state = @lexer.__flexr_dfa_start(dfa, position, @starting)
           loop do
             pending << [following, position, loop_position] if
               dfa.accepts.fetch(state).any? { |label| label.valid_end_at?(input, position) }

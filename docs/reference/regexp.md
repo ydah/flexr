@@ -11,7 +11,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Unicode `\p{...}` / `\P{...}` | Supported | Uses the vendored UCD snapshot |
 | `*`, `+`, `?` | Supported | Greedy forms only |
 | `{n}`, `{n,m}`, `{n,}` | Supported | Explicit bounds may not exceed 1000 |
-| `^` | Restricted | Allowed at the start of the outermost rule pattern; otherwise `FLEXR-E009` |
+| `^`, `\A` | Supported | See [start anchors](#start-anchors) |
 | `$`, `\z`, `\Z` | Supported | See [end anchors](#end-anchors) |
 | `/i`, `/m`, `/x`, `/n` | Supported | Inline forms are supported where Ruby permits them |
 | `\d`, `\w`, `\s` | Supported | Unicode-aware with `option :unicode` in UTF-8 |
@@ -22,7 +22,6 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Positive and negative lookbehind | Unsupported | Track preceding input with rules or states |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
 | `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
-| `\A` | Unsupported | The `^` example in `FLEXR-E014` applies to input without line feeds |
 | `\G` | Unsupported | At the start of a rule, omit it: rules already match at the current lexer position |
 | `\K` | Unsupported | Use the prefix/suffix state example in `FLEXR-E014` where applicable to preserve token text and location |
 | Subexpression calls `\g<...>` | Unsupported | Inline non-recursive expressions; recursive calls need a parser or state stack |
@@ -68,6 +67,17 @@ matches U+0085, U+2028, and U+2029. CRLF is atomic. For example, `/\R\n/`
 accepts CRLF followed by an additional LF. A CR followed by LF belongs to
 the pair even when the LF falls beyond the end of a candidate token.
 See [Ruby's line break syntax](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Shorthand+Character+Classes).
+
+## Start anchors
+
+`\A` matches the beginning of the active input source. `^` also matches
+immediately after a line feed when another byte follows. Both are zero-width
+and can appear in alternatives, groups, and lookahead. An included source
+starts at its own byte offset zero. Resuming the parent source restores its
+original position and line context.
+
+`pattern(/^a/)` reports `FLEXR-E009`. Use `/^a/` directly in a rule
+or use `\A` in a pattern value to assert the start of the source.
 
 ## End anchors
 
@@ -141,8 +151,7 @@ Likewise, flexr parses `X` as an ordinary alternation in `(?~a|b)`.
 Use `table`, `direct`, or `auto` for rule patterns that use absence.
 All backends support non-nullable absence expressions in `followed_by:`
 because trailing context is evaluated by a DFA. Extended `(?~|...)`
-forms report `FLEXR-E014`. Use end anchors in `X` to constrain its
-right context. A beginning-of-line anchor in `X` reports `FLEXR-E009`.
+forms report `FLEXR-E014`. Anchors in `X` can constrain either input boundary.
 
 See the [absence implementation record](../implementations/20261122_dfa_absence_groups.md) for the compilation strategy.
 

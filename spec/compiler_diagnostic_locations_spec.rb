@@ -33,7 +33,7 @@ RSpec.describe "compiler diagnostic locations" do
   {
     "FLEXR-E005" => "rule(/a*/, skip: true)",
     "FLEXR-E007" => "rule(/a{1001}/, skip: true)",
-    "FLEXR-E009" => "rule(/a^b/, skip: true)",
+    "FLEXR-E009" => "rule(pattern(/^a/), skip: true)",
     "FLEXR-E014" => "rule(/(?<=a)b/, skip: true)"
   }.each do |code, statement|
     it "locates #{code} in both check output and generator errors" do
@@ -74,7 +74,6 @@ RSpec.describe "compiler diagnostic locations" do
       '/foo\b:/' => 'rule(/foo:/)',
       '/foo\Bbar/' => 'rule(/foobar/)',
       '/\Ga/' => 'rule(/a/)',
-      '/\Aa/' => 'rule(/^a/)',
       '/[\A]/' => 'rule(/[A]/)',
       '/[\B]/' => 'rule(/[B]/)',
       '/[\G]/' => 'rule(/[G]/)',

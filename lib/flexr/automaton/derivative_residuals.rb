@@ -30,6 +30,8 @@ module Flexr
       def expression(term)
         kind, *parts = @expressions.fetch(term)
         case kind
+        when :left then parts.first == :source_start ? '\A' : "^"
+        when :entry then "DFA[#{parts.first}][entry]"
         when :empty then "ε"
         when :fail then "∅"
         when :guard then "(?=#{expression(parts.first)})#{expression(parts.last)}"
