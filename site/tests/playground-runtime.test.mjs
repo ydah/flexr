@@ -41,7 +41,7 @@ test('executes edited Ruby actions and generates a real scanner with Prism', asy
 });
 
 test('renders real diagnostic source locations and rejects malformed Ruby', async () => {
-  const result = await runtime.run({ source: 'class Lexer < Flexr::Lexer\n rule(/a(?=b)/, emit: :A)\nend', input: 'ab', mode: 'runtime' });
+  const result = await runtime.run({ source: 'class Lexer < Flexr::Lexer\n rule(/(a)\\1/, emit: :A)\nend', input: 'ab', mode: 'runtime' });
   assert.match(result.error, /FLEXR-E014/);
   assert.match(result.error, /playground.flexr.rb:2:/);
   assert.match(result.error, /\^/);
