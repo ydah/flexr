@@ -34,10 +34,12 @@ module Flexr
         memoized_body = compiled.machines.values.any?(&:backup_memo_states)
         memoized = memoized_body || compiled.machines.values.any?(&:backup_recovery_states)
         recovery_only = memoized && !memoized_body
-        dense_rows = !direct && !packed &&
+        small_table = !packed &&
           compiled.machines.values.sum { |machine| machine.dfa.states * machine.dfa.class_count } <= DENSE_SCAN_CELL_LIMIT
+        dense_rows = !direct && small_table
         accelerate = memoized ? "accelerate && (guarded_steps || !memo_states&.[](current))" : "accelerate"
         captures = compiled.rules.any?(&:capture_patterns)
+        fast_winners = small_table && !captures && !memoized_body
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
         fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
         lines << "#{indent}def scan_one"
@@ -59,6 +61,23 @@ module Flexr
           lines << "#{indent}    @__flexr_generated_recover_simple = @__flexr_generated_scan_simple && @__flexr_generated_backup"
           lines << "#{indent}    @__flexr_generated_scan_simple = false if @__flexr_generated_recover_simple"
         end
+        if dense_rows || fast_winners
+          lines << "#{indent}    if @__flexr_generated_scan_simple"
+          lines << "#{indent}      dfa = @__flexr_generated_scan_dfa"
+          if dense_rows
+            lines << "#{indent}      @__flexr_generated_layouts ||= {}.compare_by_identity"
+            lines << "#{indent}      @__flexr_generated_scan_rows = (@__flexr_generated_layouts[dfa] ||= " \
+              "[dfa.start, dfa.ec, dfa.transitions.to_a.freeze, dfa.accepts, self.class.__flexr_rules].freeze)"
+          end
+          if fast_winners
+            lines << "#{indent}      @__flexr_generated_winners ||= {}.compare_by_identity"
+            lines << "#{indent}      @__flexr_generated_scan_winners = (@__flexr_generated_winners[dfa] ||= dfa.accepts.map do |entries|"
+            lines << "#{indent}        acceptance = entries.first"
+            lines << "#{indent}        self.class.__flexr_rules.fetch(acceptance.rule_index) if acceptance"
+            lines << "#{indent}      end.freeze)"
+          end
+          lines << "#{indent}    end"
+        end
         lines << "#{indent}  end"
         lines << "#{indent}  dfa = @__flexr_generated_scan_dfa"
         lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless #{scan_cache}"
@@ -71,10 +90,12 @@ module Flexr
         lines << "#{indent}  return __flexr_generated_scan_simple(dfa, position) if @__flexr_generated_scan_simple"
         lines << "#{indent}  cursor = position"
         lines << "#{indent}  current = dfa.start"
-        lines << "#{indent}  direct = dfa.direct"
-        lines << "#{indent}  direct_nxt = direct&.fetch(:nxt)"
-        lines << "#{indent}  direct_classes = direct&.fetch(:classes)"
-        lines << "#{indent}  ec = dfa.ec"
+        if direct
+          lines << "#{indent}  direct = dfa.direct"
+          lines << "#{indent}  direct_nxt = direct.fetch(:nxt)"
+          lines << "#{indent}  direct_classes = direct.fetch(:classes)"
+          lines << "#{indent}  ec = dfa.ec"
+        end
         lines.concat(scan_source(indent, memoized))
         lines << "#{indent}  guarded_steps = scan_steps_guarded?"
         lines << "#{indent}  token_start = more_text_start || position"
@@ -101,13 +122,12 @@ module Flexr
         lines << "#{indent}    end"
         lines << "#{indent}    byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)"
         lines << "#{indent}    consume_step! if guarded_steps"
-        lines << "#{indent}    current = if direct_nxt"
-        lines << "#{indent}      class_id = ec[byte]"
-        lines << "#{indent}      value = direct_nxt[(current * direct_classes) + class_id]"
-        lines << "#{indent}      value >= 0 ? value : nil"
-        lines << "#{indent}    else"
-        lines << "#{indent}      dfa.transition(current, byte)"
-        lines << "#{indent}    end"
+        if direct
+          lines << "#{indent}    value = direct_nxt[(current * direct_classes) + ec[byte]]"
+          lines << "#{indent}    current = value >= 0 ? value : nil"
+        else
+          lines << "#{indent}    current = dfa.transition(current, byte)"
+        end
         lines << "#{indent}    break unless current"
         lines << "#{indent}    cursor += 1"
         lines << "#{indent}    resource_acceptance = dfa.accepts[current].first"
@@ -124,14 +144,12 @@ module Flexr
         lines << "#{indent}def __flexr_generated_scan_simple(dfa, position)"
         if direct
           lines << "#{indent}  current, direct_nxt, direct_classes, ec, accepts, rules = #{scan_cache}"
+        elsif dense_rows
+          lines << "#{indent}  current, ec, transitions, accepts, rules = @__flexr_generated_scan_rows"
         else
           lines << "#{indent}  current = dfa.start"
-          lines << "#{indent}  direct = dfa.direct"
-          lines << "#{indent}  direct_nxt = direct&.fetch(:nxt)"
-          lines << "#{indent}  direct_classes = direct&.fetch(:classes)"
           lines << "#{indent}  ec = dfa.ec"
           lines << "#{indent}  accepts = dfa.accepts"
-          lines << "#{indent}  transitions = dfa.transitions" if dense_rows
           lines << "#{indent}  rules = self.class.__flexr_rules"
         end
         lines.concat(scan_source(indent, memoized, probe: memoized_body))
@@ -141,6 +159,7 @@ module Flexr
         lines << "#{indent}  best = nil"
         frozen_fast = "source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)"
         lines << "#{indent}  if #{frozen_fast}"
+        lines << "#{indent}    winners = @__flexr_generated_scan_winners" if fast_winners
         lines << "#{indent}    while (byte = source.getbyte(cursor))"
         if direct
           lines << "#{indent}      current = direct_nxt[(current * direct_classes) + ec[byte]]"
@@ -153,14 +172,15 @@ module Flexr
           lines << "#{indent}      break unless current"
         end
         lines << "#{indent}      cursor += 1"
-        lines << "#{indent}      acceptance = accepts[current].first"
+        winner_lookup = fast_winners ? "winners[current]" : "accepts[current].first"
+        lines << "#{indent}      acceptance = #{winner_lookup}"
         lines.concat(backup_suffix("#{indent}      ", "acceptance", update: true)) if memoized_body
         lines << "#{indent}      next unless acceptance"
         lines << "#{indent}      winner = acceptance"
         lines << "#{indent}      winner_end = cursor"
         lines << "#{indent}    end"
         lines << "#{indent}    return unless winner"
-        lines << "#{indent}    rule = rules.fetch(winner.rule_index)"
+        lines << "#{indent}    rule = #{fast_winners ? 'winner' : 'rules.fetch(winner.rule_index)'}"
         lines << "#{indent}    best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
         lines << "#{indent}    best.rule = rule"
         lines << "#{indent}    best.start_pos = position"
@@ -185,13 +205,12 @@ module Flexr
         lines << "#{indent}    end"
         lines << "#{indent}    byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)"
         lines << "#{indent}    consume_step! if guarded_steps"
-        lines << "#{indent}    current = if direct_nxt"
-        lines << "#{indent}      class_id = ec[byte]"
-        lines << "#{indent}      value = direct_nxt[(current * direct_classes) + class_id]"
-        lines << "#{indent}      value >= 0 ? value : nil"
-        lines << "#{indent}    else"
-        lines << "#{indent}      dfa.transition(current, byte)"
-        lines << "#{indent}    end"
+        if direct
+          lines << "#{indent}    value = direct_nxt[(current * direct_classes) + ec[byte]]"
+          lines << "#{indent}    current = value >= 0 ? value : nil"
+        else
+          lines << "#{indent}    current = dfa.transition(current, byte)"
+        end
         lines << "#{indent}    break unless current"
         lines << "#{indent}    cursor += 1"
         lines << "#{indent}    acceptance = accepts[current].first"
