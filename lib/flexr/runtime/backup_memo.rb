@@ -61,7 +61,7 @@ module Flexr
       def on_error=(handler)
         @on_error = handler
         @interpreter = nil
-        @generated_scanner = use_generated_scanner?
+        @__flexr_generated_scan_state = nil
         handler
       end
 
@@ -78,7 +78,7 @@ module Flexr
         ending = memo.failed_end(state, cursor)
         return false if ending && (!limit || ending <= limit)
 
-        source = @buffer.backup_scan_source
+        source = @buffer.scan_source
         accepts = dfa.accepts
         memo.clear_attempt
         loop do
@@ -109,14 +109,6 @@ module Flexr
         false
       end
 
-      private
-
-      def use_generated_scanner?
-        return false unless super
-
-        !__flexr_recovers_unmatched? ||
-          self.class.__flexr_compiled.machines.values.none?(&:backup_recovery_states)
-      end
     end
     prepend BackupScanning
 
@@ -151,12 +143,17 @@ module Flexr
           extend StreamExposure if @io
         end
 
-        def backup_scan_source
-          @source if @retain_input && @source.frozen? && @window_start.zero? && base_offset.zero?
-        end
-
         def backup_memo(dfa)
-          return unless @source.frozen? || (@io && !@source_exposed)
+          if @io
+            return if @source_exposed
+          else
+            if @backup_safe_string.nil?
+              @backup_safe_string = @source.frozen? && %i[getbyte bytesize byteslice].all? do |name|
+                @source.method(name).source_location.nil?
+              end
+            end
+            return unless @backup_safe_string
+          end
 
           (@backup_memos ||= {}.compare_by_identity)[dfa] ||= BackupMemo.new
         end

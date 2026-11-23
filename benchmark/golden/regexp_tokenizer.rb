@@ -24,7 +24,10 @@ module Flexr
           @__flexr_generated_scan_state = @state
           @__flexr_generated_scan_dfa = machine.dfa
           @__flexr_generated_backup_capable = machine.respond_to?(:backup_memo_states)
-          @__flexr_generated_backup = machine.backup_memo_states if @__flexr_generated_backup_capable
+          if @__flexr_generated_backup_capable
+            recovery = __flexr_recovers_unmatched? && machine.backup_recovery_states
+            @__flexr_generated_backup = recovery || machine.backup_memo_states
+          end
           @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
           @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
         end
@@ -197,7 +200,7 @@ module Flexr
             return matched ? cursor : nil if buffer.eof_loaded?
             return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)
           end
-          segment = @__flexr_generated_backup_capable ? buffer.acceleration_source : buffer.source
+          segment = @__flexr_generated_backup_capable ? buffer.__send__(:acceleration_source) : buffer.source
           segment_position = cursor - buffer.base_offset
           if segment.encoding == ::Encoding::UTF_8 && region.utf8_regexp
             regexp = region.utf8_regexp

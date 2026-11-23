@@ -31,7 +31,7 @@ module Flexr
       def source(indent: "  ", direct: false, packed: false)
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
-        memoized = compiled.machines.values.any?(&:backup_memo_states)
+        memoized = compiled.machines.values.any? { |machine| machine.backup_memo_states || machine.backup_recovery_states }
         dense_rows = !direct && !packed &&
           compiled.machines.values.sum { |machine| machine.dfa.states * machine.dfa.class_count } <= DENSE_SCAN_CELL_LIMIT
         accelerate = memoized ? "accelerate && (guarded_steps || !memo_states&.[](current))" : "accelerate"
@@ -45,7 +45,10 @@ module Flexr
         lines << "#{indent}    @__flexr_generated_scan_dfa = machine.dfa"
         if memoized
           lines << "#{indent}    @__flexr_generated_backup_capable = machine.respond_to?(:backup_memo_states)"
-          lines << "#{indent}    @__flexr_generated_backup = machine.backup_memo_states if @__flexr_generated_backup_capable"
+          lines << "#{indent}    if @__flexr_generated_backup_capable"
+          lines << "#{indent}      recovery = __flexr_recovers_unmatched? && machine.backup_recovery_states"
+          lines << "#{indent}      @__flexr_generated_backup = recovery || machine.backup_memo_states"
+          lines << "#{indent}    end"
         end
         lines << "#{indent}    @__flexr_generated_whole_tokens = machine.respond_to?(:whole_tokens) ? machine.whole_tokens : nil" if whole_tokens
         lines << "#{indent}    #{scan_cache} = #{fast_path}(@__flexr_generated_scan_dfa)"
@@ -216,7 +219,7 @@ module Flexr
         lines << "#{indent}      return matched ? cursor : nil if buffer.eof_loaded?"
         lines << "#{indent}      return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)"
         lines << "#{indent}    end"
-        segment = memoized ? "@__flexr_generated_backup_capable ? buffer.acceleration_source : buffer.source" : "buffer.source"
+        segment = memoized ? "@__flexr_generated_backup_capable ? buffer.__send__(:acceleration_source) : buffer.source" : "buffer.source"
         lines << "#{indent}    segment = #{segment}"
         lines << "#{indent}    segment_position = cursor - buffer.base_offset"
         lines << "#{indent}    if segment.encoding == ::Encoding::UTF_8 && region.utf8_regexp"

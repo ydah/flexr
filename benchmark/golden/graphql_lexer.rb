@@ -20,6 +20,11 @@ module GraphqlExample
         machine = self.class.__flexr_compiled.machines.fetch(@state)
         @__flexr_generated_scan_state = @state
         @__flexr_generated_scan_dfa = machine.dfa
+        @__flexr_generated_backup_capable = machine.respond_to?(:backup_memo_states)
+        if @__flexr_generated_backup_capable
+          recovery = __flexr_recovers_unmatched? && machine.backup_recovery_states
+          @__flexr_generated_backup = recovery || machine.backup_memo_states
+        end
         @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
       end
@@ -34,7 +39,8 @@ module GraphqlExample
       direct_nxt = direct&.fetch(:nxt)
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
-      source = @__flexr_stable_scan_source || buffer.stable_source
+      memo_states = @__flexr_generated_backup
+      source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
       guarded_steps = scan_steps_guarded?
       token_start = more_text_start || position
       token_limit = max_token_size
@@ -43,7 +49,7 @@ module GraphqlExample
       accel_mode = @accel_mode
       accelerate = accel_mode != :none && !(accel_mode == :auto && @__flexr_generated_auto_accel_off)
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
-        if accelerate
+        if accelerate && (guarded_steps || !memo_states&.[](current))
           region = __flexr_generated_acceleration_region(dfa, current)
           acceptance = dfa.accepts[current].first
           token_rule = acceptance&.rule_index
@@ -71,6 +77,13 @@ module GraphqlExample
           size = cursor - token_start
           defer_token_size_check!(size, rule: resource_rule) if size > token_limit
         end
+        if !resource_acceptance && memo_states&.[](current)
+          suffix = __flexr_backup_suffix(dfa, memo_states, current, cursor, position)
+          break if suffix == false
+          if suffix
+            current, cursor = suffix
+          end
+        end
         best = __flexr_generated_acceptance(dfa, current, position, cursor, best)
       end
       best
@@ -84,7 +97,8 @@ module GraphqlExample
       accepts = dfa.accepts
       transitions = dfa.transitions
       rules = self.class.__flexr_rules
-      source = @__flexr_stable_scan_source || buffer.stable_source
+      memo_states = @__flexr_generated_backup
+      source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
       guarded_steps = scan_steps_guarded?
       check_token_limit = token_limit_required?
       cursor = position
@@ -95,6 +109,14 @@ module GraphqlExample
           break unless current
           cursor += 1
           acceptance = accepts[current].first
+          if !acceptance && memo_states&.[](current)
+            suffix = __flexr_backup_suffix(dfa, memo_states, current, cursor, position)
+            break if suffix == false
+            if suffix
+              current, cursor = suffix
+              acceptance = accepts[current].first
+            end
+          end
           next unless acceptance
           rule = rules.fetch(acceptance.rule_index)
           best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
@@ -109,7 +131,7 @@ module GraphqlExample
       token_limit = max_token_size
       accelerate = @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
-        if accelerate
+        if accelerate && (guarded_steps || !memo_states&.[](current))
           region = __flexr_generated_acceleration_region(dfa, current)
           acceptance = accepts[current].first
           accelerated_end = __flexr_generated_accelerate(region, cursor, acceptance&.rule_index, position) if region
@@ -134,6 +156,14 @@ module GraphqlExample
         if check_token_limit
           size = cursor - token_start
           defer_token_size_check!(size, rule: acceptance&.rule_index) if size > token_limit
+        end
+        if !acceptance && memo_states&.[](current)
+          suffix = __flexr_backup_suffix(dfa, memo_states, current, cursor, position)
+          break if suffix == false
+          if suffix
+            current, cursor = suffix
+            acceptance = accepts[current].first
+          end
         end
         next unless acceptance
         rule = rules.fetch(acceptance.rule_index)
@@ -167,7 +197,7 @@ module GraphqlExample
           return matched ? cursor : nil if buffer.eof_loaded?
           return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)
         end
-        segment = buffer.source
+        segment = @__flexr_generated_backup_capable ? buffer.__send__(:acceleration_source) : buffer.source
         segment_position = cursor - buffer.base_offset
         if segment.encoding == ::Encoding::UTF_8 && region.utf8_regexp
           regexp = region.utf8_regexp

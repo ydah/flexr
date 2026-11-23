@@ -5,21 +5,13 @@ require "rbconfig"
 require "stringio"
 
 RSpec.describe "longest-match backup" do
-  let(:byte_counted_input) do
-    Class.new(String) do
-      def initialize(text)
-        super
-        @reads = [0]
-        freeze
-      end
-
-      def getbyte(index)
-        @reads[0] += 1
-        super
-      end
-
-      def reads = @reads[0]
+  def count_byte_reads(input, &)
+    reads = 0
+    trace = TracePoint.new(:c_call) do |event|
+      reads += 1 if event.method_id == :getbyte && event.self.equal?(input)
     end
+    trace.enable(&)
+    reads
   end
 
   let(:lexer_class) do
@@ -31,32 +23,36 @@ RSpec.describe "longest-match backup" do
 
   it "bounds the number of byte reads as the input grows" do
     [256, 512].each do |length|
-      input = byte_counted_input.new("a" * length)
+      input = ("a" * length).freeze
 
-      expect(lexer_class.new(input).tokens).to eq([[:A, "a"]] * length)
-      expect(input.reads).to be <= length * 8
+      reads = count_byte_reads(input) do
+        expect(lexer_class.new(input).tokens).to eq([[:A, "a"]] * length)
+      end
+      expect(reads).to be <= length * 8
     end
   end
 
   it "bounds failed matches before any acceptance when an error handler skips bytes" do
     recovery_class = Class.new(Flexr::Lexer) { rule(/a*b/, emit: :AB) }
-    input = byte_counted_input.new("a" * 256)
+    input = ("a" * 256).freeze
     lexer = recovery_class.new(input)
     lexer.on_error = ->(_error) { :skip }
 
-    expect(lexer.tokens).to be_empty
-    expect(input.reads).to be <= 256 * 8
+    reads = count_byte_reads(input) { expect(lexer.tokens).to be_empty }
+    expect(reads).to be <= 256 * 8
   end
 
   it "bounds repeated failures through a cycle with more than one DFA state" do
-    input = byte_counted_input.new("ab" * 256)
+    input = ("ab" * 256).freeze
     lexer = Class.new(Flexr::Lexer) do
       rule(/[ab]/, emit: :LETTER)
       rule(/(?:ab)*z/, emit: :END)
     end.new(input)
 
-    expect(lexer.tokens).to eq([[:LETTER, "a"], [:LETTER, "b"]] * 256)
-    expect(input.reads).to be <= input.bytesize * 8
+    reads = count_byte_reads(input) do
+      expect(lexer.tokens).to eq([[:LETTER, "a"], [:LETTER, "b"]] * 256)
+    end
+    expect(reads).to be <= input.bytesize * 8
   end
 
   it "waits for a jam or confirmed EOF before treating a stream suffix as failed" do
@@ -75,6 +71,20 @@ RSpec.describe "longest-match backup" do
     input[-1] = "b"
 
     expect(lexer.tokens).to eq([[:AB, "aab"]])
+  end
+
+  it "does not assume an overridden byte reader stays stable when a string is frozen" do
+    alternate = false
+    input = Class.new(String) do
+      define_method(:getbyte) do |index|
+        alternate && index == 3 ? "b".ord : super(index)
+      end
+    end.new("aaaa").freeze
+    lexer = lexer_class.new(input)
+
+    expect(lexer.next_token).to eq([:A, "a"])
+    alternate = true
+    expect(lexer.tokens).to eq([[:AB, "aaa"]])
   end
 
   it "stops using the failure table when the loaded stream bytes can be mutated" do
@@ -151,6 +161,28 @@ RSpec.describe "longest-match backup" do
     expect(lexer.tokens).to eq([[:AB, "aaab"], [:C, "c"], *([[:A, "a"]] * 4)])
   end
 
+  it "preserves generated acceleration and cancellation steps with error recovery enabled" do
+    Dir.mktmpdir("flexr-guarded-backup") do |dir|
+      source = File.join(dir, "lexer.flexr.rb")
+      File.write(source, <<~RUBY)
+        class GuardedBackupFixture < Flexr::Lexer
+          accel :strscan
+          rule(/x*b/, emit: :LONG)
+        end
+      RUBY
+      output = File.join(dir, "lexer.rb")
+      Flexr::Generator.new(source, output: output).generate
+      runner = <<~RUBY
+        require "flexr"
+        load ARGV.fetch(0)
+        lexer = GuardedBackupFixture.new("xxxxxxxxb", error_mode: :token, cancellation: ->(scanner) { scanner.steps == 3 })
+        abort "wrong token or step count" unless lexer.tokens == [[:LONG, "xxxxxxxxb"]] && lexer.steps == 11
+      RUBY
+      _, stderr, status = Open3.capture3({ "RUBYOPT" => nil, "RUBYLIB" => nil }, RbConfig.ruby, "-Ilib", "-e", runner, output)
+      expect(status).to be_success, stderr
+    end
+  end
+
   [[:table, false], [:direct, false], [:table, true], [:direct, true]].each do |backend, standalone|
     it "uses the same linear scan with #{backend} generation and standalone=#{standalone}" do
       Dir.mktmpdir("flexr-linear-scan") do |dir|
@@ -166,6 +198,11 @@ RSpec.describe "longest-match backup" do
             state :only_long do
               rule(/a*b/, emit: :AB)
             end
+
+            state :anchored do
+              rule(/^a/, emit: :A)
+              rule(/x*b/, emit: :LONG)
+            end
           end
         RUBY
         output = File.join(dir, "lexer.rb")
@@ -173,30 +210,30 @@ RSpec.describe "longest-match backup" do
         runner = <<~'RUBY'
           require ARGV.fetch(0)
 
-          class CountedInput < String
-            def initialize(text)
-              super
-              @reads = [0]
-              freeze
+          def count_reads(input, &)
+            reads = 0
+            trace = TracePoint.new(:c_call) do |event|
+              reads += 1 if event.method_id == :getbyte && event.self.equal?(input)
             end
-
-            def getbyte(position)
-              @reads[0] += 1
-              super
-            end
-
-            def reads = @reads[0]
+            trace.enable(&)
+            reads
           end
 
-          input = CountedInput.new("a" * 512)
-          abort "incorrect tokens" unless BackupFixture.new(input).tokens == [[:A, "a"]] * 512
-          abort "read #{input.reads} bytes" unless input.reads <= 512 * 8
+          input = ("a" * 512).freeze
+          reads = count_reads(input) do
+            abort "incorrect tokens" unless BackupFixture.new(input).tokens == [[:A, "a"]] * 512
+          end
+          abort "read #{reads} bytes" unless reads <= 512 * 8
 
-          input = CountedInput.new("a" * 512)
           recovering = BackupFixture.new(input, error_mode: :panic)
           recovering.begin_state(:only_long)
-          abort "unexpected recovery tokens" unless recovering.tokens.empty?
-          abort "read #{input.reads} bytes during recovery" unless input.reads <= 512 * 8
+          reads = count_reads(input) { abort "unexpected recovery tokens" unless recovering.tokens.empty? }
+          abort "read #{reads} bytes during recovery" unless reads <= 512 * 8
+
+          bad = "a\x80".b.force_encoding(Encoding::UTF_8)
+          anchored = BackupFixture.new(bad, error_mode: :token)
+          anchored.begin_state(:anchored)
+          abort "lost anchored token" unless anchored.tokens == [[:A, "a"], [:error, bad.byteslice(1, 1)]]
         RUBY
         command = [RbConfig.ruby, standalone ? "--disable-gems" : "-Ilib", "-e", runner, output]
         _, stderr, status = Open3.capture3({ "RUBYOPT" => nil, "RUBYLIB" => nil }, *command)

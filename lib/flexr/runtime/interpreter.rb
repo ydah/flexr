@@ -20,6 +20,7 @@ module Flexr
         @rules = klass.__flexr_rules
         @config = klass.__flexr_config
         @recover_backup = lexer.__flexr_recovers_unmatched?
+        @scan_source = lexer.buffer.scan_source
       end
 
       def scan(expected = nil)
@@ -40,7 +41,6 @@ module Flexr
       end
 
       def scan_fast(machine, position)
-        buffer = @lexer.buffer
         dfa = machine.dfa
         accepts = dfa.accepts
         rules = @rules
@@ -50,7 +50,7 @@ module Flexr
         direct_nxt = direct&.fetch(:nxt)
         direct_classes = direct&.fetch(:classes)
         memo_states = (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
-        source = buffer.scan_source
+        source = @scan_source
         return scan_with_conditions(machine, position, nil, simple: true) unless
           source && !@lexer.scan_steps_guarded? && !@lexer.token_limit_required?
 
@@ -252,7 +252,7 @@ module Flexr
             return matched ? cursor : nil unless buffer.ensure_available?(cursor + 1)
           end
 
-          segment = buffer.acceleration_source
+          segment = buffer.__send__(:acceleration_source)
           segment_position = cursor - buffer.base_offset
           length = acceleration_length(region, segment, segment_position, mode)
           record_auto_acceleration_miss(region) if mode == :auto && length.to_i < 8
