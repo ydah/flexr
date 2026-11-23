@@ -148,7 +148,7 @@ module Flexr
       Generated.artifact_metadata
     end
 
-    def compile_parsed(parsed, construction: :subset)
+    def compile_parsed(parsed, construction: Automaton::Compiler::DEFAULT_CONSTRUCTION)
       states = parsed.states.each_with_index.to_h do |(name, value), index|
         [name.to_sym, IR::State.new(name: name.to_sym, inclusive: value[:inclusive], id: index, location: value[:location])]
       end

@@ -744,17 +744,23 @@ compiling the parsed specification and excludes reading the source.
 
 | Workload | Subset construction | Derivative construction |
 | --- | ---: | ---: |
-| json | 5.93 ms | 6.20 ms |
-| toml | 12.58 ms | 10.45 ms |
-| graphql | 11.28 ms | 8.32 ms |
-| sql | 48.52 ms | 45.61 ms |
-| ruby_subset | 5.49 ms | 4.37 ms |
-| unicode_identifier | 139.17 ms | 164.57 ms |
+| json | 5.23 ms | 5.74 ms |
+| toml | 10.86 ms | 9.57 ms |
+| graphql | 9.01 ms | 7.60 ms |
+| sql | 43.98 ms | 42.80 ms |
+| ruby_subset | 5.12 ms | 3.66 ms |
+| pattern_algebra | 3.17 ms | 3.58 ms |
+| unicode_identifier | 121.90 ms | 145.38 ms |
 
 The test corpus compares minimized graphs byte for byte, allowing
 different state numbers and byte class partitions. Acceptance labels
 include rule and pattern indices in priority order and anchor
 conditions. Trailing-context DFAs are compared separately.
+
+With derivatives as the runtime default, requiring flexr, defining a lexer
+with `/\p{L}[\p{L}\p{N}_]*/`, and scanning one identifier took 176 ms
+with the disk cache disabled and 25 ms with a populated cache. Each figure
+is the median of five fresh Ruby 4.0.9 processes on the same machine.
 ## 2026-11-23: Frozen and mutable workload baseline
 
 Ruby 4.0.9 on arm64-darwin25 measured the scanners from `f718499` using the

@@ -7,11 +7,11 @@ require_relative "../artifact_writer"
 module Flexr
   module Automaton
     class DfaCache
-      SCHEMA_VERSION = 2
+      SCHEMA_VERSION = 3
 
-      def initialize(directory, spec, state_limit)
+      def initialize(directory, spec, state_limit, construction:)
         @directory = directory
-        @compiler = [SCHEMA_VERSION, Flexr::VERSION, Unicode::VERSION, spec.encoding.name,
+        @compiler = [SCHEMA_VERSION, construction, Flexr::VERSION, Unicode::VERSION, spec.encoding.name,
                      spec.options[:unicode] == true, state_limit]
       end
 

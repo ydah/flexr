@@ -20,6 +20,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 - Take a frozen snapshot of mutable String inputs at `Lexer.new` and
   `push_input`. Pass `freeze_input: false` to borrow the original String.
+- Build lexer DFAs from regular-expression derivatives for runtime
+  compilation and static generation.
 - Compile UTF-8 Unicode properties from prebuilt automata, reducing setup
   time for lexers that use them.
 - Reuse failed longest-match scans so overlapping rules such as `/a/` and

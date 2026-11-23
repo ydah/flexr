@@ -13,6 +13,7 @@ module Flexr
         terms = DerivativeTerms.new
         start = patterns.each_with_index.to_h { |(body, _), index| [index, terms.from_ast(body)] }.freeze
         conditions = patterns.map(&:last)
+        operation = terms.operations.join(" and ") unless terms.operations.empty?
         ec, count = terms.byte_classes.build
         representatives = ec.each_index.uniq { |byte| ec.fetch(byte) }
         states = [start]
@@ -29,7 +30,7 @@ module Flexr
             next if successor.empty?
 
             ids[successor] ||= begin
-              state_limit.call(states.length)
+              state_limit.call(states.length, operation)
               states.push(successor).length - 1
             end
           end

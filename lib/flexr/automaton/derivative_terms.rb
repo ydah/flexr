@@ -6,11 +6,12 @@ module Flexr
       FAIL = 0
       EMPTY = 1
 
-      attr_reader :byte_classes, :expressions
+      attr_reader :byte_classes, :expressions, :operations
 
       def initialize
         @byte_classes = ByteClassSet.new
         @expressions = []
+        @operations = []
         @ids = {}
         @nullable = []
         @derivatives = []
@@ -32,7 +33,10 @@ module Flexr
         when Regexp::AST::Alt then union(node.children.map { |child| from_ast(child) })
         when Regexp::AST::Star then repeat(from_ast(node.child), 0, nil)
         when Regexp::AST::Repeat then repeat(from_ast(node.child), node.minimum, node.maximum)
-        when Regexp::AST::Difference then intersection([from_ast(node.left), negate(from_ast(node.right))])
+        when Regexp::AST::Difference
+          operation = node.operation || "absence group"
+          @operations << operation unless @operations.include?(operation)
+          intersection([from_ast(node.left), negate(from_ast(node.right))])
         when Regexp::AST::Intersection then intersection([from_ast(node.left), from_ast(node.right)])
         when Regexp::AST::EmbeddedDFA then from_graph(node.dfa)
         when Regexp::AST::ByteAutomaton then from_graph(node.fragment)
