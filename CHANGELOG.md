@@ -11,6 +11,10 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
   and `dot`. Use `flexr check --warn all` to see a repeatable example for
   states where the number of bytes read after an acceptance is unbounded.
 
+### Changed
+
+- Take a frozen snapshot of mutable String inputs at `Lexer.new` and `push_input`. Pass `freeze_input: false` to borrow the original String.
+
 ## [2.2.0](https://github.com/ydah/flexr/compare/v2.1.0...v2.2.0)
 
 ### Added
