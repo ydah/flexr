@@ -20,6 +20,7 @@ require_relative "regexp/char_class"
 require_relative "unicode/utf8_splitter"
 require_relative "unicode/data"
 require_relative "unicode/property"
+require_relative "unicode/property_automata"
 require_relative "unicode/reference_regexp"
 require_relative "unicode/case_fold"
 require_relative "regexp/matcher"
@@ -42,6 +43,7 @@ require_relative "runtime/firstmatch"
 require_relative "runtime/interpreter"
 require_relative "runtime/recognizer"
 require_relative "runtime/core"
+require_relative "runtime/backup_memo"
 require_relative "runtime/checkpoint"
 require_relative "runtime/input_stack"
 require_relative "runtime/indentation"
@@ -58,6 +60,17 @@ require_relative "generated"
 
 module Flexr
   class << self
+    attr_reader :cache_dir
+
+    def cache_dir=(directory)
+      if directory.nil?
+        @cache_dir = nil
+      else
+        require_relative "automaton/dfa_cache"
+        @cache_dir = File.expand_path(directory).freeze
+      end
+    end
+
     def compile_pattern(pattern, options: {}, encoding: nil)
       pattern = ::Regexp.new(pattern.to_s) unless pattern.is_a?(::Regexp) || pattern.is_a?(Pattern)
       encoding ||= pattern.is_a?(::Regexp) && pattern.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8

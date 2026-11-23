@@ -702,7 +702,34 @@ token stream.
 | Delegation | 0.08× to 0.18× | 0.15× to 0.50× |
 | Indentation | 0.53× to 0.86× | 0.64× to 0.82× |
 | `push_input` | 0.21× to 0.50× | 0.28× to 0.69× |
+## 2026-11-23: Compiled DFA disk cache
 
+Fresh Ruby 4.0.9 processes on arm64-darwin25 compiled a lexer with
+`/\p{L}[\p{L}\p{N}_]*/` and checked its first token. Setup starts after
+requiring flexr and selecting the cache directory. Total time includes
+loading flexr and configuring the cache.
+
+| Cache state | Lexer setup | Total time |
+| --- | ---: | ---: |
+| Disabled, median of three processes | 0.649 s | 0.665 s |
+| First compilation and write | 0.656 s | 0.679 s |
+| Cache hit, median of five processes | 0.0012 s | 0.024 s |
+
+## 2026-11-23: Prebuilt UTF-8 property automata
+
+The Unicode identifier fixture above was rerun with the prebuilt data
+and the updated cache schema. Each median uses five fresh Ruby 4.0.9
+processes on arm64-darwin25. Every process checked the first token.
+
+| Cache state | Lexer setup | Total time |
+| --- | ---: | ---: |
+| Disabled, median | 0.138 s | 0.158 s |
+| First compilation and write | 0.147 s | 0.181 s |
+| Cache hit, median | 0.0017 s | 0.029 s |
+
+The decoded UTF-8 tables occupy 411,997 bytes. The asset includes ordinary,
+case-folded, negated, and negated case-folded variants for 225 property
+names. The automata were checked against the exact Unicode scalar ranges.
 ## 2026-11-23: Frozen and mutable workload baseline
 
 Ruby 4.0.9 on arm64-darwin25 measured the scanners from `f718499` using the
@@ -726,3 +753,57 @@ the same machine.
 ```sh
 FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 3
 ```
+
+## 2026-11-23: Snapshot mutable String input
+
+The same Ruby 4.0.9 machine and fixed workload matrix compared mutable
+inputs before and after taking one frozen snapshot per lexer. Each cell
+is the median of three samples with three warmup and three timed scans per
+sample. Runtime, generated, and standalone token parity passed in all 30
+cells, including frozen inputs. This table shows the generated/runtime
+ratios for inputs supplied as mutable Strings.
+
+| Workload | Interpreter | YJIT | ZJIT |
+|---|---:|---:|---:|
+| json | 1.144x to 1.215x | 0.587x to 1.221x | 0.238x to 1.109x |
+| toml | 0.918x to 0.810x | 0.426x to 0.592x | 0.241x to 0.871x |
+| graphql | 0.960x to 0.874x | 0.454x to 0.665x | 0.278x to 0.918x |
+| sql | 0.932x to 0.849x | 0.415x to 0.652x | 0.246x to 0.883x |
+| ruby_subset | 0.944x to 0.842x | 0.442x to 0.659x | 0.252x to 0.902x |
+
+All six JSON cells met the `1.0x` threshold. Across the full matrix the
+lowest ratio was `0.592x`. The other four workloads still need
+attention before the gate can pass.
+
+## 2026-11-23: Reuse failed longest-match continuations
+
+For rules `/a/` and `/a*b/` on a frozen string of `a` bytes, Ruby 4.0.9 on
+arm64-darwin25 returned the expected single-byte tokens at each input size.
+Times include collecting every token, with compilation outside the timed
+region. Each value is the median of three runs.
+
+| Input bytes | Seconds |
+| ---: | ---: |
+| 125,000 | 0.187 |
+| 250,000 | 0.365 |
+| 500,000 | 0.737 |
+| 1,000,000 | 1.490 |
+
+The five workload specifications were also measured against the combined
+backup-analysis and snapshot baseline (`a31b39f`). Three alternating
+baseline and candidate pairs per condition used three warmup and three
+timed scans. Each column shows the lowest median candidate-to-baseline
+throughput ratio across frozen and mutable inputs and the interpreter,
+YJIT, and ZJIT.
+
+| Workload | Runtime | Generated |
+| --- | ---: | ---: |
+| JSON | 1.0556x | 1.0046x |
+| TOML | 1.0681x | 1.1938x |
+| GraphQL | 1.0437x | 1.1364x |
+| SQL | 1.0652x | 1.1910x |
+| Ruby subset | 1.0521x | 1.1749x |
+
+Every condition was within the 1% regression threshold. The workload
+matrix separately confirmed typed token parity across runtime, generated,
+and standalone scanners in all 30 conditions.

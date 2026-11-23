@@ -3,12 +3,15 @@
 module Flexr
   module Regexp
     class Normalizer
-      def initialize(ast, encoding: Encoding::UTF_8, options: 0, subject_encoding: encoding)
+      attr_reader :used_prebuilt_properties
+
+      def initialize(ast, encoding: Encoding::UTF_8, options: 0, subject_encoding: encoding, prebuilt_properties: true)
         @ast = ast
         @encoding = encoding
         @options = options
         @byte_mode = [Encoding::BINARY, Encoding::US_ASCII].include?(encoding)
         @subject_byte_mode = [Encoding::BINARY, Encoding::US_ASCII].include?(subject_encoding)
+        @prebuilt_properties = prebuilt_properties
       end
 
       def normalize
@@ -53,6 +56,12 @@ module Flexr
       end
 
       def char_class(node)
+        unicode_properties = !@byte_mode && node.ranges.any? { |range| range.first == AST::Property }
+        if @prebuilt_properties && unicode_properties && (compiled = property_automata(node))
+          @used_prebuilt_properties = true
+          return compiled
+        end
+
         ranges = node.ranges.flat_map do |range|
           if range.first == AST::Property
             property_ranges = Unicode::Property.ranges(range[2])
@@ -63,7 +72,34 @@ module Flexr
           end
         end
         ranges = complement(ranges) if node.negated
+        ranges = Unicode::Property.merge_ranges(ranges) if unicode_properties && !node.negated
         byte_sequences_for_ranges(ranges, loc: node.loc)
+      end
+
+      def property_automata(node)
+        properties, literals = node.ranges.partition { |range| range.first == AST::Property }
+        invert_property = node.negated && properties.one? && literals.empty?
+        children = properties.map do |_, negate, name, fold|
+          fragment = Unicode::PropertyAutomata.lookup(name, negate: negate ^ invert_property, fold: fold)
+          return nil unless fragment
+
+          if fragment.state_count.zero?
+            AST::Fail.new(loc: node.loc)
+          else
+            AST::ByteAutomaton.new(fragment)
+          end
+        end
+        if !invert_property && (children.length > 1 || !literals.empty?)
+          any = Unicode::PropertyAutomata.lookup("Any", negate: false, fold: false)
+          if children.any? { |child| child.is_a?(AST::ByteAutomaton) && child.fragment.equal?(any) }
+            return node.negated ? AST::Fail.new(loc: node.loc) : AST::ByteAutomaton.new(any)
+          end
+        end
+        children << byte_sequences_for_ranges(literals, loc: node.loc) unless literals.empty?
+        union = alternatives(children)
+        return union unless node.negated && !invert_property
+
+        AST::Difference.new(left: universal_character, right: union, loc: node.loc, operation: "character class complement")
       end
 
       def byte_sequences_for_ranges(ranges, loc:)

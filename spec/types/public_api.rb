@@ -31,6 +31,8 @@ module PublicApiTypecheck
   end
 end
 
+Flexr.cache_dir = "tmp/flexr-cache"
+Flexr.cache_dir = nil
 Flexr::Lexer.rule(/[0-9]+/, emits: [:INTEGER]) { emit :INTEGER, text.to_i }
 Flexr::Lexer.rule(/(?<value>[0-9]+)mm/) do
   # @type var value: String?
@@ -62,6 +64,7 @@ Flexr::Lexer.rule("<<") { emit :INLINE, scan_until(">>") }
 Flexr::Lexer.rule("<<TAG\n") { emit :HEREDOC, scan_until_line("TAG") }
 
 lexer = Flexr::Lexer.new("12", filename: "input.txt", max_steps: 1000)
+Flexr::Lexer.new(+"12", freeze_input: false)
 Flexr::Lexer.new("12", cancellation: -> { false })
 Flexr::Lexer.new("12", cancellation: ->(current) { current.byte_pos > 100 })
 Flexr::Lexer.new("12", cancellation: false.method(:!))

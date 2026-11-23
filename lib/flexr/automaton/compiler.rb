@@ -11,7 +11,20 @@ module Flexr
       end
 
       def compile
+        @prebuilt_properties = true
+        compile_spec
+      rescue CompileError => e
+        raise unless @used_prebuilt_properties && e.diagnostic&.code == "FLEXR-E006"
+
+        @prebuilt_properties = false
+        compile_spec
+      end
+
+      private
+
+      def compile_spec
         started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        @used_prebuilt_properties = false
         @regexp_asts = {}
         @differences = {}
         @empty_absence_rules = {}
@@ -23,6 +36,8 @@ module Flexr
         @pattern_universe_dfa = nil
         @state_limit = @spec.options.fetch(:max_dfa_states, 100_000)
         @state_limit = 100_000 unless @state_limit.is_a?(Integer) && @state_limit.positive?
+        directory = Flexr.cache_dir
+        @dfa_cache = directory && DfaCache.new(directory, @spec, @state_limit)
         validate_rules
         state_names = effective_states
         machines = state_names.to_h do |state_name|
@@ -30,7 +45,9 @@ module Flexr
           dfa = compile_machine(rules)
           plans = Accel.whole_token_plans(dfa, rules) if
             @spec.backend != :firstmatch && @spec.options[:accel] == :strscan
-          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans)]
+          memo_states, recovery_states = Analysis.backup_memo_states(dfa) unless @spec.backend == :firstmatch
+          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans,
+                                   backup_memo_states: memo_states, backup_recovery_states: recovery_states)]
         rescue CompileError => e
           e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
           raise
@@ -47,8 +64,6 @@ module Flexr
         compiled.diagnostics.concat(KeywordTables.diagnostics(compiled, @spec)) if @spec.options.key?(:keyword_tables)
         compiled
       end
-
-      private
 
       def effective_states
         names = [:initial]
@@ -68,13 +83,39 @@ module Flexr
       end
 
       def compile_machine(rules)
+        return build_machine(rules) unless @dfa_cache
+
+        resolved_patterns = rules.map do |rule|
+          rule.patterns.map { |pattern| pattern.is_a?(Pattern) ? pattern : pattern_regexp(pattern) }
+        end
+        key = @dfa_cache.key(rules, resolved_patterns)
+        if (entry = @dfa_cache.read(key))
+          dfa, conditions, empty_absence = entry
+          rules.zip(conditions).each do |rule, values|
+            rule.pattern_conditions = values.map do |rule_index, pattern_index, bol_only, end_anchor|
+              Acceptance.new(rule_index: rule_index, pattern_index: pattern_index, bol_only: bol_only, end_anchor: end_anchor)
+            end
+          end
+          empty_absence.each { |index| @empty_absence_rules[index] = true }
+          return dfa
+        end
+
+        dfa = build_machine(rules, resolved_patterns)
+        conditions = rules.map { |rule| rule.pattern_conditions.map(&:to_a) }
+        empty_absence = rules.filter_map { |rule| rule.index if @empty_absence_rules[rule.index] }
+        @dfa_cache.write(key, dfa, conditions, empty_absence)
+        dfa
+      end
+
+      def build_machine(rules, resolved_patterns = nil)
         @active_rules = rules
         normalized = []
-        rules.each do |rule|
+        rules.each_with_index do |rule, rule_offset|
           rule.pattern_conditions = []
           first_pattern = normalized.length
           contains_absence = false
-          rule.patterns.each_with_index do |pattern, pattern_index|
+          patterns = resolved_patterns ? resolved_patterns.fetch(rule_offset) : rule.patterns
+          patterns.each_with_index do |pattern, pattern_index|
             if pattern.is_a?(Pattern)
               body = Regexp::AST::EmbeddedDFA.new(@pattern_dfas.fetch([rule.index, pattern_index]))
               bol_only = end_anchor = false
@@ -109,10 +150,11 @@ module Flexr
 
       def compile_difference(node)
         @differences[node] ||= begin
+          operation = node.operation || "absence group"
           accept = Acceptance.new(rule_index: 0, pattern_index: 0)
-          left = determinize([[node.left, accept]], operation: "absence group")
-          right = determinize([[node.right, accept]], operation: "absence group")
-          difference = DFAOperations.difference(left, right) { |state| enforce_state_limit!(state, "absence group") }
+          left = determinize([[node.left, accept]], operation: operation)
+          right = determinize([[node.right, accept]], operation: operation)
+          difference = DFAOperations.difference(left, right) { |state| enforce_state_limit!(state, operation) }
           Minimizer.minimize(difference)
         end
       end
@@ -466,7 +508,11 @@ module Flexr
 
       def normalize_regexp(regexp, ast)
         encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
-        Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, options: regexp.options).normalize
+        normalizer = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding,
+                                            options: regexp.options, prebuilt_properties: @prebuilt_properties)
+        normalized = normalizer.normalize
+        @used_prebuilt_properties ||= normalizer.used_prebuilt_properties
+        normalized
       end
 
       def diagnostics_for(compiled, elapsed)
@@ -489,7 +535,10 @@ module Flexr
                               help: "remove it, reorder the rules, or make its language distinct",
                               note: example&.fetch(:note) || empty_absence_note(rule))
         end)
-        diagnostics.concat(overlap_diagnostics(compiled, rules_by_index)) if @spec.options[:warn_level] == :all
+        if @spec.options[:warn_level] == :all
+          diagnostics.concat(overlap_diagnostics(compiled, rules_by_index))
+          diagnostics.concat(backup_diagnostics(compiled)) unless @spec.backend == :firstmatch
+        end
 
         @spec.states.each do |state_name, state|
           next if state_name == :initial
@@ -559,6 +608,17 @@ module Flexr
                                               help: "use generated mode for production startup")
         end
         diagnostics
+      end
+
+      def backup_diagnostics(compiled)
+        compiled.machines.filter_map do |state, machine|
+          backup = Analysis.backup(machine.dfa)
+          next unless backup.unbounded?
+
+          Diagnostics.warning("FLEXR-W023", "state #{state.inspect} has unbounded DFA backup",
+                              location: @spec.states.fetch(state).location,
+                              note: "body DFA example: #{backup.example.inspect} followed by repetitions of #{backup.cycle.inspect}")
+        end
       end
 
       def empty_absence_note(rule)
