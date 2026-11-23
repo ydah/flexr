@@ -37,12 +37,16 @@ module Flexr
       reset_input_cursor(input, config.encoding)
       @on_error = nil
       @interpreter = nil
-      @generated_scanner = generated_runtime? && respond_to?(:scan_one, true)
+      @generated_scanner = use_generated_scanner?
     end
 
     attr_reader :filename, :error_mode, :buffer, :max_token_size, :max_lookahead_size, :steps
 
     attr_writer :on_error
+
+    def __flexr_recovers_unmatched?
+      @on_error || @error_mode != :raise
+    end
 
     def input
       @buffer.source
@@ -452,6 +456,10 @@ module Flexr
 
     def generated_runtime?
       self.class.respond_to?(:__flexr_generated?) && self.class.__flexr_generated?
+    end
+
+    def use_generated_scanner?
+      generated_runtime? && respond_to?(:scan_one, true)
     end
 
     def ensure_token_size!

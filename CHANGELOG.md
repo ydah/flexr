@@ -14,6 +14,7 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 ### Changed
 
 - Take a frozen snapshot of mutable String inputs at `Lexer.new` and `push_input`. Pass `freeze_input: false` to borrow the original String.
+- Reuse failed longest-match scans so overlapping rules such as `/a/` and `/a*b/` can tokenize a long run of `a` in linear time. Regenerate existing scanners to use the optimization.
 
 ## [2.2.0](https://github.com/ydah/flexr/compare/v2.1.0...v2.2.0)
 

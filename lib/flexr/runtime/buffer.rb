@@ -47,9 +47,13 @@ module Flexr
         @source.frozen? ? retained.freeze : retained
       end
 
+      alias acceleration_source source
+
       def stable_source
         @source if @retain_input && @window_start.zero? && base_offset.zero?
       end
+
+      alias scan_source stable_source
 
       def getbyte(position)
         return @source.getbyte(position) if @window_start.zero? && base_offset.zero? && position < @source.bytesize
@@ -148,6 +152,7 @@ module Flexr
 
         ending = [position, bytesize].min
         removed = ending - base_offset
+        prune_backup_memos(ending) if @backup_memos
         @window_start += removed
         @base_offset = ending
         compact_storage!

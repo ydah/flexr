@@ -201,7 +201,9 @@ module Flexr
       machines = compiled.machines.map do |name, machine|
         direct = Codegen::Direct.new(compiled).generate(state: name) if backend == :direct
         data = dfa_data(machine.dfa, compression: compression, direct: direct)
-        "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)} }"
+        flags = { backup_memo_states: machine.backup_memo_states, backup_recovery_states: machine.backup_recovery_states }
+        fields = flags.compact.map { |field, states| ", #{field}: #{ruby_literal(states)}" }.join
+        "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)}#{fields} }"
       end
       # W016 is derived from wall-clock compilation time and must not make
       # generated source (or its golden digest) vary between runs.
@@ -261,6 +263,8 @@ module Flexr
 
     def embedded_runtime(parsed, compiled)
       sources = RUNTIME_SOURCES.dup
+      sources.insert(sources.index("runtime/checkpoint.rb"), "runtime/backup_memo.rb") if
+        compiled.machines.values.any? { |machine| machine.backup_memo_states || machine.backup_recovery_states }
       sources << "runtime/input_stack.rb" if parsed.uses_input_stack || parsed.config.dig(:options, :input_stack)
       sources << "runtime/indentation.rb" if parsed.config.dig(:options, :indentation)
       sources << "runtime/delimiters.rb" if parsed.uses_dynamic_delimiters || parsed.config.dig(:options, :dynamic_delimiters)

@@ -24,6 +24,12 @@ module Flexr
         BackupAnalysis.new(dfa).analyze
       end
 
+      def backup_memo_states(dfa)
+        require_relative "backup"
+
+        BackupAnalysis.new(dfa).memo_states
+      end
+
       def self_loop_set(dfa, state)
         Accel.self_loop_set(dfa, state)
       end

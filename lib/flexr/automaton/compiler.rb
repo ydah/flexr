@@ -30,7 +30,9 @@ module Flexr
           dfa = compile_machine(rules)
           plans = Accel.whole_token_plans(dfa, rules) if
             @spec.backend != :firstmatch && @spec.options[:accel] == :strscan
-          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans)]
+          memo_states, recovery_states = Analysis.backup_memo_states(dfa) unless @spec.backend == :firstmatch
+          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans,
+                                   backup_memo_states: memo_states, backup_recovery_states: recovery_states)]
         rescue CompileError => e
           e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
           raise
