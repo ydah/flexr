@@ -55,6 +55,10 @@ module Flexr
         lines << "#{indent}    @__flexr_generated_whole_tokens = machine.respond_to?(:whole_tokens) ? machine.whole_tokens : nil" if whole_tokens
         lines << "#{indent}    #{scan_cache} = #{fast_path}(@__flexr_generated_scan_dfa)"
         lines << "#{indent}    @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)"
+        if recovery_only
+          lines << "#{indent}    @__flexr_generated_recover_simple = @__flexr_generated_scan_simple && @__flexr_generated_backup"
+          lines << "#{indent}    @__flexr_generated_scan_simple = false if @__flexr_generated_recover_simple"
+        end
         lines << "#{indent}  end"
         lines << "#{indent}  dfa = @__flexr_generated_scan_dfa"
         lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless #{scan_cache}"
@@ -79,6 +83,10 @@ module Flexr
         lines << "#{indent}  best = nil"
         lines << "#{indent}  accel_mode = @accel_mode"
         lines << "#{indent}  accelerate = accel_mode != :none && !(accel_mode == :auto && @__flexr_generated_auto_accel_off)"
+        if recovery_only
+          lines << "#{indent}  accelerate = false if @__flexr_generated_recover_simple && source && " \
+            "!guarded_steps && !check_token_limit && accel_mode == :auto"
+        end
         lines << "#{indent}  while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)"
         lines << "#{indent}    if #{accelerate}"
         lines << "#{indent}      region = __flexr_generated_acceleration_region(dfa, current)"
@@ -126,18 +134,13 @@ module Flexr
           lines << "#{indent}  transitions = dfa.transitions" if dense_rows
           lines << "#{indent}  rules = self.class.__flexr_rules"
         end
-        lines.concat(scan_source(indent, memoized))
+        lines.concat(scan_source(indent, memoized, probe: memoized_body))
         lines << "#{indent}  guarded_steps = @max_steps || @cancellation"
         lines << "#{indent}  check_token_limit = @token_limit_required"
         lines << "#{indent}  cursor = position"
         lines << "#{indent}  best = nil"
         frozen_fast = "source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)"
-        if recovery_only
-          lines << "#{indent}  frozen_fast = #{frozen_fast}"
-          lines << "#{indent}  if frozen_fast && !memo_states"
-        else
-          lines << "#{indent}  if #{frozen_fast}"
-        end
+        lines << "#{indent}  if #{frozen_fast}"
         lines << "#{indent}    while (byte = source.getbyte(cursor))"
         if direct
           lines << "#{indent}      current = direct_nxt[(current * direct_classes) + ec[byte]]"
@@ -168,9 +171,7 @@ module Flexr
         lines << "#{indent}  end"
         lines << "#{indent}  token_start = more_text_start || position"
         lines << "#{indent}  token_limit = max_token_size"
-        ordinary_accel = "@accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)"
-        ordinary_accel = "!frozen_fast && #{ordinary_accel}" if recovery_only
-        lines << "#{indent}  accelerate = #{ordinary_accel}"
+        lines << "#{indent}  accelerate = @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)"
         lines << "#{indent}  while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)"
         lines << "#{indent}    if #{accelerate}"
         lines << "#{indent}      region = __flexr_generated_acceleration_region(dfa, current)"
@@ -198,7 +199,7 @@ module Flexr
         lines << "#{indent}      size = cursor - token_start"
         lines << "#{indent}      defer_token_size_check!(size, rule: acceptance&.rule_index) if size > token_limit"
         lines << "#{indent}    end"
-        lines.concat(backup_suffix("#{indent}    ", "acceptance", update: true)) if memoized
+        lines.concat(backup_suffix("#{indent}    ", "acceptance", update: true)) if memoized_body
         lines << "#{indent}    next unless acceptance"
         lines << "#{indent}    rule = rules.fetch(acceptance.rule_index)"
         lines << "#{indent}    best ||= (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
@@ -321,13 +322,11 @@ module Flexr
 
       private
 
-      def scan_source(indent, memoized)
-        return ["#{indent}  source = @__flexr_stable_scan_source || buffer.stable_source"] unless memoized
-
-        [
-          "#{indent}  memo_states = @__flexr_generated_backup",
-          "#{indent}  source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)"
-        ]
+      def scan_source(indent, memoized, probe: memoized)
+        source = memoized ? "(@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)" : "buffer.stable_source"
+        lines = []
+        lines << "#{indent}  memo_states = @__flexr_generated_backup" if probe
+        lines << "#{indent}  source = @__flexr_stable_scan_source || #{source}"
       end
 
       def backup_suffix(indent, acceptance, update: false)

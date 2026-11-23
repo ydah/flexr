@@ -27,6 +27,8 @@ module TomlExample
         end
         @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
+        @__flexr_generated_recover_simple = @__flexr_generated_scan_simple && @__flexr_generated_backup
+        @__flexr_generated_scan_simple = false if @__flexr_generated_recover_simple
       end
       dfa = @__flexr_generated_scan_dfa
       return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast
@@ -48,6 +50,7 @@ module TomlExample
       best = nil
       accel_mode = @accel_mode
       accelerate = accel_mode != :none && !(accel_mode == :auto && @__flexr_generated_auto_accel_off)
+      accelerate = false if @__flexr_generated_recover_simple && source && !guarded_steps && !check_token_limit && accel_mode == :auto
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
         if accelerate && (guarded_steps || !memo_states&.[](current))
           region = __flexr_generated_acceleration_region(dfa, current)
@@ -97,14 +100,12 @@ module TomlExample
       accepts = dfa.accepts
       transitions = dfa.transitions
       rules = self.class.__flexr_rules
-      memo_states = @__flexr_generated_backup
       source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
       guarded_steps = @max_steps || @cancellation
       check_token_limit = @token_limit_required
       cursor = position
       best = nil
-      frozen_fast = source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
-      if frozen_fast && !memo_states
+      if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
         while (byte = source.getbyte(cursor))
           current = transitions[current][ec[byte]]
           break unless current
@@ -125,7 +126,7 @@ module TomlExample
       end
       token_start = more_text_start || position
       token_limit = max_token_size
-      accelerate = !frozen_fast && @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)
+      accelerate = @accel_mode != :none && !(@accel_mode == :auto && @__flexr_generated_auto_accel_off)
       while cursor < (source ? source.bytesize : buffer.bytesize) || buffer.ensure_available?(cursor + 1)
         if accelerate && (guarded_steps || !memo_states&.[](current))
           region = __flexr_generated_acceleration_region(dfa, current)
@@ -152,14 +153,6 @@ module TomlExample
         if check_token_limit
           size = cursor - token_start
           defer_token_size_check!(size, rule: acceptance&.rule_index) if size > token_limit
-        end
-        if !acceptance && memo_states&.[](current)
-          suffix = __flexr_backup_suffix(dfa, memo_states, current, cursor, position)
-          break if suffix == false
-          if suffix
-            current, cursor = suffix
-            acceptance = accepts[current].first
-          end
         end
         next unless acceptance
         rule = rules.fetch(acceptance.rule_index)
