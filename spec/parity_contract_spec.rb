@@ -115,6 +115,20 @@ RSpec.describe "runtime and generated parity" do
                                           "note" => "rule /a/", "rule" => 1)
   end
 
+  it "scans octal byte escapes in runtime, generated, and standalone lexers" do
+    source = <<~'RUBY'
+      require "flexr"
+      class OctalParityLexer < Flexr::Lexer
+        rule(/[\011\015]+/, skip: true)
+        rule(/\303\xA9+/) { emit :LETTER, text.bytes }
+        rule(/\08|\1234/, emit: :ESCAPE)
+      end
+    RUBY
+    input = "\x008\téé\rS4"
+    expected = [[["ESCAPE", "\x008"], ["LETTER", "éé".bytes], ["ESCAPE", "S4"]]]
+    expect(outcomes_for(source, "OctalParityLexer", [input], streaming: true).values).to all(eq(expected))
+  end
+
   %i[table direct auto].each do |backend|
     it "ends absence comments at the first close in every #{backend} scanner" do
       source = <<~'RUBY'.sub("BACKEND", backend.to_s)

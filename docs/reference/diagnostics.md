@@ -272,14 +272,9 @@ state name, and return to the original state when adapting the example.
 Larger patterns and competing rules need a separate review; this is not an
 automatic replacement for every `\K`.
 
-Escape diagnostics also include concrete examples. For an octal tab,
-rewrite `rule(/\011/)` as `rule(/\x09/)`. For an unknown escape such as `\q`,
-use `rule(/q/)` only if `q` is the intended literal character. Keep the original
-action and regexp options when adapting either example.
-
-Inside a character class, `\1` is a character code. Its diagnostic recommends
-an explicit hexadecimal escape such as `rule(/[\x01]/)`, which matches the same
-control character as `rule(/[\1]/)`.
+For an unknown escape such as `\q`, use `rule(/q/)` only if `q` is the
+intended literal character. Keep the original action and regexp options.
+Inside a character class, `\1` matches the same control character as `\x01`.
 
 When raw regexp sources contain control or meta escapes, their help gives
 hexadecimal alternatives: `rule(/\cA/)` and `rule(/\C-A/)` become
