@@ -7,6 +7,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Use Ruby-style octal escapes in regexp rules and character classes, including
+  UTF-8 sequences such as `\303\251` and binary bytes such as `\377`.
 - Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes. Set it to `nil` to disable the cache.
 - Use `--residuals` with `flexr explain` or `flexr trace` to see what a
   longest-match rule can still match at each DFA state.

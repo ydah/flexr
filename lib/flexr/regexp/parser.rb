@@ -5,7 +5,7 @@ module Flexr
     class Parser
       ESCAPES = {
         "n" => 0x0a, "t" => 0x09, "r" => 0x0d, "f" => 0x0c,
-        "v" => 0x0b, "a" => 0x07, "e" => 0x1b, "0" => 0
+        "v" => 0x0b, "a" => 0x07, "e" => 0x1b
       }.freeze
       PROPERTY_ALIASES = {
         "digit" => "Nd", "alpha" => "Alphabetic", "alnum" => "Alnum",
@@ -13,6 +13,7 @@ module Flexr
       }.freeze
       POSIX_CLASSES = %w[alnum alpha blank cntrl digit graph lower print punct space upper xdigit].freeze
       LITERAL_ESCAPES = (%w[. [ ] { } ( ) * + ? | ^ $ \\ / - #] + [" "]).freeze
+      MAX_BACKREFERENCE = 1000
 
       attr_reader :source
 
@@ -26,6 +27,7 @@ module Flexr
         @preserve_captures = preserve_captures
         @index = 0
         @class_depth = 0
+        @capture_count = 0
         offset = 0
         @byte_offsets = [0]
         source.each_char do |character|
@@ -139,6 +141,7 @@ module Flexr
           prefix = parse_group_prefix
           return AST::Empty.new(loc: span(starting)) if prefix == :global
         else
+          @capture_count += 1
           @capture_offsets&.push(@byte_offsets.fetch(starting))
         end
         node = parse_expression
@@ -205,6 +208,7 @@ module Flexr
 
       def named_capture_prefix(opener, closer)
         name = read_until(closer)
+        @capture_count += 1
         @preserve_captures ? "#{opener}#{name}#{closer}" : true
       end
 
@@ -223,10 +227,20 @@ module Flexr
       def fold_ranges(ranges)
         folded = ranges.flat_map do |range|
           next [range] if range.first.is_a?(Module)
+          next fold_binary_range(range) if @encoding == Encoding::BINARY
 
           Unicode::CaseFold.ranges(range.first, range.last)
         end
         merge_ranges(folded)
+      end
+
+      def fold_binary_range(range)
+        alternatives = [[65, 90, 32], [97, 122, -32]].filter_map do |first, last, offset|
+          lo = [range.first, first].max
+          hi = [range.last, last].min
+          [lo + offset, hi + offset] if lo <= hi
+        end
+        [range, *alternatives]
       end
 
       def parse_class
@@ -364,11 +378,6 @@ module Flexr
         char = advance_raw
         raise_syntax("trailing backslash") unless char
         if ESCAPES.key?(char)
-          if char == "0" && current&.match?(/[0-9]/)
-            raise unsupported("octal escapes",
-                              'use an explicit hexadecimal escape: rewrite rule(/\011/) as rule(/\x09/) for a tab; keep the action')
-          end
-
           @escaped_value = true
           @last_codepoint = ESCAPES.fetch(char)
           return
@@ -392,7 +401,7 @@ module Flexr
           if consume?("{")
             assign_codepoint(read_until("}"))
           else
-            assign_hex_byte(read_exact(2))
+            assign_byte(read_exact(2).to_i(16))
           end
           nil
         when "u"
@@ -446,15 +455,11 @@ module Flexr
         when "M"
           raise unsupported("\\M",
                             'for binary input, rewrite rule(/\M-a/n) as rule(/\xE1/n); keep the action; other meta characters need their own byte value')
-        when "1".."9", "k"
-          read_until(">") if char == "k" && consume?("<")
-          feature = char == "k" ? "backreferences" : "\\#{char}"
-          help = if @class_depth.positive? && char != "k"
-            'for a character code, use an explicit hexadecimal escape such as rule(/[\x01]/); keep the action'
-          else
-            'for a capture limited to a or b, rewrite rule(/(a|b)\1/) as rule(/(?:aa|bb)/) and keep the action; otherwise split the rule into states and compare matched text in actions'
-          end
-          raise unsupported(feature, help)
+        when "0".."9"
+          parse_numbered_escape(char)
+        when "k"
+          read_until(">") if consume?("<")
+          reject_backreference("backreferences")
         when *LITERAL_ESCAPES
           @escaped_value = true
           @last_codepoint = char.ord
@@ -462,6 +467,31 @@ module Flexr
           raise unsupported("unknown escape \\#{char}",
                             'if q is literal, rewrite rule(/\q/) as rule(/q/); otherwise use a supported escape; keep the action')
         end
+      end
+
+      def parse_numbered_escape(first)
+        starting = @index - 1
+        octal = octal_digits(starting)
+        byte = octal&.to_i(8)
+        # Ruby preserves decimal references for ASCII escapes after preprocessing raw bytes.
+        if first != "0" && @class_depth.zero? && (!byte || byte < 0x80)
+          decimal = /\G[0-9]+/.match(@source, starting)[0]
+          maximum = @capture_count.clamp(9, MAX_BACKREFERENCE)
+          reject_backreference("\\#{decimal}") if decimal.to_i <= maximum
+        end
+
+        if octal
+          @index += octal.length - 1
+          assign_byte(byte)
+        else
+          @escaped_value = true
+          @last_codepoint = first.ord
+        end
+      end
+
+      def reject_backreference(feature)
+        raise unsupported(feature,
+                          'for a capture limited to a or b, rewrite rule(/(a|b)\1/) as rule(/(?:aa|bb)/) and keep the action; otherwise split the rule into states and compare matched text in actions')
       end
 
       def shorthand_ranges(char)
@@ -654,9 +684,25 @@ module Flexr
         @last_codepoint = codepoint
       end
 
-      def assign_hex_byte(digits)
-        byte = digits.to_i(16)
-        if @encoding == Encoding::BINARY
+      def octal_digits(starting)
+        @source[starting, 3][/\A[0-7]+/]
+      end
+
+      def read_byte_escape
+        expect("\\")
+        return read_exact(2).to_i(16) if consume?("x")
+
+        digits = octal_digits(@index)
+        raise_syntax("invalid byte escape") unless digits
+
+        @index += digits.length
+        digits.to_i(8)
+      end
+
+      def assign_byte(byte)
+        raise_syntax("invalid byte escape") if byte > 0xff
+
+        if @encoding == Encoding::BINARY && (!ignorecase? || byte >= 0x80)
           @escaped_byte = true
           @last_byte = byte
           return
@@ -670,10 +716,8 @@ module Flexr
         else 0
         end
         bytes = [byte]
-        (length - 1).times do
-          expect("\\x")
-          bytes << read_exact(2).to_i(16)
-        end
+        (length - 1).times { bytes << read_byte_escape }
+        raise_syntax("invalid byte escape") if bytes.any? { |part| part > 0xff }
         value = bytes.pack("C*").force_encoding(Encoding::UTF_8)
         raise_syntax("invalid UTF-8 byte escape") unless length.positive? && value.valid_encoding?
 
