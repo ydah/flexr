@@ -34,7 +34,7 @@ module JsonExample
       direct_nxt = direct&.fetch(:nxt)
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
-      source = buffer.stable_source
+      source = @__flexr_stable_scan_source || buffer.stable_source
       guarded_steps = scan_steps_guarded?
       token_start = more_text_start || position
       token_limit = max_token_size
@@ -77,7 +77,7 @@ module JsonExample
     end
     def __flexr_generated_scan_simple(dfa, position)
       current, direct_nxt, direct_classes, ec, accepts, rules = @__flexr_generated_scan_layout
-      source = buffer.stable_source
+      source = @__flexr_stable_scan_source || buffer.stable_source
       guarded_steps = scan_steps_guarded?
       check_token_limit = token_limit_required?
       cursor = position

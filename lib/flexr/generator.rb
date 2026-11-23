@@ -83,7 +83,10 @@ module Flexr
           ' unless defined?(Flexr::Runtime::DelegatedTokens)'
         install = "#{guard}\n#{indent}#{install}"
       end
-      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct)}"
+      scanner = Codegen::Table.new(compiled).source(
+        indent: indent, direct: effective_backend(parsed) == :direct, packed: table_format == :packed
+      )
+      install = "#{install}#{scanner}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
       parsed.rules.each do |rule|
@@ -228,12 +231,12 @@ module Flexr
         accepts: dfa.accepts, ec: dfa.ec, class_count: dfa.class_count,
         state_count: dfa.states, start: dfa.start, rule_ids: dfa.rule_ids
       }
-      pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
+      pack_tables = %i[rows full].include?(compression) || table_format == :packed
       if direct
         data[:direct] = direct
       elsif pack_tables
         packed = Codegen::TablePacker.pack(dfa.transitions, compression: compression)
-        data[:packed] = if @options.fetch(:table_format, :literal).to_sym == :packed
+        data[:packed] = if table_format == :packed
           Codegen::TablePacker.encode(packed)
         else
           packed
@@ -259,6 +262,10 @@ module Flexr
 
     def table_compression(parsed)
       @options.fetch(:table_compression, parsed.config[:options]&.fetch(:table_compression, :rows) || :rows).to_sym
+    end
+
+    def table_format
+      @options.fetch(:table_format, :literal).to_sym
     end
 
     def embedded_runtime(parsed, compiled)

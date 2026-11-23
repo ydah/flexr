@@ -3,6 +3,9 @@
 module Flexr
   module Codegen
     class Table < Base
+      # Cap row materialization at 128 KiB of transition slots on 64-bit Ruby.
+      DENSE_SCAN_CELL_LIMIT = 16_384
+
       def generate(state: :initial)
         machine = compiled.machines.fetch(state)
         dfa = machine.dfa
@@ -25,10 +28,12 @@ module Flexr
         ].join("\n")
       end
 
-      def source(indent: "  ", direct: false)
+      def source(indent: "  ", direct: false, packed: false)
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         memoized = compiled.machines.values.any?(&:backup_memo_states)
+        dense_rows = !direct && !packed &&
+          compiled.machines.values.sum { |machine| machine.dfa.states * machine.dfa.class_count } <= DENSE_SCAN_CELL_LIMIT
         accelerate = memoized ? "accelerate && (guarded_steps || !memo_states&.[](current))" : "accelerate"
         captures = compiled.rules.any?(&:capture_patterns)
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
@@ -113,7 +118,7 @@ module Flexr
           lines << "#{indent}  direct_classes = direct&.fetch(:classes)"
           lines << "#{indent}  ec = dfa.ec"
           lines << "#{indent}  accepts = dfa.accepts"
-          lines << "#{indent}  transitions = dfa.transitions" if memoized
+          lines << "#{indent}  transitions = dfa.transitions" if dense_rows
           lines << "#{indent}  rules = self.class.__flexr_rules"
         end
         lines.concat(scan_source(indent, memoized))
@@ -126,7 +131,7 @@ module Flexr
         if direct
           lines << "#{indent}      current = direct_nxt[(current * direct_classes) + ec[byte]]"
           lines << "#{indent}      break if current < 0"
-        elsif memoized
+        elsif dense_rows
           lines << "#{indent}      current = transitions[current][ec[byte]]"
           lines << "#{indent}      break unless current"
         else
@@ -301,11 +306,11 @@ module Flexr
       private
 
       def scan_source(indent, memoized)
-        return ["#{indent}  source = buffer.stable_source"] unless memoized
+        return ["#{indent}  source = @__flexr_stable_scan_source || buffer.stable_source"] unless memoized
 
         [
           "#{indent}  memo_states = @__flexr_generated_backup",
-          "#{indent}  source = @__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source"
+          "#{indent}  source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)"
         ]
       end
 

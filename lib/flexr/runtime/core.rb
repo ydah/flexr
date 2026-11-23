@@ -410,6 +410,7 @@ module Flexr
       @string_input = input.is_a?(String)
       input = @buffer.source if @string_input
       @stable_input_end = @string_input && input.frozen? ? input.bytesize : nil
+      @__flexr_stable_scan_source = @stable_input_end && @retain_input && input
       @valid_utf8_input = @stable_input_end && (encoding != Encoding::UTF_8 || input.ascii_only? || begin
         bytes = input.encoding == Encoding::UTF_8 ? input : input.dup.force_encoding(Encoding::UTF_8)
         bytes.valid_encoding?

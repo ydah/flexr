@@ -703,3 +703,36 @@ ratios for inputs supplied as mutable Strings.
 All six JSON cells met the `1.0x` threshold. Across the full matrix the
 lowest ratio was `0.592x`. The other four workloads still need
 attention before the gate can pass.
+
+## 2026-11-23: Reuse failed longest-match continuations
+
+For rules `/a/` and `/a*b/` on a frozen string of `a` bytes, Ruby 4.0.9 on
+arm64-darwin25 returned the expected single-byte tokens at each input size.
+Times include collecting every token, with compilation outside the timed
+region. Each value is the median of three runs.
+
+| Input bytes | Seconds |
+| ---: | ---: |
+| 125,000 | 0.206 |
+| 250,000 | 0.394 |
+| 500,000 | 0.813 |
+| 1,000,000 | 1.663 |
+
+The five workload specifications were also measured against the combined
+backup-analysis and snapshot baseline (`a31b39f`). Three alternating
+baseline and candidate pairs per condition used three warmup and three
+timed scans. Each column shows the lowest median candidate-to-baseline
+throughput ratio across frozen and mutable inputs and the interpreter,
+YJIT, and ZJIT.
+
+| Workload | Runtime | Generated |
+| --- | ---: | ---: |
+| JSON | 1.0207x | 1.0065x |
+| TOML | 1.0190x | 1.1390x |
+| GraphQL | 0.9967x | 1.1093x |
+| SQL | 1.0439x | 1.1245x |
+| Ruby subset | 1.0452x | 1.1013x |
+
+Every condition was within the 1% regression threshold. The workload
+matrix separately confirmed typed token parity across runtime, generated,
+and standalone scanners in all 30 conditions.

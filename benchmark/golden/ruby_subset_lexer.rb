@@ -42,7 +42,7 @@ module RubySubset
       direct_nxt = direct&.fetch(:nxt)
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
-      source = buffer.stable_source
+      source = @__flexr_stable_scan_source || buffer.stable_source
       guarded_steps = scan_steps_guarded?
       token_start = more_text_start || position
       token_limit = max_token_size
@@ -90,15 +90,16 @@ module RubySubset
       direct_classes = direct&.fetch(:classes)
       ec = dfa.ec
       accepts = dfa.accepts
+      transitions = dfa.transitions
       rules = self.class.__flexr_rules
-      source = buffer.stable_source
+      source = @__flexr_stable_scan_source || buffer.stable_source
       guarded_steps = scan_steps_guarded?
       check_token_limit = token_limit_required?
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
         while (byte = source.getbyte(cursor))
-          current = dfa.transition(current, byte)
+          current = transitions[current][ec[byte]]
           break unless current
           cursor += 1
           acceptance = accepts[current].first

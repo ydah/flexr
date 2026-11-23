@@ -40,7 +40,7 @@ module Flexr
         direct_classes = direct&.fetch(:classes)
         ec = dfa.ec
         memo_states = @__flexr_generated_backup
-        source = @__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source
+        source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
         guarded_steps = scan_steps_guarded?
         token_start = more_text_start || position
         token_limit = max_token_size
@@ -98,7 +98,7 @@ module Flexr
         transitions = dfa.transitions
         rules = self.class.__flexr_rules
         memo_states = @__flexr_generated_backup
-        source = @__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source
+        source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
         guarded_steps = scan_steps_guarded?
         check_token_limit = token_limit_required?
         cursor = position
