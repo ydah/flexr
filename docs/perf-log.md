@@ -713,10 +713,10 @@ region. Each value is the median of three runs.
 
 | Input bytes | Seconds |
 | ---: | ---: |
-| 125,000 | 0.206 |
-| 250,000 | 0.394 |
-| 500,000 | 0.813 |
-| 1,000,000 | 1.663 |
+| 125,000 | 0.187 |
+| 250,000 | 0.365 |
+| 500,000 | 0.737 |
+| 1,000,000 | 1.490 |
 
 The five workload specifications were also measured against the combined
 backup-analysis and snapshot baseline (`a31b39f`). Three alternating
@@ -727,11 +727,11 @@ YJIT, and ZJIT.
 
 | Workload | Runtime | Generated |
 | --- | ---: | ---: |
-| JSON | 1.0207x | 1.0065x |
-| TOML | 1.0190x | 1.1390x |
-| GraphQL | 0.9967x | 1.1093x |
-| SQL | 1.0439x | 1.1245x |
-| Ruby subset | 1.0452x | 1.1013x |
+| JSON | 1.0556x | 1.0046x |
+| TOML | 1.0681x | 1.1938x |
+| GraphQL | 1.0437x | 1.1364x |
+| SQL | 1.0652x | 1.1910x |
+| Ruby subset | 1.0521x | 1.1749x |
 
 Every condition was within the 1% regression threshold. The workload
 matrix separately confirmed typed token parity across runtime, generated,
