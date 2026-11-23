@@ -659,6 +659,19 @@ Runtime, generated, and standalone produced identical frozen-input
 token sequences on all three engines for the five stock workloads
 and the three direct variants.
 
+## 2026-11-23: Compiled DFA disk cache
+
+Fresh Ruby 4.0.9 processes on arm64-darwin25 compiled a lexer with
+`/\p{L}[\p{L}\p{N}_]*/` and checked its first token. Setup starts after
+requiring flexr and selecting the cache directory. Total time includes
+loading flexr and configuring the cache.
+
+| Cache state | Lexer setup | Total time |
+| --- | ---: | ---: |
+| Disabled, median of three processes | 0.649 s | 0.665 s |
+| First compilation and write | 0.656 s | 0.679 s |
+| Cache hit, median of five processes | 0.0012 s | 0.024 s |
+
 ## 2026-11-23: Frozen and mutable workload baseline
 
 Ruby 4.0.9 on arm64-darwin25 measured the scanners from `f718499` using the
