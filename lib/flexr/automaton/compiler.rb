@@ -153,9 +153,8 @@ module Flexr
 
       def determinize(patterns, operation: nil)
         if @construction == :derivative
-          require_relative "derivative_compiler"
           ordered = patterns.sort_by { |_, acceptance| acceptance_order(acceptance) }
-          compiler = DerivativeCompiler.new
+          compiler = derivative_compiler
           dfa = compiler.compile(ordered, retain_residuals: block_given?) { |state| enforce_state_limit!(state, operation) }
           yield compiler.residuals if block_given?
           return dfa
@@ -219,12 +218,43 @@ module Flexr
           ending = Regexp::AST::Seq.new(children: [pattern_universe, operands.first], loc: nil)
           right = value_dfa(ending, expression)
         end
-        product, overlap = DFAOperations.product(left, right, intersection: %i[intersection upto].include?(operation)) do |state|
-          enforce_state_limit!(state, expression)
+        limit = ->(state) { enforce_state_limit!(state, expression) }
+        product, overlap = if @construction == :derivative
+          derive_pattern_product(left, right, operation, &limit)
+        else
+          DFAOperations.product(left, right, intersection: %i[intersection upto].include?(operation), &limit)
         end
         result = Minimizer.minimize(operation == :upto ? DFAOperations.first_ending(product) : product)
         record_pattern_operation(rule, operation, expression, left, right, product, result, overlap)
         result
+      end
+
+      def derivative_compiler
+        require_relative "derivative_compiler"
+        DerivativeCompiler.new
+      end
+
+      def derive_pattern_product(left, right, operation, &)
+        left = Regexp::AST::EmbeddedDFA.new(left)
+        right = Regexp::AST::EmbeddedDFA.new(right)
+        intersection = Regexp::AST::Intersection.new(left: left, right: right)
+        body = if %i[intersection upto].include?(operation)
+          intersection
+        else
+          Regexp::AST::Difference.new(left: left, right: right)
+        end
+        patterns = [[body, Acceptance.new(rule_index: 0, pattern_index: 0)]]
+        if operation == :difference
+          overlap_probe = Acceptance.new(rule_index: 1, pattern_index: 0)
+          patterns << [intersection, overlap_probe]
+        end
+        product = derivative_compiler.compile(patterns, minimize: false, &)
+        return [product, false] unless overlap_probe && product.rule_ids.include?(overlap_probe.rule_index)
+
+        accepts = product.accepts.map { |labels| labels.reject { |label| label == overlap_probe } }
+        filtered = DFA.new(transitions: product.transitions, accepts: accepts, ec: product.ec,
+                           class_count: product.class_count, start: product.start, rule_ids: [0])
+        [filtered, true]
       end
 
       def pattern_universe

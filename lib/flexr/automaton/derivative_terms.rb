@@ -33,6 +33,7 @@ module Flexr
         when Regexp::AST::Star then repeat(from_ast(node.child), 0, nil)
         when Regexp::AST::Repeat then repeat(from_ast(node.child), node.minimum, node.maximum)
         when Regexp::AST::Difference then intersection([from_ast(node.left), negate(from_ast(node.right))])
+        when Regexp::AST::Intersection then intersection([from_ast(node.left), from_ast(node.right)])
         when Regexp::AST::EmbeddedDFA then from_graph(node.dfa)
         when Regexp::AST::ByteAutomaton then from_graph(node.fragment)
         else raise CompileError, "cannot derive #{node.class}"

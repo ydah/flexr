@@ -11,6 +11,8 @@ fixtures = %w[json toml graphql sql ruby_subset].to_h do |name|
   path = File.join(root, "examples", name, "lexer.flexr.rb")
   [name, [path, File.binread(path).gsub(/\r\n?/, "\n").force_encoding(Encoding::UTF_8)]]
 end
+pattern_path = File.join(root, "site/ruby/presets/pattern.flexr.rb")
+fixtures["pattern_algebra"] = [pattern_path, File.binread(pattern_path).gsub(/\r\n?/, "\n").force_encoding(Encoding::UTF_8)]
 fixtures["unicode_identifier"] = ["unicode_identifier.flexr.rb", <<~'SOURCE']
   class UnicodeIdentifier < Flexr::Lexer
     rule(/\p{L}[\p{L}\p{N}_]*/, emit: :IDENT)

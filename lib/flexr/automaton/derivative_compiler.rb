@@ -8,7 +8,8 @@ module Flexr
     class DerivativeCompiler
       attr_reader :residuals
 
-      def compile(patterns, retain_residuals: false, &state_limit)
+      def compile(patterns, retain_residuals: false, minimize: true, &state_limit)
+        @residuals = nil
         terms = DerivativeTerms.new
         start = patterns.each_with_index.to_h { |(body, _), index| [index, terms.from_ast(body)] }.freeze
         conditions = patterns.map(&:last)
@@ -37,6 +38,7 @@ module Flexr
 
         dfa = DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: count,
                       start: 0, rule_ids: accepts.flatten.map(&:rule_index))
+        return dfa unless minimize
         return Minimizer.minimize(dfa) unless retain_residuals
 
         Minimizer.minimize(dfa) do |representatives|
