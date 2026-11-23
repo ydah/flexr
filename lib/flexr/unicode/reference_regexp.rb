@@ -38,6 +38,8 @@ module Flexr
         when Regexp::AST::Empty, Regexp::AST::Anchor then ""
         when Regexp::AST::Fail then "(?!)"
         when Regexp::AST::NotNextLineFeed then '(?!\n)'
+        when Regexp::AST::Lookahead
+          "(?#{node.negative ? '!' : '='}#{source_for(node.child, binary: binary)})"
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
         when Regexp::AST::CodepointRange then character_class([[node.lo, node.hi]], binary: binary)
         when Regexp::AST::CharClass
@@ -62,7 +64,7 @@ module Flexr
         when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, binary: binary)})"
         when Regexp::AST::Absence
           child = source_for(node.child, binary: binary)
-          return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child)
+          return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child) && !Regexp::AST.lookahead?(node.child)
 
           "(?~(?:#{child}))"
         else

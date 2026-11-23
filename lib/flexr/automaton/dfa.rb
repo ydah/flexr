@@ -64,7 +64,7 @@ module Flexr
                            bol_only: acceptance[2], end_anchor: acceptance[3]).freeze
           end.freeze
         end.freeze
-        @context_dependent_end = @accepts.any? { |labels| labels.any? { |label| label.end_anchor.is_a?(Integer) } }
+        @context_dependent_end = @accepts.any? { |labels| labels.any? { |label| label.end_anchor && label.end_anchor != true } }
         @ec = ec.freeze
         @class_count = class_count
         @start = start

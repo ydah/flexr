@@ -29,6 +29,9 @@ module Flexr
       end
 
       def firstmatch_counterexample(first, second)
+        # shortcut: nonlocal assertions need a suffix product to prove first-match differences.
+        return if first.lookahead? || second.lookahead?
+
         queue = [[first.start, second.start, false, +"".b]]
         visited = { [first.start, second.start, false] => true }
         bytes = joint_byte_representatives(first, second)
@@ -231,7 +234,7 @@ module Flexr
           if encoding != Encoding::UTF_8 || input.byteslice(0, cursor).force_encoding(encoding).valid_encoding?
             dfa.accepts.fetch(state).each do |acceptance|
               next if acceptance.bol_only && !at_line_start
-              next if acceptance.end_anchor && !acceptance.valid_end?(input.getbyte(cursor))
+              next if acceptance.end_anchor && !acceptance.valid_end_at?(input, cursor)
 
               matches << [acceptance.rule_index, cursor - offset]
             end

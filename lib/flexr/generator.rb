@@ -84,6 +84,16 @@ module Flexr
           ' unless Flexr::Automaton::Acceptance.method_defined?(:valid_end?)'
         install = "#{guard}\n#{indent}#{install}"
       end
+      if compiled.rules.any?(&:contextual_patterns)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support ordered regexp context")' \
+          ' unless defined?(Flexr::Runtime::ContextualRegexp)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
+      if regexp_lookahead?(compiled)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp lookahead")' \
+          ' unless defined?(Flexr::Automaton::Lookahead)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if uses_delegation?(parsed)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support lexer delegation")' \
           ' unless defined?(Flexr::Runtime::DelegatedTokens)'
@@ -128,11 +138,13 @@ module Flexr
         emits = "emits: #{ruby_literal(rule.emits)}, " if rule.emits
         capture_patterns = compiled.rules.fetch(rule.index).capture_patterns
         captures = "capture_patterns: #{ruby_literal(capture_patterns)}, " if capture_patterns
+        contextual = compiled.rules.fetch(rule.index).contextual_patterns
+        context = "contextual_patterns: #{ruby_literal(contextual)}, " if contextual
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
           "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
           "#{priority}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
-          "#{channel}#{emits}#{captures}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
+          "#{channel}#{emits}#{captures}#{context}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
       "{ artifact: #{ruby_literal(artifact_metadata)}, rules: [#{definitions.join(', ')}], " \
         "backend: #{ruby_literal(effective_backend(parsed))}, " \
@@ -229,7 +241,7 @@ module Flexr
 
     def dfa_data(dfa, compression:, direct: nil)
       data = {
-        accepts: dfa.accepts, ec: dfa.ec, class_count: dfa.class_count,
+        **dfa.acceptance_data, ec: dfa.ec, class_count: dfa.class_count,
         state_count: dfa.states, start: dfa.start, rule_ids: dfa.rule_ids
       }
       pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
@@ -267,6 +279,8 @@ module Flexr
 
     def embedded_runtime(parsed, compiled)
       sources = RUNTIME_SOURCES.dup
+      sources << "automaton/lookahead.rb" if regexp_lookahead?(compiled) || compiled.rules.any?(&:contextual_patterns)
+      sources << "runtime/contextual_regexp.rb" if compiled.rules.any?(&:contextual_patterns)
       sources << "runtime/input_stack.rb" if parsed.uses_input_stack || parsed.config.dig(:options, :input_stack)
       sources << "runtime/indentation.rb" if parsed.config.dig(:options, :indentation)
       sources << "runtime/delimiters.rb" if parsed.uses_dynamic_delimiters || parsed.config.dig(:options, :dynamic_delimiters)
@@ -281,6 +295,11 @@ module Flexr
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
+    end
+
+    def regexp_lookahead?(compiled)
+      compiled.machines.values.any? { |machine| machine.dfa.lookahead? } ||
+        compiled.rules.any? { |rule| rule.trailing_dfa&.lookahead? }
     end
 
     def matcher_runtime?(parsed)
@@ -396,6 +415,14 @@ module Flexr
         "{#{entries.join(', ')}}"
       when Array
         "[#{value.map { |item| ruby_literal(item) }.join(', ')}]"
+      when Automaton::Acceptance
+        "::Flexr::Automaton::Acceptance.new(**#{ruby_literal(value.to_h)})"
+      when Automaton::Lookahead
+        "::Flexr::Automaton::Lookahead.new(**#{ruby_literal(value.to_h)})"
+      when Automaton::DFA
+        "::Flexr::Generated.load_dfa(#{ruby_literal(dfa_data(value, compression: :rows))})"
+      when Runtime::ContextualRegexp
+        "::Flexr::Runtime::ContextualRegexp.new(**#{ruby_literal(value.to_h)})"
       when Pattern
         "::Flexr::Pattern.__flexr_restore(#{value.operation.inspect}, #{ruby_literal(value.operands)}, #{ruby_literal(value.name)})"
       else

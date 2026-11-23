@@ -105,3 +105,4 @@ MUST rules are required. For a SHOULD rule, explain any exception in the pull re
 | [Preserve first-match order when importing oedipus_lex](20261122_import_oedipus_firstmatch.md) | The explicit import mode reports unsupported constructs before writing a specification. |
 | [Build lexer DFAs from regular-expression derivatives](20261123_derivative_dfa_construction.md) | A derivative state records each rule's remaining byte language and preserves the lexer's token selection contract. |
 | [Treat CRLF as one atomic match for the line-break escape](20261123_atomic_crlf_for_linebreak_escape.md) | A CR can match on its own only when its next byte is absent or differs from LF. |
+| [Keep regexp lookahead zero-width during rule selection](20261123_zero_width_regexp_lookahead.md) | Assertions inspect the active input source without adding to the regexp body's match length. |

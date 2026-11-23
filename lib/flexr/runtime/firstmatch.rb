@@ -5,6 +5,10 @@ module Flexr
     module Firstmatch
       private
 
+      def end_anchor_match?(buffer, position)
+        buffer.eof?(position) || buffer.getbyte(position) == 0x0a
+      end
+
       def reference_pattern?(pattern)
         Regexp::Matcher.reference?(pattern, encoding: @config.encoding, unicode: @config.options[:unicode] == true)
       end
@@ -20,10 +24,12 @@ module Flexr
             next if condition.bol_only && !@lexer.beginning_of_line?
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
-            match = streamed_match(
-              regexp, buffer, position, reference: reference_pattern?(regexp),
-              limit: :token, rule: rule
-            )
+            context = rule.contextual_patterns&.[](pattern_index)
+            match = if context
+              context.match(@lexer, rule, position)
+            else
+              streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp), limit: :token, rule: rule)
+            end
             next unless match&.begin(0)&.zero?
             next if expected && !expected_rule?(rule, expected, buffer, position, position + match[0].bytesize)
 

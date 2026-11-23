@@ -60,7 +60,7 @@ must be positive.
 | `filename` | The configured filename |
 | `error_mode` | The configured default input error mode |
 | `max_token_size` | The configured token-size limit |
-| `max_lookahead_size` | The configured trailing-context limit |
+| `max_lookahead_size` | The configured lookahead limit |
 | `steps` | Work units consumed by scanning |
 
 `each_token` yields two arguments instead of one when `token_kind :yield` is
@@ -211,8 +211,8 @@ an unmatched-byte error rather than being silently normalized. With
 match; `input` and `binary_input` then expose only the retained window.
 
 `max_token_size` is checked before an action can shorten or materialize an
-oversized match. `max_lookahead_size` separately bounds trailing context, and
-`max_buffer_size` bounds bytes retained at one time. `max_steps` and
+oversized match. `max_lookahead_size` separately bounds regexp lookahead
+and trailing context. `max_buffer_size` bounds bytes retained at one time. `max_steps` and
 `cancellation` bound CPU work cooperatively.
 
 ## Input stack

@@ -15,10 +15,12 @@ module Flexr
       Difference = Struct.new(:left, :right, :loc, :operation, keyword_init: true)
       Intersection = Struct.new(:left, :right, :loc, keyword_init: true)
       EmbeddedDFA = Struct.new(:dfa)
+      FirstEnding = Struct.new(:child)
       ByteAutomaton = Struct.new(:fragment)
       NamedCapture = Struct.new(:opening, :child, keyword_init: true)
       Anchor = Struct.new(:kind, :loc, keyword_init: true)
       NotNextLineFeed = Struct.new(:loc, keyword_init: true)
+      Lookahead = Struct.new(:child, :negative, :loc, keyword_init: true)
       TrailMark = Struct.new(:rule_id, :loc, keyword_init: true)
       CharClass = Struct.new(:ranges, :negated, :loc, keyword_init: true)
       Property = Module.new
@@ -31,7 +33,7 @@ module Flexr
           when "ByteRange" then "ByteRange(#{lo}..#{hi})"
           when "CodepointRange" then "CodepointRange(#{lo}..#{hi})"
           when "Anchor" then "Anchor(#{kind})"
-          when "Star", "Absence" then "#{name}(#{child})"
+          when "Star", "Absence", "Lookahead" then "#{name}(#{child})"
           when "Repeat" then "Repeat(#{child}, #{minimum}, #{maximum || '∞'})"
           when "Seq", "Alt" then "#{name}(#{children.join(', ')})"
           when "Difference", "Intersection" then "#{name}(#{left}, #{right})"
@@ -41,7 +43,7 @@ module Flexr
       end
 
       [Empty, Fail, ByteRange, CodepointRange, Seq, Alt, Star, Repeat, Absence, Difference, Intersection,
-       Anchor, NotNextLineFeed, TrailMark, CharClass].each do |node_class|
+       Anchor, NotNextLineFeed, Lookahead, TrailMark, CharClass].each do |node_class|
         node_class.include(Formatting)
       end
 
@@ -49,7 +51,26 @@ module Flexr
         case node
         when Absence then true
         when Seq, Alt then node.children.any? { |child| absence?(child) }
-        when Star, Repeat then absence?(node.child)
+        when Star, Repeat, Lookahead, NamedCapture then absence?(node.child)
+        else false
+        end
+      end
+
+      def self.lookahead?(node)
+        case node
+        when Lookahead then true
+        when Seq, Alt then node.children.any? { |child| lookahead?(child) }
+        when Star, Repeat, Absence, NamedCapture then lookahead?(node.child)
+        else false
+        end
+      end
+
+      def self.named_capture?(node)
+        case node
+        when NamedCapture then true
+        when Seq, Alt then node.children.any? { |child| named_capture?(child) }
+        when Star, Repeat, Absence, Lookahead then named_capture?(node.child)
+        when Difference, Intersection then named_capture?(node.left) || named_capture?(node.right)
         else false
         end
       end
@@ -58,14 +79,14 @@ module Flexr
         case node
         when NotNextLineFeed then true
         when Seq, Alt then node.children.any? { |child| next_byte_assertion?(child) }
-        when Star, Repeat, Absence, NamedCapture then next_byte_assertion?(node.child)
+        when Star, Repeat, Absence, Lookahead, NamedCapture then next_byte_assertion?(node.child)
         else false
         end
       end
 
       def self.nullable?(node)
         case node
-        when Empty, Anchor, NotNextLineFeed, Star then true
+        when Empty, Anchor, NotNextLineFeed, Lookahead, Star then true
         when Repeat then node.minimum.zero? || nullable?(node.child)
         when NamedCapture then nullable?(node.child)
         when Seq then node.children.all? { |child| nullable?(child) }

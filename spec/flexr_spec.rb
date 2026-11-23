@@ -117,25 +117,16 @@ RSpec.describe Flexr do
     expect(lexer_class.new("A").tokens).to eq([[:A, "A"]])
   end
 
-  it "shows a trailing positive lookahead rewrite in unsupported regexp diagnostics" do
-    expect { Flexr::Regexp::Parser.new("a(?=b)").parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-      expect(error.diagnostic.code).to eq("FLEXR-E014")
-      expect(error.diagnostic.help).to include("trailing positive lookahead", "rule(/a(?=b)/)",
-                                               "rule(/a/, followed_by: /b/)", "keep the action")
-    end
-  end
-
-  it "does not suggest the positive lookahead rewrite for negative lookahead or lookbehind" do
-    ["a(?!b)", "(?<=a)b", "(?<!a)b"].each do |source|
+  it "reports unsupported lookbehind with a state-based alternative" do
+    ["(?<=a)b", "(?<!a)b"].each do |source|
       expect { Flexr::Regexp::Parser.new(source).parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
         expect(error.diagnostic.code).to eq("FLEXR-E014")
-        expect(error.diagnostic.help).to include("separate rules or states", "cannot express negative lookahead or lookbehind")
-        expect(error.diagnostic.help).not_to include("rule(/a/, followed_by: /b/)")
+        expect(error.diagnostic.help).to include("separate rules or lexer states")
       end
     end
   end
 
-  it "keeps the suggested lookahead unconsumed while preserving the rule action" do
+  it "keeps followed_by context unconsumed while preserving the rule action" do
     lexer = Class.new(Flexr::Lexer) do
       rule(/a/, followed_by: /b/) { emit :A }
       rule(/./) { emit :OTHER }
@@ -144,13 +135,13 @@ RSpec.describe Flexr do
     expect(lexer.new("abac").tokens).to eq([[:A, "a"], [:OTHER, "b"], [:OTHER, "a"], [:OTHER, "c"]])
   end
 
-  it "validates trailing context with the same regexp parser as rule patterns" do
+  it "rejects trailing context that matches without consuming bytes" do
     lexer = Class.new(Flexr::Lexer) do
       rule(/a/, followed_by: /(?=b)/) { emit :A }
     end
 
-    expect { lexer.compile! }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-      expect(error.diagnostic.code).to eq("FLEXR-E014")
+    expect { lexer.compile! }.to raise_error(Flexr::CompileError) do |error|
+      expect(error.diagnostic.code).to eq("FLEXR-E005")
     end
   end
 

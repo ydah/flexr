@@ -47,7 +47,7 @@ RSpec.describe "adversarial boundary coverage" do
       end
 
       {
-        "(?=a)" => "followed_by",
+        "(?<=a)b" => "lexer states",
         "(?>a)" => "DFA-compatible",
         "a*?" => "negated character class",
         "\\1" => "state",

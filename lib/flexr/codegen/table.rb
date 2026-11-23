@@ -26,6 +26,14 @@ module Flexr
       end
 
       def source(indent: "  ", direct: false)
+        if compiled.machines.values.any? { |machine| machine.dfa.lookahead? }
+          return <<~RUBY.lines.map { |line| indent + line }.join
+            def scan_one
+              (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan
+            end
+          RUBY
+        end
+
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         captures = compiled.rules.any?(&:capture_patterns)

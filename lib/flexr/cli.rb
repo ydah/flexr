@@ -361,6 +361,7 @@ module Flexr
 
     def next_byte_label(acceptance)
       mask = acceptance.end_anchor
+      return " (lookahead)" if mask.is_a?(Automaton::Lookahead)
       return "" unless mask.is_a?(Integer)
 
       names = []

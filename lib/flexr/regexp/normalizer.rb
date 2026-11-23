@@ -41,6 +41,10 @@ module Flexr
           repeat(node)
         when AST::Absence
           absence(node)
+        when AST::NamedCapture
+          AST::NamedCapture.new(opening: node.opening, child: normalize_node(node.child))
+        when AST::Lookahead
+          AST::Lookahead.new(child: normalize_node(node.child), negative: node.negative, loc: node.loc)
         else
           raise CompileError, "unknown regexp AST node: #{node.class}"
         end
@@ -187,7 +191,7 @@ module Flexr
       end
 
       def absence(node)
-        return AST::Fail.new(loc: node.loc) if AST.nullable?(node.child)
+        return AST::Fail.new(loc: node.loc) if AST.nullable?(node.child) && !AST.lookahead?(node.child)
 
         child = normalize_node(node.child)
         AST::Difference.new(left: universe, right: sequence([universe, child, universe]), loc: node.loc)
