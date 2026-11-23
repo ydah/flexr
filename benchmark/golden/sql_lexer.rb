@@ -29,6 +29,11 @@ module SqlExample
         end
         @__flexr_generated_scan_fast = __flexr_generated_fast_path?(@__flexr_generated_scan_dfa)
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
+        if @__flexr_generated_scan_simple
+          dfa = @__flexr_generated_scan_dfa
+          @__flexr_generated_layouts ||= {}.compare_by_identity
+          @__flexr_generated_scan_rows = (@__flexr_generated_layouts[dfa] ||= [dfa.start, dfa.ec, dfa.transitions.to_a.freeze, dfa.accepts, self.class.__flexr_rules].freeze)
+        end
       end
       dfa = @__flexr_generated_scan_dfa
       return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_fast
@@ -37,10 +42,6 @@ module SqlExample
       return __flexr_generated_scan_simple(dfa, position) if @__flexr_generated_scan_simple
       cursor = position
       current = dfa.start
-      direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
-      ec = dfa.ec
       memo_states = @__flexr_generated_backup
       source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
       guarded_steps = scan_steps_guarded?
@@ -64,13 +65,7 @@ module SqlExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        current = dfa.transition(current, byte)
         break unless current
         cursor += 1
         resource_acceptance = dfa.accepts[current].first
@@ -91,14 +86,7 @@ module SqlExample
       best
     end
     def __flexr_generated_scan_simple(dfa, position)
-      current = dfa.start
-      direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
-      ec = dfa.ec
-      accepts = dfa.accepts
-      transitions = dfa.transitions
-      rules = self.class.__flexr_rules
+      current, ec, transitions, accepts, rules = @__flexr_generated_scan_rows
       memo_states = @__flexr_generated_backup
       source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
       guarded_steps = @max_steps || @cancellation
@@ -148,13 +136,7 @@ module SqlExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        current = dfa.transition(current, byte)
         break unless current
         cursor += 1
         acceptance = accepts[current].first

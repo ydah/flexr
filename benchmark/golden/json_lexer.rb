@@ -29,6 +29,14 @@ module JsonExample
         @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)
         @__flexr_generated_recover_simple = @__flexr_generated_scan_simple && @__flexr_generated_backup
         @__flexr_generated_scan_simple = false if @__flexr_generated_recover_simple
+        if @__flexr_generated_scan_simple
+          dfa = @__flexr_generated_scan_dfa
+          @__flexr_generated_winners ||= {}.compare_by_identity
+          @__flexr_generated_scan_winners = (@__flexr_generated_winners[dfa] ||= dfa.accepts.map do |entries|
+            acceptance = entries.first
+            self.class.__flexr_rules.fetch(acceptance.rule_index) if acceptance
+          end.freeze)
+        end
       end
       dfa = @__flexr_generated_scan_dfa
       return Flexr::Runtime::Interpreter.new(self).scan unless @__flexr_generated_scan_layout
@@ -38,8 +46,8 @@ module JsonExample
       cursor = position
       current = dfa.start
       direct = dfa.direct
-      direct_nxt = direct&.fetch(:nxt)
-      direct_classes = direct&.fetch(:classes)
+      direct_nxt = direct.fetch(:nxt)
+      direct_classes = direct.fetch(:classes)
       ec = dfa.ec
       memo_states = @__flexr_generated_backup
       source = @__flexr_stable_scan_source || (@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)
@@ -65,13 +73,8 @@ module JsonExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        value = direct_nxt[(current * direct_classes) + ec[byte]]
+        current = value >= 0 ? value : nil
         break unless current
         cursor += 1
         resource_acceptance = dfa.accepts[current].first
@@ -99,17 +102,18 @@ module JsonExample
       cursor = position
       best = nil
       if source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)
+        winners = @__flexr_generated_scan_winners
         while (byte = source.getbyte(cursor))
           current = direct_nxt[(current * direct_classes) + ec[byte]]
           break if current < 0
           cursor += 1
-          acceptance = accepts[current].first
+          acceptance = winners[current]
           next unless acceptance
           winner = acceptance
           winner_end = cursor
         end
         return unless winner
-        rule = rules.fetch(winner.rule_index)
+        rule = winner
         best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)
         best.rule = rule
         best.start_pos = position
@@ -133,13 +137,8 @@ module JsonExample
         end
         byte = source ? source.getbyte(cursor) : buffer.getbyte(cursor)
         consume_step! if guarded_steps
-        current = if direct_nxt
-          class_id = ec[byte]
-          value = direct_nxt[(current * direct_classes) + class_id]
-          value >= 0 ? value : nil
-        else
-          dfa.transition(current, byte)
-        end
+        value = direct_nxt[(current * direct_classes) + ec[byte]]
+        current = value >= 0 ? value : nil
         break unless current
         cursor += 1
         acceptance = accepts[current].first

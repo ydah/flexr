@@ -807,3 +807,24 @@ YJIT, and ZJIT.
 Every condition was within the 1% regression threshold. The workload
 matrix separately confirmed typed token parity across runtime, generated,
 and standalone scanners in all 30 conditions.
+
+## 2026-11-23: Reuse the generated scan layout
+
+Ruby 4.0.9 on arm64-darwin25 measured the five workload specifications
+with `FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 3`.
+The generated scanner materializes one dense layout per lexical DFA for
+small tables and reuses it across tokens. Explicit packed artifacts keep
+their packed lookup path. Each cell reports generated/runtime throughput
+on frozen input followed by mutable input. Runtime, generated, and
+standalone token streams matched in all 30 conditions.
+
+| Workload | Interpreter | YJIT | ZJIT |
+| --- | ---: | ---: | ---: |
+| json | 1.231x / 1.196x | 1.166x / 1.201x | 1.008x / 1.011x |
+| toml | 1.234x / 1.232x | 1.068x / 1.037x | 1.033x / 1.034x |
+| graphql | 1.226x / 1.221x | 1.076x / 1.082x | 0.961x / 0.976x |
+| sql | 1.179x / 1.218x | 1.059x / 1.055x | 1.039x / 1.045x |
+| ruby_subset | 1.222x / 1.262x | 1.216x / 1.220x | 1.061x / 1.054x |
+
+The 1.0x gate passed in 28 conditions. GraphQL on ZJIT measured
+0.961x for frozen input and 0.976x for mutable input.
