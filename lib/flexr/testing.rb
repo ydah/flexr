@@ -4,6 +4,7 @@ require_relative "../flexr" unless defined?(Flexr::Lexer)
 
 module Flexr
   module Testing
+    autoload :Coverage, File.expand_path("testing/coverage", __dir__)
     autoload :Languages, File.expand_path("testing/languages", __dir__)
 
     module Snapshot

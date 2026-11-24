@@ -17,6 +17,7 @@ module Flexr
 
     def initialize(compiled, encoding:)
       @compiled = compiled
+      @encoding = encoding
       @utf8 = encoding == Encoding::UTF_8
       @completion = { 0 => "".b.freeze }
     end
@@ -40,11 +41,22 @@ module Flexr
             )
           end
         end
-        witnesses.values.uniq.sort_by { |input| [input.bytesize, input] }.unshift("".b).each do |input|
+        inputs = witnesses.values.map { |example| example.fetch(:input) }
+        inputs.uniq.sort_by { |input| [input.bytesize, input] }.unshift("".b).each do |input|
           cases << describe(dfa, name, input)
         end
       end
       { coverage: { covered: total - uncovered.length, total: total, uncovered: uncovered }, cases: cases }
+    end
+
+    def witnesses(state, edges)
+      desired = edges.to_h { |edge| [edge, true] }
+      return {} if desired.empty?
+
+      dfa = @compiled.machines.fetch(state).dfa
+      examples = transition_witnesses(dfa, desired: desired, contextual: true)
+      examples.each_value { |example| example.fetch(:input).force_encoding(@encoding) }
+      examples
     end
 
     def self.human(report)
@@ -80,37 +92,79 @@ module Flexr
 
     private
 
-    def transition_witnesses(dfa)
+    def transition_witnesses(dfa, desired: nil, contextual: false)
       steps = steps_by_encoding_state(dfa)
-      paths = [[[dfa.start, 0], nil, nil, 0]]
-      seen = { [dfa.start, 0] => true }
+      contextual &&= dfa.starts
+      graph = dfa.left_context if contextual
+      prefix_steps = steps_by_encoding_state(graph) if graph
+      start = contextual ? Automaton::LeftContext::SOURCE_START : dfa.start
+      paths = [[[start, 0], nil, nil, 0, (0 unless contextual)]]
+      prefix_seen = { [start, 0] => true }
+      seen = contextual ? {} : { [start, 0] => 0 }
       witnesses = {}
       completions = {}
       cursor = 0
       while cursor < paths.length
-        (from, encoding_state), _, _, depth = paths.fetch(cursor)
+        parent = cursor
+        (from, encoding_state), _, _, depth, offset = paths.fetch(parent)
+        cursor += 1
+        if offset.nil?
+          advance_prefix(graph, prefix_steps, paths, parent, prefix_seen)
+          next unless encoding_state.zero?
+
+          from = dfa.start_for(from)
+          # Entering a DFA at this byte can beat a body path queued for the next byte.
+          next unless remember_shorter?(seen, [from, 0], depth)
+
+          offset = depth
+        elsif seen.fetch([from, encoding_state]) < depth
+          next
+        end
+
         row = dfa.transitions.fetch(from)
         steps.fetch(encoding_state).each do |(byte_class, next_state), byte|
           to = row.fetch(byte_class)
           next unless to
 
           edge = [from, byte_class]
-          suffix = dfa_completion(dfa, to, next_state, steps, completions) || completion(next_state)
-          size = depth + 1 + suffix.bytesize
-          previous = witnesses[edge]
-          witnesses[edge] = [size, cursor, byte, suffix] if !previous || size < previous.first
+          if !desired || desired.key?(edge)
+            suffix = dfa_completion(dfa, to, next_state, steps, completions) || completion(next_state)
+            size = depth + 1 + suffix.bytesize
+            previous = witnesses[edge]
+            witnesses[edge] = [size, parent, byte, suffix, offset] if !previous || size < previous.first
+          end
 
           target = [to, next_state]
+          paths << [target, parent, byte, depth + 1, offset] if remember_shorter?(seen, target, depth + 1)
+        end
+      end
+      witnesses.transform_values do |_, parent, byte, suffix, offset|
+        input = Automaton::Analysis.example_input(paths, parent) + byte.chr(Encoding::BINARY) + suffix
+        { input: input, offset: offset }
+      end
+    end
+
+    def advance_prefix(graph, steps, paths, parent, seen)
+      (state, encoding_state), _, _, depth = paths.fetch(parent)
+      if graph
+        steps.fetch(encoding_state).each do |(_, following), byte|
+          target = [graph.transition(state, byte), following]
           next if seen[target]
 
           seen[target] = true
-          paths << [target, cursor, byte, depth + 1]
+          paths << [target, parent, byte, depth + 1, nil]
         end
-        cursor += 1
+      elsif depth.zero?
+        paths << [[Automaton::LeftContext::AFTER_LF, 0], parent, 0x0a, 1, nil]
+        paths << [[Automaton::LeftContext::OTHER, 0], parent, 0x20, 1, nil]
       end
-      witnesses.transform_values do |_, parent, byte, suffix|
-        Automaton::Analysis.example_input(paths, parent) + byte.chr(Encoding::BINARY) + suffix
-      end
+    end
+
+    def remember_shorter?(seen, target, depth)
+      return false if (previous = seen[target]) && previous <= depth
+
+      seen[target] = depth
+      true
     end
 
     def steps_by_encoding_state(dfa)
