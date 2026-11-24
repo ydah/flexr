@@ -212,7 +212,7 @@ module Flexr
           candidate = @rules.fetch(acceptance.rule_index)
           next if acceptance.bol_only && !@lexer.beginning_of_line?
           next if check_boundary && !@lexer.utf8_boundary?(cursor)
-          next unless !acceptance.end_anchor || end_anchor_match?(buffer, cursor)
+          next unless !acceptance.end_anchor || acceptance.valid_end?(buffer.getbyte(cursor))
           next if expected && !expected_rule?(candidate, expected, buffer, position, cursor)
 
           trailing_size = trailing_length(candidate, buffer, cursor)
@@ -342,10 +342,6 @@ module Flexr
 
           [region.state, region]
         end.to_h
-      end
-
-      def end_anchor_match?(buffer, position)
-        buffer.eof?(position) || buffer.getbyte(position) == 0x0a
       end
 
       def ensure_token_size!(end_position, position, rule: nil)

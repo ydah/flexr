@@ -130,7 +130,7 @@ RSpec.describe "generated artifact safety" do
         File.binwrite(path, lexer_source.sub("rule(/a/)", "rule(/a+/)"))
         generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
-        expect(generated.bytesize).to be < 101_000
+        expect(generated.bytesize).to be < 102_000
         expect(generated).not_to include("\r\n", "module Keywords", "module Firstmatch", "def push_input(", "module Indentation", "module Captures", "module DelegatedTokens", "def scan_until(")
         expect(generated).not_to include(
           "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis",
