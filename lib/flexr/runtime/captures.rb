@@ -27,7 +27,7 @@ module Flexr
 
       def replay_capture_data
         match = @capture_match
-        return match.capture if match.capture.is_a?(MatchData)
+        return match.capture if match.capture.respond_to?(:byteoffset)
 
         regexp = match.capture
         if regexp.respond_to?(:instructions)

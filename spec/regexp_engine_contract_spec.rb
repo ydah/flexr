@@ -65,8 +65,6 @@ RSpec.describe "regexp engine contracts" do
   end
 
   {
-    /foo\b:/ => [/foo:/, "surrounding literals already establish the boundary"],
-    /foo\Bbar/ => [/foobar/, "surrounding literals already establish the non-boundary"],
     /\Ga/ => [/a/, "at the start of a rule"]
   }.each do |original, (rewritten, condition)|
     it "shows a scoped boundary rewrite for #{original.inspect}" do
@@ -109,11 +107,6 @@ RSpec.describe "regexp engine contracts" do
   end
 
   it "keeps the limits of boundary rewrites explicit" do
-    [/foo\b:/, /foo\Bbar/].each do |pattern|
-      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-        expect(error.diagnostic.help).to include("token edges need separate rules or state checks")
-      end
-    end
     expect { Flexr.parse_pattern(/a\Gb/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
       expect(error.diagnostic.help).to include('interior \G needs a separate rewrite')
     end

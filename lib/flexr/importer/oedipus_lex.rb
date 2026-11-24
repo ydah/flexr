@@ -159,7 +159,7 @@ module Flexr
       end
 
       def anchor?(node)
-        return true if node.is_a?(Regexp::AST::Anchor)
+        return true if node.is_a?(Regexp::AST::Anchor) || node.is_a?(Regexp::AST::WordBoundary)
         return anchor?(node.child) if node.respond_to?(:child)
 
         node.respond_to?(:children) && node.children.any? { |child| anchor?(child) }

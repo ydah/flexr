@@ -124,6 +124,8 @@ module Flexr
 
         if consume?("\\")
           case current
+          when "b", "B"
+            return AST::WordBoundary.new(negative: advance == "B", binary: @encoding == Encoding::BINARY, loc: span(starting))
           when "R"
             advance
             return parse_linebreak(starting)
@@ -426,16 +428,8 @@ module Flexr
           assign_codepoint(digits)
           nil
         when "b"
-          unless @class_depth.positive?
-            raise unsupported("\\b",
-                              'when surrounding literals already establish the boundary, rewrite rule(/foo\b:/) as rule(/foo:/); keep the action; token edges need separate rules or state checks')
-          end
-
           @escaped_value = true
           @last_codepoint = 0x08
-        when "B"
-          raise unsupported("\\B",
-                            'when surrounding literals already establish the non-boundary, rewrite rule(/foo\Bbar/) as rule(/foobar/); keep the action; token edges need separate rules or state checks')
         when "G"
           raise unsupported("\\G",
                             'at the start of a rule, rewrite rule(/\Ga/) as rule(/a/); keep the action; rules already match at the current lexer position; interior \G needs a separate rewrite')

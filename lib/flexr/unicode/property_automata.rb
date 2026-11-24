@@ -4,6 +4,7 @@ module Flexr
   module Unicode
     module PropertyAutomata
       PATH = File.expand_path("data/utf8_automata.rb", __dir__).freeze
+      BOUNDARY_PATH = File.expand_path("data/word_boundary_automaton.rb", __dir__).freeze
       MAGIC = "flexr UTF-8 property automata v1\n".b.freeze
       Fragment = ::Data.define(:state_count, :accept, :edges)
 
@@ -16,11 +17,23 @@ module Flexr
 
         offset, length = variants.fetch((negate ? 2 : 0) + (fold ? 1 : 0))
         fragments = (@fragments ||= {})
-        fragments[offset] ||= begin
-          state_count, accept, *edges = data.byteslice(offset, length).unpack("v*")
-          Fragment.new(state_count, accept, edges.freeze)
-        end
+        fragments[offset] ||= decode_fragment(data.byteslice(offset, length))
       end
+
+      def boundary_word
+        @boundary_word ||= begin
+          require_relative "data/word_boundary_automaton"
+          decode_fragment(Data::WORD_BOUNDARY_AUTOMATON)
+        end
+      rescue LoadError
+        nil
+      end
+
+      def decode_fragment(bytes)
+        state_count, accept, *edges = bytes.unpack("v*")
+        Fragment.new(state_count, accept, edges.freeze)
+      end
+      private_class_method :decode_fragment
 
       def artifact
         @artifact ||= begin

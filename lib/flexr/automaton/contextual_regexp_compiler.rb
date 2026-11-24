@@ -16,6 +16,7 @@ module Flexr
 
       def lookbehind_width(node)
         case node
+        when Regexp::AST::WordBoundary then 4
         when Regexp::AST::Lookbehind
           consuming_width(node.child) + lookbehind_width(node.child)
         when Regexp::AST::Seq, Regexp::AST::Alt
@@ -62,7 +63,7 @@ module Flexr
           node.children.reverse_each.reduce(nil) { |tail, part| choice(build(part, following), tail) }
         when Regexp::AST::NamedCapture then build(node.child, following)
         when Regexp::AST::Lookahead then assertion(node, following)
-        when Regexp::AST::Lookbehind then predicate(node, following)
+        when Regexp::AST::Lookbehind, Regexp::AST::WordBoundary then predicate(node, following)
         when Regexp::AST::Difference, Regexp::AST::Intersection then append(:span, language(node), following)
         when Regexp::AST::Star then repeated(node.child, 0, nil, following)
         when Regexp::AST::Repeat then repeated(node.child, node.minimum, node.maximum, following)

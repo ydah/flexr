@@ -4,6 +4,25 @@ module Flexr
   module Unicode
     module ReferenceRegexp
       CACHE = {} # rubocop:disable Style/MutableConstant
+      class BoundaryGroups
+        def initialize(names)
+          @prefix = +"FlexrWordBoundary"
+          @prefix << "_" while names.any? { |name| name.start_with?(@prefix) }
+          @groups = {}
+        end
+
+        def call(node)
+          key = [node.binary, node.negative]
+          name, = @groups[key] ||= ["#{@prefix}#{@groups.length}", ReferenceRegexp.boundary_source(node)]
+          "\\g<#{name}>"
+        end
+
+        def definitions
+          @groups.values.map { |name, body| "(?<#{name}>#{body}){0}" }.join
+        end
+      end
+      private_constant :BoundaryGroups
+
       module_function
 
       def match(pattern, subject, encoding:, options: 0, unicode: false)
@@ -31,7 +50,9 @@ module Flexr
             anchor.kind = :never if %i[eof final_eol].include?(anchor.kind)
           end
         end
-        source = source_for(ast, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)
+        groups = BoundaryGroups.new(pattern.names) if Regexp::AST.lookbehind?(ast)
+        source = source_for(ast, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker, groups: groups)
+        source = "#{groups.definitions}#{source}" if groups
         if anchored
           ending = following_lf ? '(?=\n\z)' : '\z'
           source = "\\A(?:#{source})#{ending}"
@@ -41,13 +62,18 @@ module Flexr
         CACHE[key] = ::Regexp.new(source, regexp_options).freeze
       end
 
-      def source_for(node, binary: false, invalid_left: false, invalid_tail_marker: false)
+      def source_for(node, binary: false, invalid_left: false, invalid_tail_marker: false, inside_lookbehind: false, groups: nil)
         if invalid_tail_marker && (node.is_a?(Regexp::AST::ByteRange) || node.is_a?(Regexp::AST::CodepointRange) ||
                                   node.is_a?(Regexp::AST::CharClass))
           return "(?!(?m:.\\z))#{source_for(node, binary: binary)}"
         end
 
+        options = { binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker,
+                    inside_lookbehind: inside_lookbehind, groups: groups }
         case node
+        when Regexp::AST::WordBoundary
+          # Onigmo rejects inline lookahead in lookbehind but permits a zero-width subexpression call.
+          inside_lookbehind ? groups.call(node) : boundary_source(node)
         when Regexp::AST::Empty then ""
         when Regexp::AST::Anchor then anchor_source(node.kind)
         when Regexp::AST::Fail then "(?!)"
@@ -55,12 +81,12 @@ module Flexr
         when Regexp::AST::Lookbehind
           branches = node.child.is_a?(Regexp::AST::Alt) ? node.child.children : [node.child]
           source = branches.map do |child|
-            body = source_for(child, binary: binary, invalid_left: invalid_left)
+            body = source_for(child, binary: binary, invalid_left: invalid_left, inside_lookbehind: true, groups: groups)
             invalid_left ? "(?<!\\A)#{body}" : body
           end.join("|")
           "(?<#{node.negative ? '!' : '='}#{source})"
         when Regexp::AST::Lookahead
-          "(?#{node.negative ? '!' : '='}#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)})"
+          "(?#{node.negative ? '!' : '='}#{source_for(node.child, **options)})"
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
         when Regexp::AST::CodepointRange then character_class([[node.lo, node.hi]], binary: binary)
         when Regexp::AST::CharClass
@@ -75,16 +101,16 @@ module Flexr
           end
           ranges = complement(ranges) if node.negated
           character_class(ranges, binary: binary)
-        when Regexp::AST::Seq then node.children.map { |child| source_for(child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker) }.join
+        when Regexp::AST::Seq then node.children.map { |child| source_for(child, **options) }.join
         when Regexp::AST::Alt
-          "(?:#{node.children.map { |child| source_for(child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker) }.join('|')})"
-        when Regexp::AST::Star then "(?:#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)})*"
+          "(?:#{node.children.map { |child| source_for(child, **options) }.join('|')})"
+        when Regexp::AST::Star then "(?:#{source_for(node.child, **options)})*"
         when Regexp::AST::Repeat
           maximum = node.maximum.nil? ? "" : node.maximum
-          "(?:#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)}){#{node.minimum},#{maximum}}"
-        when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)})"
+          "(?:#{source_for(node.child, **options)}){#{node.minimum},#{maximum}}"
+        when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, **options)})"
         when Regexp::AST::Absence
-          child = source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)
+          child = source_for(node.child, **options)
           return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child) && !Regexp::AST.contextual?(node.child)
 
           child = "(?:#{child})|(?m:.\\z)" if invalid_tail_marker
@@ -92,6 +118,13 @@ module Flexr
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"
         end
+      end
+
+      def boundary_source(node)
+        word = character_class(Unicode::Property.boundary_word_ranges(binary: node.binary), binary: node.binary)
+        positive = node.negative ? "=" : "!"
+        negative = node.negative ? "!" : "="
+        "(?:(?<=#{word})(?#{positive}#{word})|(?<!#{word})(?#{negative}#{word}))"
       end
 
       def anchor_source(kind)

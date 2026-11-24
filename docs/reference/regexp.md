@@ -21,7 +21,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Positive `(?=...)` and negative `(?!...)` lookahead | Supported | See [lookahead](#lookahead) |
 | Positive `(?<=...)` and negative `(?<!...)` lookbehind | Supported | See [lookbehind](#lookbehind) |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
-| `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
+| `\b`, `\B` | Supported | See [word boundaries](#word-boundaries) |
 | `\G` | Unsupported | At the start of a rule, omit it: rules already match at the current lexer position |
 | `\K` | Unsupported | Use the prefix/suffix state example in `FLEXR-E014` where applicable to preserve token text and location |
 | Subexpression calls `\g<...>` | Unsupported | Inline non-recursive expressions; recursive calls need a parser or state stack |
@@ -149,6 +149,28 @@ successful positive lookbehind. A streamed lexer keeps the DFA history
 after discarding input and retains the bounded text needed to replay
 fixed-width captures when the rule uses them. Looking behind in a live
 mutable string can reread its retained prefix after an edit.
+
+## Word boundaries
+
+`\b` matches a position with a word character on exactly one side.
+`\B` matches when both sides have the same word status. The
+assertions consume no input and can inspect characters outside the token.
+The start and end of each input source count as non-word sides.
+
+In a UTF-8 lexer, word characters for these assertions come from the
+vendored Unicode 15.1 snapshot. They include alphabetic characters, marks,
+decimal digits, connector punctuation, the two join controls, and Latin-1
+numbers. Ruby versions with newer Unicode data can classify newly assigned
+scalars differently. In a binary lexer, word characters are ASCII letters,
+digits, and underscore. Neither assertion changes the character class
+used by `\w`. Inside a character class, `[\b]` matches backspace.
+
+```ruby
+rule(/\bend\b/, emit: :END)
+```
+
+On `end!`, this rule emits `end`. An adjacent word character prevents
+the rule from matching `weekend` or `end` followed by a combining mark.
 
 ## Absence groups
 

@@ -3,12 +3,13 @@
 module Flexr
   module Runtime
     class ContextualRegexp < Data.define(:regexp, :invalid_eof, :instructions, :entry, :left_context,
-                                         :history_bytes, :invalid_left, :invalid_both)
+                                         :history_bytes, :invalid_left, :invalid_both, :capture_names)
       def initialize(regexp:, instructions:, entry:, invalid_eof: nil, left_context: false, history_bytes: nil,
-                     invalid_left: nil, invalid_both: nil)
+                     invalid_left: nil, invalid_both: nil, capture_names: nil)
         super(regexp: regexp.freeze, invalid_eof: invalid_eof&.freeze,
               instructions: instructions.each(&:freeze).freeze, entry: entry, left_context: left_context,
-              history_bytes: history_bytes, invalid_left: invalid_left&.freeze, invalid_both: invalid_both&.freeze)
+              history_bytes: history_bytes, invalid_left: invalid_left&.freeze, invalid_both: invalid_both&.freeze,
+              capture_names: capture_names&.each(&:freeze)&.freeze)
       end
 
       def match(lexer, rule, starting, ending: nil)
@@ -29,15 +30,28 @@ module Flexr
         end
         subject = prefix + subject unless prefix.empty?
         origin = prefix.length
-        return reference.match(subject, origin) unless ending
-
-        offset = prefix.bytesize + ending - starting
-        # Constrain Ruby's ordered capture replay to the endpoint chosen by the DFA.
-        suffix_size = subject.byteslice(offset..).length
-        groups, remainder = suffix_size.divmod(10_000)
-        suffix = (".{10000}" * groups) + ".{#{remainder}}"
-        ::Regexp.new("#{reference.source}(?=(?m:#{suffix})\\z)", reference.options).match(subject, origin)
+        if ending
+          offset = prefix.bytesize + ending - starting
+          # Constrain Ruby's ordered capture replay to the endpoint chosen by the DFA.
+          suffix_size = subject.byteslice(offset..).length
+          groups, remainder = suffix_size.divmod(10_000)
+          suffix = (".{10000}" * groups) + ".{#{remainder}}"
+          reference = ::Regexp.new("#{reference.source}(?=(?m:#{suffix})\\z)", reference.options)
+        end
+        match = reference.match(subject, origin)
+        capture_names && match ? CapturedMatch.new(match, capture_names) : match
       end
+
+      CapturedMatch = Data.define(:match, :names) do
+        def [](index) = match[index]
+        def byteoffset(name) = match.byteoffset(name)
+
+        def named_captures(symbolize_names: false)
+          keys = symbolize_names ? names.map(&:to_sym) : names
+          match.named_captures(symbolize_names: symbolize_names).slice(*keys)
+        end
+      end
+      private_constant :CapturedMatch
 
       class Cursor
         def initialize(lexer, rule, starting, ending, instructions)

@@ -451,6 +451,10 @@ task "unicode:verify" do
   abort "vendored UTF-8 automata are stale (run ruby tools/gen_unicode_automata.rb)" unless
     FlexrVerification.normalized_source(File.binread(Flexr::Unicode::PropertyAutomata::PATH)) == UnicodeAutomataGenerator.generate
 
+  abort "vendored word boundary automaton is stale (run ruby tools/gen_unicode_automata.rb)" unless
+    FlexrVerification.normalized_source(File.binread(Flexr::Unicode::PropertyAutomata::BOUNDARY_PATH)) ==
+      UnicodeAutomataGenerator.generate_boundary_word
+
   splitter = Flexr::Unicode::Utf8Splitter
   properties = Flexr::Unicode::Data::PROPERTIES
   abort "unexpected vendored Unicode version" unless Flexr::Unicode::VERSION == "15.1.0"

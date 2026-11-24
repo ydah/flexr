@@ -97,6 +97,11 @@ module Flexr
         guard += ' unless defined?(Flexr::Runtime::ContextualRegexp) && Flexr::Runtime::ContextualRegexp.method_defined?(:invalid_eof)'
         install = "#{guard}\n#{indent}#{install}"
       end
+      if compiled.rules.any? { |rule| rule.contextual_patterns&.any? { |pattern| pattern&.capture_names } }
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp word boundary captures")'
+        guard += ' unless defined?(Flexr::Runtime::ContextualRegexp) && Flexr::Runtime::ContextualRegexp.method_defined?(:capture_names)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if regexp_lookbehind?(compiled)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp lookbehind")' \
           ' unless defined?(Flexr::Runtime::Lookbehind)'
@@ -475,7 +480,7 @@ module Flexr
         definition = value.to_h
         definition.delete(:invalid_eof) unless value.invalid_eof
         definition.delete(:left_context) unless value.left_context
-        %i[history_bytes invalid_left invalid_both].each { |key| definition.delete(key) unless definition[key] }
+        %i[history_bytes invalid_left invalid_both capture_names].each { |key| definition.delete(key) unless definition[key] }
         "::Flexr::Runtime::ContextualRegexp.new(**#{ruby_literal(definition)})"
       when Pattern
         "::Flexr::Pattern.__flexr_restore(#{value.operation.inspect}, #{ruby_literal(value.operands)}, #{ruby_literal(value.name)})"

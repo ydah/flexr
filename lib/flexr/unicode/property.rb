@@ -13,6 +13,7 @@ module Flexr
         "Lower" => "Lowercase", "Lowercase" => "Lowercase",
         "Upper" => "Uppercase", "Uppercase" => "Uppercase"
       }.freeze
+      ASCII_WORD = [[0x30, 0x39], [0x41, 0x5a], [0x5f, 0x5f], [0x61, 0x7a]].each(&:freeze).freeze
       CACHE = {} # rubocop:disable Style/MutableConstant
       module_function
 
@@ -28,6 +29,17 @@ module Flexr
         end
         ranges = complement(ranges) if negate
         CACHE[key] = ranges.map { |range| range.dup.freeze }.freeze
+      end
+
+      def boundary_word_ranges(binary: false)
+        return ASCII_WORD if binary
+
+        CACHE[:boundary_word] ||= begin
+          groups = %w[Alphabetic M Nd Pc].flat_map { |name| Data::PROPERTIES.fetch(name) }
+          # Onigmo uses its Latin-1 ctype table below U+0100.
+          latin1_numbers = Data::PROPERTIES.fetch("No").select { |_, hi| hi < 0x100 }
+          merge_ranges(groups + latin1_numbers + [[0x200c, 0x200d]]).each(&:freeze).freeze
+        end
       end
 
       def canonical_name(name)

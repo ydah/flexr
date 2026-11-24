@@ -527,7 +527,7 @@ module Flexr
         body = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, prebuilt_properties: false).normalize
         options = { encoding: encoding, unicode: @spec.options[:unicode] == true }
         anchors = Regexp::AST.anchors(ast)
-        behind = Regexp::AST.lookbehind?(ast)
+        behind = Regexp::AST.history?(ast)
         left_context = behind || anchors.any? { |anchor| Regexp::AST.left_anchor?(anchor) }
         start = left_context ? '\G' : '\A'
         ending = terminal_line_end ? "$" : ""
@@ -547,8 +547,11 @@ module Flexr
             invalid_both = contextual_reference(regexp, invalid_edges, start, invalid_ending)
           end
         end
+        names = regexp.names
+        capture_names = names if !names.empty? && reference.names.length > names.length
         compiler.compile(body, reference, invalid_eof: invalid_eof, left_context: left_context,
-                         history_bytes: history_bytes, invalid_left: invalid_left, invalid_both: invalid_both)
+                         history_bytes: history_bytes, invalid_left: invalid_left, invalid_both: invalid_both,
+                         capture_names: capture_names)
       end
 
       def contextual_reference(regexp, options, start, ending)
