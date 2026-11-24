@@ -8,13 +8,20 @@ module Flexr
     class DerivativeCompiler
       attr_reader :residuals
 
-      def compile(patterns, retain_residuals: false, minimize: true, &state_limit)
+      def compile(patterns, retain_residuals: false, minimize: true, lazy: false, &state_limit)
         @residuals = nil
         terms = DerivativeTerms.new
         start = patterns.each_with_index.to_h { |(body, _), index| [index, terms.from_ast(body)] }.freeze
         conditions = patterns.map(&:last)
         operation = terms.operations.join(" and ") unless terms.operations.empty?
         ec, count = terms.byte_classes.build
+        if lazy
+          require_relative "lazy_derivative_dfa"
+          return LazyDerivativeDFA.new(start, conditions, terms, ec, count) do |size|
+            state_limit.call(size, operation)
+          end
+        end
+
         representatives = ec.each_index.uniq { |byte| ec.fetch(byte) }
         states = [start]
         ids = { start => 0 }
@@ -26,7 +33,7 @@ module Flexr
           vector = states.fetch(index)
           accepts << terms.accepting_conditions(vector, conditions, ec: ec, representatives: representatives, &state_limit)
           transitions << representatives.each_with_index.map do |byte, class_id|
-            successor = advance(vector, terms, byte, class_id)
+            successor = terms.advance(vector, byte, class_id)
             next if successor.empty?
 
             ids[successor] ||= begin
@@ -48,14 +55,6 @@ module Flexr
         end
       end
 
-      private
-
-      def advance(vector, terms, byte, class_id)
-        vector.each_with_object({}) do |(pattern, term), residuals|
-          residual = terms.derivative(term, byte, class_id)
-          residuals[pattern] = residual unless residual == DerivativeTerms::FAIL
-        end.freeze
-      end
     end
   end
 end

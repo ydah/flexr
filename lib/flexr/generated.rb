@@ -63,7 +63,9 @@ module Flexr
         dfa = load_dfa(machine.fetch(:dfa))
         plans = Automaton::Accel.whole_token_plans(dfa, klass.__flexr_rules) if
           klass.__flexr_config.backend != :firstmatch && klass.__flexr_config.options[:accel] == :strscan
-        Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym, whole_tokens: plans)
+        Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym, whole_tokens: plans,
+                              backup_memo_states: machine[:backup_memo_states]&.freeze,
+                              backup_recovery_states: machine[:backup_recovery_states]&.freeze)
       end
       compiled = Automaton::CompiledSpec.new(
         machines: machines,
@@ -120,8 +122,7 @@ module Flexr
         IR::Rule.new(**rule.to_h, trailing_dfa: rule.trailing_dfa && shareable_dfa(rule.trailing_dfa))
       end
       machines = original.machines.transform_values do |machine|
-        Automaton::Machine.new(dfa: shareable_dfa(machine.dfa), state_name: machine.state_name,
-                                whole_tokens: machine.whole_tokens)
+        Automaton::Machine.new(**machine.to_h, dfa: shareable_dfa(machine.dfa))
       end
       compiled = Automaton::CompiledSpec.new(**original.to_h, machines: machines, rules: rules)
       Ractor.make_shareable([compiled, klass.__flexr_config, klass.__flexr_states, klass.__flexr_spec.eof_rules,

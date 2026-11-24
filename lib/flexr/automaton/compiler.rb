@@ -18,19 +18,19 @@ module Flexr
         @retain_residuals = retain_residuals && construction == :derivative
       end
 
-      def compile
+      def compile(lazy: false)
         @prebuilt_properties = true
-        compile_spec
+        compile_spec(lazy: lazy)
       rescue CompileError => e
         raise unless @used_prebuilt_properties && e.diagnostic&.code == "FLEXR-E006"
 
         @prebuilt_properties = false
-        compile_spec
+        compile_spec(lazy: lazy)
       end
 
       private
 
-      def compile_spec
+      def compile_spec(lazy:)
         started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         @used_prebuilt_properties = false
         @regexp_asts = {}
@@ -44,7 +44,7 @@ module Flexr
         @pattern_universe_dfa = nil
         @state_limit = @spec.options.fetch(:max_dfa_states, 100_000)
         @state_limit = 100_000 unless @state_limit.is_a?(Integer) && @state_limit.positive?
-        directory = Flexr.cache_dir unless @retain_residuals
+        directory = Flexr.cache_dir unless @retain_residuals || lazy
         @dfa_cache = directory && DfaCache.new(directory, @spec, @state_limit, construction: @construction)
         validate_rules
         state_names = effective_states
@@ -52,14 +52,19 @@ module Flexr
           rules = rules_for(state_name)
           residuals = nil
           retain = ->(descriptions) { residuals = descriptions } if @retain_residuals
-          dfa = compile_machine(rules, &retain)
+          dfa = compile_machine(rules, lazy: lazy, &retain)
           plans = Accel.whole_token_plans(dfa, rules) if
             @spec.backend != :firstmatch && @spec.options[:accel] == :strscan
-          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans, residuals: residuals)]
+          memo_states, recovery_states = Analysis.backup_memo_states(dfa) unless @spec.backend == :firstmatch
+          [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans,
+                                   residuals: residuals, backup_memo_states: memo_states,
+                                   backup_recovery_states: recovery_states)]
         rescue CompileError => e
           e.diagnostic.location ||= @spec.states.fetch(state_name).location if e.diagnostic
           raise
         end
+        return CompiledSpec.new(machines: machines, rules: @spec.rules, states: state_names, stats: {}, diagnostics: []) if lazy
+
         stats = machines.to_h do |name, machine|
           stat = machine.dfa.stats
           operations = rules_for(name).flat_map { |rule| @pattern_stats.fetch(rule.index, []) } unless @pattern_stats.empty?
@@ -90,8 +95,8 @@ module Flexr
         end
       end
 
-      def compile_machine(rules, &)
-        return build_machine(rules, &) unless @dfa_cache
+      def compile_machine(rules, lazy:, &)
+        return build_machine(rules, lazy: lazy, &) unless @dfa_cache
 
         resolved_patterns = rules.map do |rule|
           rule.patterns.map { |pattern| pattern.is_a?(Pattern) ? pattern : pattern_regexp(pattern) }
@@ -115,7 +120,7 @@ module Flexr
         dfa
       end
 
-      def build_machine(rules, resolved_patterns = nil, &)
+      def build_machine(rules, resolved_patterns = nil, lazy: false, &)
         @active_rules = rules
         normalized = []
         rules.each_with_index do |rule, rule_offset|
@@ -147,7 +152,7 @@ module Flexr
         end
         return empty_dfa if normalized.empty?
 
-        dfa = determinize(normalized, &)
+        dfa = determinize(normalized, lazy: lazy, &)
         empty = dfa.accepts.fetch(dfa.start).first
         if empty && !@spec.options[:allow_empty_match]
           rule = rules.find { |candidate| candidate.index == empty.rule_index }
@@ -156,12 +161,13 @@ module Flexr
         dfa
       end
 
-      def determinize(patterns, operation: nil)
+      def determinize(patterns, operation: nil, lazy: false)
         if @construction == :derivative
           ordered = patterns.sort_by { |_, acceptance| acceptance_order(acceptance) }
           compiler = derivative_compiler
-          dfa = compiler.compile(ordered, retain_residuals: block_given?) do |state, derived_operation|
-            enforce_state_limit!(state, operation || derived_operation)
+          rules = @active_rules
+          dfa = compiler.compile(ordered, retain_residuals: block_given?, lazy: lazy) do |state, derived_operation|
+            enforce_state_limit!(state, operation || derived_operation, rules: rules)
           end
           yield compiler.residuals if block_given?
           return dfa
@@ -329,10 +335,10 @@ module Flexr
         pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
       end
 
-      def enforce_state_limit!(state, operation)
+      def enforce_state_limit!(state, operation, rules: @active_rules)
         return if state < @state_limit
 
-        labels = @active_rules.map { |rule| Diagnostics.rule_label(rule) }.join(", ")
+        labels = rules.map { |rule| Diagnostics.rule_label(rule) }.join(", ")
         subject = operation ? "#{operation} in #{labels}" : labels
         diagnostic = Diagnostics.error("FLEXR-E006", "DFA state limit exceeded while compiling #{subject}",
                                        help: "raise max_dfa_states or split the listed rules")
@@ -655,7 +661,10 @@ module Flexr
                               help: "remove it, reorder the rules, or make its language distinct",
                               note: example&.fetch(:note) || empty_absence_note(rule))
         end)
-        diagnostics.concat(overlap_diagnostics(compiled, rules_by_index)) if @spec.options[:warn_level] == :all
+        if @spec.options[:warn_level] == :all
+          diagnostics.concat(overlap_diagnostics(compiled, rules_by_index))
+          diagnostics.concat(backup_diagnostics(compiled)) unless @spec.backend == :firstmatch
+        end
 
         @spec.states.each do |state_name, state|
           next if state_name == :initial
@@ -725,6 +734,17 @@ module Flexr
                                               help: "use generated mode for production startup")
         end
         diagnostics
+      end
+
+      def backup_diagnostics(compiled)
+        compiled.machines.filter_map do |state, machine|
+          backup = Analysis.backup(machine.dfa)
+          next unless backup.unbounded?
+
+          Diagnostics.warning("FLEXR-W023", "state #{state.inspect} has unbounded DFA backup",
+                              location: @spec.states.fetch(state).location,
+                              note: "body DFA example: #{backup.example.inspect} followed by repetitions of #{backup.cycle.inspect}")
+        end
       end
 
       def empty_absence_note(rule)

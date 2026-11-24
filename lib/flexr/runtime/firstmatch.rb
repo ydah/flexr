@@ -5,10 +5,6 @@ module Flexr
     module Firstmatch
       private
 
-      def end_anchor_match?(buffer, position)
-        buffer.eof?(position) || buffer.getbyte(position) == 0x0a
-      end
-
       def reference_pattern?(pattern)
         Regexp::Matcher.reference?(pattern, encoding: @config.encoding, unicode: @config.options[:unicode] == true)
       end
@@ -40,7 +36,7 @@ module Flexr
 
           end_position = position + match[0].bytesize
           next unless @lexer.utf8_boundary?(end_position)
-          next if condition.end_anchor && !end_anchor_match?(buffer, end_position)
+          next if condition.end_anchor && !condition.valid_end?(buffer.getbyte(end_position))
           trailing = trailing_length(rule, buffer, end_position)
           next if rule.trailing && trailing.nil?
 
