@@ -10,7 +10,7 @@ module Flexr
       FIRSTMATCH_INSTRUCTION_LIMIT = 100_000
       private_constant :FIRSTMATCH_INSTRUCTION_LIMIT
 
-      def initialize(spec, construction: DEFAULT_CONSTRUCTION, retain_residuals: false)
+      def initialize(spec, construction: DEFAULT_CONSTRUCTION, retain_residuals: false, retain_firstmatch_order: false)
         raise ArgumentError, "unknown DFA construction: #{construction.inspect}" unless %i[subset derivative].include?(construction)
 
         raise ArgumentError, "--residuals requires a longest-match backend" if retain_residuals && spec.backend == :firstmatch
@@ -18,6 +18,7 @@ module Flexr
         @spec = spec
         @construction = construction
         @retain_residuals = retain_residuals && construction == :derivative
+        @retain_firstmatch_order = retain_firstmatch_order
       end
 
       def compile
@@ -496,10 +497,12 @@ module Flexr
               raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
             end
             contextual = Regexp::AST.contextual?(ast)
-            if contextual && (@spec.backend == :firstmatch || !regexp.names.empty?)
+            firstmatch = @spec.backend == :firstmatch
+            known_order = !@retain_firstmatch_order || !firstmatch || !uncertain_repeat_order?(ast)
+            if known_order && contextual && (firstmatch || !regexp.names.empty?)
               contexts = rule.contextual_patterns ||= []
               contexts[index] = prepare_contextual_regexp(rule, regexp, ast)
-            elsif @spec.backend == :firstmatch
+            elsif known_order && firstmatch
               prepare_firstmatch_regexp(rule, index, regexp, ast)
             end
             prepare_capture_pattern(rule, index, regexp) unless regexp.names.empty?
@@ -514,6 +517,19 @@ module Flexr
         end
       end
 
+      def uncertain_repeat_order?(node)
+        case node
+        when Regexp::AST::Repeat
+          # shortcut: Ruby may stop a bounded repeat after an empty iteration. Model that stop before comparing.
+          (node.maximum && node.maximum > 1 && Regexp::AST.nullable?(node.child)) || uncertain_repeat_order?(node.child)
+        when Regexp::AST::Seq, Regexp::AST::Alt
+          node.children.any? { |child| uncertain_repeat_order?(child) }
+        when Regexp::AST::Star, Regexp::AST::NamedCapture, Regexp::AST::Lookahead, Regexp::AST::Lookbehind
+          uncertain_repeat_order?(node.child)
+        else false
+        end
+      end
+
       def prepare_firstmatch_regexp(rule, index, regexp, ast)
         reference = Regexp::Matcher.reference?(regexp, encoding: @spec.encoding, unicode: @spec.options[:unicode] == true)
         if reference
@@ -522,7 +538,7 @@ module Flexr
           return unless regexp.encoding == Encoding::US_ASCII || regexp.encoding == @spec.encoding
           # Ruby's ignorecase can match multiple characters for one codepoint.
           return if regexp.casefold? || regexp.source.match?(/\(\?[mx]*i/)
-          return if simple_byte_repeat?(ast)
+          return if !@retain_firstmatch_order && simple_byte_repeat?(ast)
         end
 
         plan = catch(:firstmatch_instruction_limit) do

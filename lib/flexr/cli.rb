@@ -261,7 +261,8 @@ module Flexr
     def diff_input(path, options)
       parsed = read_spec(path)
       backend = options.overrides.fetch(:backend, parsed.config.fetch(:backend))
-      Source::SemanticDiff::Input.new(parsed: parsed, compiled: compile(parsed, overrides: options.overrides), backend: backend)
+      compiled = compile(parsed, overrides: options.overrides, retain_firstmatch_order: backend == :firstmatch)
+      Source::SemanticDiff::Input.new(parsed: parsed, compiled: compiled, backend: backend)
     end
 
     def diff_state_json(entry)
@@ -633,7 +634,7 @@ module Flexr
       Source::PrismReader.new(source, path: spec).read
     end
 
-    def compile(parsed, overrides: {}, residuals: false)
+    def compile(parsed, overrides: {}, residuals: false, retain_firstmatch_order: false)
       klass = Class.new(Flexr::Lexer)
       config = parsed.config
       klass.backend(overrides.fetch(:backend, config.fetch(:backend, :table)))
@@ -658,6 +659,7 @@ module Flexr
       end
       parsed.rules.each { |rule| klass.__flexr_add_generated_rule(rule.to_h) }
       return Automaton::Compiler.new(klass.__flexr_spec, construction: :derivative, retain_residuals: true).compile if residuals
+      return Automaton::Compiler.new(klass.__flexr_spec, retain_firstmatch_order: true).compile if retain_firstmatch_order
 
       klass.compile!
     end

@@ -7,8 +7,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
-- Use `flexr diff` to find the shortest input that changes longest-match rule
-  selection in a lexical state.
+- Use `flexr diff` to find the shortest input that changes rule selection in
+  a lexical state, including comparisons between longest-match and
+  `firstmatch` lexers.
 - Use `\X` to match one extended grapheme cluster with the vendored Unicode data,
   including across streamed chunks.
 - Use `\R` to match line breaks, including atomic CRLF pairs.

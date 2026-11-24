@@ -113,14 +113,154 @@ RSpec.describe "flexr diff" do
     expect(states.first[:left][:effect][:token]).to eq([255])
   end
 
-  it "never treats equal longest-match languages as a proof for ordered matching" do
+  it "finds a changed ordered endpoint even when the accepted language is equal" do
     left = <<~SPEC
       backend :firstmatch
       rule(/a|ab/, emit: :A)
     SPEC
     status, states = compare_json(left, left.sub("a|ab", "ab|a"))
+    expect(status).to eq(1)
+    expect(states.first).to include(status: "different", input: "ab", offset: 0)
+    expect([states.first[:left][:length], states.first[:right][:length]]).to eq([1, 2])
+  end
+
+  it "proves the longest pattern of a firstmatch rule agrees with a greedy alternative" do
+    left = <<~SPEC
+      backend :firstmatch
+      rule([/a/, /ab/], emit: :A)
+    SPEC
+    right = left.sub("[/a/, /ab/]", "/ab|a/")
+    expect(compare_json(left, right)).to eq([0, [{ state: "initial", status: "equal" }]])
+  end
+
+  it "distinguishes the first matching rule from the longest matching rule" do
+    rules = <<~SPEC
+      rule(/a/, emit: :SHORT)
+      rule(/ab/, emit: :LONG)
+    SPEC
+    status, states = compare_json("backend :firstmatch\n#{rules}", rules)
+    expect(status).to eq(1)
+    expect(states.first).to include(status: "different", input: "ab", offset: 0)
+    expect(states.first[:left]).to include(length: 1, effect: hash_including(token: "SHORT"))
+    expect(states.first[:right]).to include(length: 2, effect: hash_including(token: "LONG"))
+  end
+
+  it "preserves declaration order across local and inherited firstmatch rules" do
+    state = "state(:inside, inclusive: true) { rule(/ab/, emit: :LONG) }"
+    initial = "rule(/a/, emit: :SHORT)"
+    left = "backend :firstmatch\n#{state}\n#{initial}"
+    right = "backend :firstmatch\n#{initial}\n#{state}"
+
+    status, states = compare_json(left, right)
+    expect(status).to eq(1)
+    expect(states.first).to eq(state: "initial", status: "equal")
+    expect(states.last).to include(state: "inside", status: "different", input: "ab", offset: 0)
+    expect([states.last[:left][:length], states.last[:right][:length]]).to eq([2, 1])
+  end
+
+  it "reports ordered differences on binary input as byte arrays" do
+    left = <<~'SPEC'
+      encoding Encoding::BINARY
+      backend :firstmatch
+      rule(/\xff|\xffa/n, emit: :BYTE)
+    SPEC
+    right = left.sub('\xff|\xffa', '\xffa|\xff')
+    status, states = compare_json(left, right)
+    expect(status).to eq(1)
+    expect(states.first).to include(input: [255, 97], offset: 0)
+    expect([states.first[:left][:length], states.first[:right][:length]]).to eq([1, 2])
+  end
+
+  it "compares firstmatch accepts with their right and left context" do
+    left = <<~SPEC
+      backend :firstmatch
+      rule(/(?<=x)a(?!bc)/, emit: :A)
+    SPEC
+    status, states = compare_json(left, left.sub("<=x", "<=y"))
+    expect(status).to eq(1)
+    expect(states.first).to include(input: "xa", offset: 1)
+    expect(states.first[:left]).to include(length: 1)
+    expect(states.first[:right]).to be_nil
+
+    status, states = compare_json(left, left.sub("(?!bc)", ""))
+    expect(status).to eq(1)
+    expect(states.first).to include(input: "xabc", offset: 1)
+    expect(states.first[:left]).to be_nil
+    expect(states.first[:right]).to include(length: 1)
+  end
+
+  it "keeps CRLF together when comparing an ordered grapheme match" do
+    left = <<~'SPEC'
+      backend :firstmatch
+      rule(/\X/, emit: :CHAR)
+    SPEC
+    status, states = compare_json(left, left.sub('\X', '(?m:.)'))
+    expect(status).to eq(1)
+    expect(states.first).to include(input: "\r\n", offset: 0)
+    expect([states.first[:left][:length], states.first[:right][:length]]).to eq([2, 1])
+  end
+
+  it "tests trailing context after choosing the longest pattern of a firstmatch rule" do
+    left = <<~SPEC
+      backend :firstmatch
+      rule([/a/, /ab/], followed_by: /b/, emit: :FIRST)
+      rule(/ab/, emit: :SECOND)
+    SPEC
+    status, states = compare_json(left, left.sub("[/a/, /ab/]", "/a/"))
+    expect(status).to eq(1)
+    expect(states.first).to include(input: "ab", offset: 0)
+    expect(states.first[:left]).to include(length: 2, effect: hash_including(token: "SECOND"))
+    expect(states.first[:right]).to include(length: 1, effect: hash_including(token: "FIRST"))
+  end
+
+  it "checks the terminal anchor of the selected vendored pattern before trying the next rule" do
+    left = <<~SPEC
+      backend :firstmatch
+      rule([/a/, /a[[:digit:]]$/], emit: :A)
+    SPEC
+    right = <<~SPEC
+      backend :firstmatch
+      rule(/a[[:digit:]]$/, emit: :A)
+      rule(/a/, emit: :A)
+    SPEC
+    status, states = compare_json(left, right)
+    expect(status).to eq(1)
+    expect(states.first).to include(input: "a0 ", offset: 0, left: nil)
+    expect(states.first[:right]).to include(length: 1, effect: hash_including(token: "A"))
+  end
+
+  it "keeps firstmatch uncertainty local to the states with native case folding" do
+    source = <<~SPEC
+      backend :firstmatch
+      rule(/a+/, emit: :A)
+      state(:native, inclusive: false) { rule(/ss/i, emit: :NATIVE) }
+    SPEC
+    status, states = compare_json(source, source)
+    expect(status).to eq(2)
+    expect(states.first).to eq(state: "initial", status: "equal")
+    expect(states.last).to include(state: "native", status: "inconclusive", reason: a_kind_of(String))
+  end
+
+  it "leaves bounded nullable Ruby repetitions inconclusive" do
+    left = <<~SPEC
+      backend :firstmatch
+      rule(/(?:a?|b){1,3}a/, emit: :A)
+    SPEC
+    right = left.sub("(?:a?|b){1,3}", "(?:a?|b)(?:a?|b)?(?:a?|b)?")
+    status, states = compare_json(left, right)
     expect(status).to eq(2)
     expect(states.first).to include(status: "inconclusive", reason: /firstmatch/)
+  end
+
+  it "leaves a contextual replay with an incompatible input encoding inconclusive" do
+    source = <<~SPEC
+      encoding Encoding::BINARY
+      backend :firstmatch
+      rule(/é(?=a)/, emit: :A)
+    SPEC
+    status, states = compare_json(source, "encoding Encoding::BINARY")
+    expect(status).to eq(2)
+    expect(states.first).to include(status: "inconclusive", reason: /UTF-8.*ASCII-8BIT/)
   end
 
   it "reports static parse errors at the right-hand source" do

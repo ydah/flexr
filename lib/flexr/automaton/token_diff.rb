@@ -2,19 +2,32 @@
 
 require_relative "token_diff/right_context"
 require_relative "token_diff/utf8"
+require_relative "token_diff/firstmatch"
 
 module Flexr
   module Automaton
     module TokenDiff
       Side = Data.define(:dfa, :rules, :effects, :keyword_effects, :allow_empty_match)
+      FirstmatchSide = Data.define(:rules, :effects, :keyword_effects)
       Match = Data.define(:rule_index, :effect, :length)
       Result = Data.define(:status, :input, :offset, :left, :right, :reason)
 
       Candidate = Data.define(:rule_index, :effect, :end_pos)
-      Scan = Data.define(:state, :pending, :winner)
+      Scan = Data.define(:state, :pending, :winner) do
+        def settled? = state.nil? && pending.empty?
+
+        def endpoints = [winner&.end_pos, *pending.values.map(&:end_pos)].compact
+
+        def with_endpoint_ranks(ranks)
+          ranked_winner = winner&.with(end_pos: ranks.fetch(winner.end_pos))
+          ranked_pending = pending.transform_values { |candidate| candidate.with(end_pos: ranks.fetch(candidate.end_pos)) }
+          with(winner: ranked_winner, pending: ranked_pending)
+        end
+      end
       Position = Data.define(:right, :utf8, :left, :keyword, :bol, :scans)
       Path = Data.define(:position, :parent, :byte, :length, :offset)
       class SearchLimit < StandardError; end
+      class UnsupportedFirstmatch < StandardError; end
 
       module_function
 
@@ -22,6 +35,8 @@ module Flexr
         Search.new([left, right], encoding, limit).compare
       rescue SearchLimit
         Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: "search limit reached")
+      rescue UnsupportedFirstmatch => e
+        Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: e.message)
       end
 
       class Search
@@ -38,9 +53,10 @@ module Flexr
         def compare
           return outcome(:inconclusive, reason: "unsupported input encoding") unless @utf8_rows
 
+          @ordered = @sides.map { |side| Firstmatch.new(side.rules, @encoding) if side.is_a?(FirstmatchSide) }
           trails = @sides.flat_map do |side|
-            side.dfa.rule_ids.filter_map do |index|
-              rule = side.rules.fetch(index)
+            rules = side.is_a?(FirstmatchSide) ? side.rules : side.dfa.rule_ids.map { |index| side.rules.fetch(index) }
+            rules.filter_map do |rule|
               next unless rule.trailing
 
               return outcome(:inconclusive, reason: "trailing context has no DFA") unless rule.trailing_dfa
@@ -48,17 +64,19 @@ module Flexr
               rule.trailing_dfa
             end
           end.uniq
-          bodies = @sides.map(&:dfa)
+          bodies = @sides.grep(Side).map(&:dfa)
           dfas = bodies | trails
-          @graphs = dfas.filter_map(&:left_context).uniq
+          firstmatch = @ordered.compact
+          @graphs = (dfas.filter_map(&:left_context) + firstmatch.flat_map(&:graphs)).uniq
           @graph_ids = @graphs.each_with_index.to_h
-          body_labels = bodies.flat_map { |dfa| dfa.accepts.flatten }
+          body_labels = bodies.flat_map { |dfa| dfa.accepts.flatten } + firstmatch.flat_map(&:labels)
           trailing_labels = trails.flat_map { |dfa| dfa.accepts.flatten }
           @body_bol = body_labels.any?(&:bol_only)
-          @trailing_left = trails.any?(&:starts) || trailing_labels.any?(&:bol_only)
-          @left_sensitive = bodies.any?(&:starts) || @body_bol || @trailing_left
+          @scan_left = trails.any?(&:starts) || trailing_labels.any?(&:bol_only) || firstmatch.any?(&:left_sensitive?)
+          @left_sensitive = bodies.any?(&:starts) || @body_bol || @scan_left
           labels = body_labels + trailing_labels
-          @right = RightContext.new(labels, @utf8_rows)
+          prefix_dfas = @sides.grep(FirstmatchSide).flat_map { |side| side.rules.filter_map(&:trailing_dfa) }.uniq
+          @right = RightContext.new(labels, @utf8_rows, track_edge: firstmatch.any?(&:track_edge?), prefix_dfas: prefix_dfas)
           build_keywords
 
           bytes = alphabet(dfas)
@@ -77,7 +95,7 @@ module Flexr
               if !pos.scans
                 start_scan(path, id, frontier) if pos.utf8.zero?
               elsif pos.right.zero? && pos.utf8.zero?
-                candidates = resolve(path, eof: true).map(&:winner)
+                candidates = winners(resolve(path, eof: true))
                 return witness(id, candidates) if different?(candidates)
 
                 opaque ||= candidates.any? { |candidate| candidate && candidate.effect.nil? }
@@ -127,7 +145,7 @@ module Flexr
 
         def alphabet(dfas)
           order = (32..126).to_a + (0..31).to_a + (127..255).to_a
-          byte_classes = dfas.map(&:ec) + @graphs.map(&:ec)
+          byte_classes = dfas.map(&:ec) + @graphs.map(&:ec) + @ordered.compact.flat_map(&:byte_classes)
           order.map { |byte| [byte, @right.byte_key(byte)] }.uniq do |byte, key|
             [*byte_classes.map { |row| row.fetch(byte) }, key,
              @left_sensitive && byte == 0x0a, (byte if @keyword_bytes[byte])]
@@ -145,8 +163,11 @@ module Flexr
         def start_scan(path, id, frontier)
           pos = path.position
           bol = @body_bol && (!pos.left || pos.left.first != LeftContext::OTHER)
-          scans = @sides.map { |side| Scan.new(state: start_state(side.dfa, pos.left), pending: {}, winner: nil) }
-          left = pos.left if @trailing_left
+          scans = @sides.each_with_index.map do |side, index|
+            ordered = @ordered[index]
+            ordered ? ordered.start(bol) : Scan.new(state: start_state(side.dfa, pos.left), pending: {}, winner: nil)
+          end
+          left = pos.left if @scan_left
           start = pos.with(scans: scans, keyword: @keyword_spellings.empty? ? nil : 0, bol: bol, left: left)
           return if @scan_roots[start]
 
@@ -170,6 +191,8 @@ module Flexr
             next if tails.empty?
 
             next_scans = scans&.each_with_index&.map do |scan, index|
+              next advance_ordered(scan, path, index, byte) if @ordered[index]
+
               dfa = @sides.fetch(index).dfa
               state = dfa.transition(scan.state, byte) if scan.state
               pending = advance_pending(scan.pending, @sides.fetch(index).rules, byte)
@@ -200,7 +223,25 @@ module Flexr
           return pos.scans unless pos.utf8.zero?
           return pos.scans if eof && path.length == path.offset
 
-          @sides.each_with_index.map { |side, index| resolve_scan(path, side, index) }
+          @sides.each_with_index.map do |side, index|
+            if @ordered[index]
+              scan = pos.scans.fetch(index)
+              eof ? advance_ordered(scan, path, index, nil) : scan
+            else
+              resolve_scan(path, side, index)
+            end
+          end
+        end
+
+        def advance_ordered(scan, path, index, byte)
+          pos = path.position
+          @ordered.fetch(index).advance(scan, pos, byte, @right, @graph_ids) do |rule, eligible|
+            if eligible && (dfa = rule.trailing_dfa)
+              bol = !pos.left || pos.left.first != LeftContext::OTHER
+              eligible = @right.accepts_prefix?(dfa, start_state(dfa, pos.left), bol, pos.right)
+            end
+            [candidate_at(path, @sides.fetch(index), index, rule.index), eligible]
+          end
         end
 
         def resolve_scan(path, side, index)
@@ -266,23 +307,26 @@ module Flexr
           return pos unless pos.scans
 
           # Only the order and equality of live body ends affect later comparisons.
-          ends = pos.scans.flat_map { |scan| [scan.winner&.end_pos, *scan.pending.values.map(&:end_pos)] }
-          ranks = ends.compact.uniq.sort.each_with_index.to_h
-          scans = pos.scans.map do |scan|
-            winner = scan.winner&.with(end_pos: ranks.fetch(scan.winner.end_pos))
-            pending = scan.pending.transform_values { |candidate| candidate.with(end_pos: ranks.fetch(candidate.end_pos)) }
-            Scan.new(state: scan.state, pending: pending, winner: winner)
-          end
+          ends = pos.scans.flat_map(&:endpoints)
+          ranks = ends.uniq.sort.each_with_index.to_h
+          scans = pos.scans.map { |scan| scan.with_endpoint_ranks(ranks) }
           [pos.with(scans: scans), path.offset == path.length]
         end
 
         def settled_equal?(scans)
-          return false unless scans.all? { |scan| scan.state.nil? && scan.pending.empty? }
+          return false unless scans.all?(&:settled?)
 
-          left, right = scans.map(&:winner)
+          left, right = winners(scans)
           return true unless left || right
 
           left && right && !left.effect.nil? && left.effect == right.effect && left.end_pos == right.end_pos
+        end
+
+        def winners(scans)
+          scans.each_with_index.map do |scan, index|
+            ordered = @ordered[index]
+            ordered ? ordered.winner(scan) : scan.winner
+          end
         end
 
         def different?(candidates)
@@ -312,7 +356,7 @@ module Flexr
         end
       end
 
-      private_constant :Candidate, :Scan, :Position, :Path, :Search, :SearchLimit
+      private_constant :Candidate, :Scan, :Position, :Path, :Search, :SearchLimit, :UnsupportedFirstmatch, :Firstmatch
     end
   end
 end
