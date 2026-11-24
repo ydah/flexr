@@ -9,7 +9,7 @@ require_relative "migration"
 
 module Flexr
   module CLI
-    COMMANDS = %w[check fix stats tokens dot explain trace skeleton bench import new].freeze
+    COMMANDS = %w[check fix diff stats tokens dot explain trace skeleton bench import new].freeze
     EXIT_OK = 0
     EXIT_FAILURE = 1
     EXIT_USAGE = 2
@@ -29,6 +29,10 @@ module Flexr
       raise ArgumentError, "lrama format is only valid for tokens" if options.format == :lrama && command != :tokens
       spec = positionals.shift
       raise ArgumentError, "a SPEC.rb path is required" unless spec
+      if command == :diff
+        command_args[:comparison] = positionals.shift
+        raise ArgumentError, "a second SPEC.rb path is required for diff" unless command_args[:comparison]
+      end
       raise ArgumentError, "unexpected argument: #{positionals.first}" unless positionals.empty?
 
       execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: command_args)
@@ -41,7 +45,7 @@ module Flexr
       EXIT_FAILURE
     rescue StandardError => e
       err.puts "error: #{e.class}: #{e.message}"
-      EXIT_FAILURE
+      command == :diff ? EXIT_USAGE : EXIT_FAILURE
     end
 
     def new_project(args, out)
@@ -105,7 +109,7 @@ module Flexr
         when "--standalone"
           options.set(:standalone, true)
         when "--eval"
-          raise ArgumentError, "fix requires a statically readable spec" if command == :fix
+          raise ArgumentError, "#{command} requires a statically readable spec" if %i[fix diff].include?(command)
           options.eval_mode = true
         when "--dry-run"
           raise ArgumentError, "--dry-run is only valid for fix" unless command == :fix
@@ -185,6 +189,8 @@ module Flexr
         check(spec, options, out)
       when :fix
         fix(spec, options, out)
+      when :diff
+        print_diff(spec, command_args.fetch(:comparison), options, out, err)
       when :stats
         print_stats(spec, options, out)
       when :tokens
@@ -228,6 +234,103 @@ module Flexr
                       options: options.generator_options).generate
         EXIT_OK
       end
+    end
+
+    def print_diff(left_path, right_path, options, out, err)
+      require_relative "source/semantic_diff"
+
+      path = left_path
+      left = diff_input(path, options)
+      path = right_path
+      right = diff_input(path, options)
+      states = Source::SemanticDiff.new(left, right, limit: options.max_dfa_states).states
+      if options.format == :json
+        out.puts JSON.generate(states: states.map { |entry| diff_state_json(entry) })
+      else
+        states.each { |entry| print_diff_state(entry, out) }
+      end
+      return EXIT_FAILURE if states.any? { |entry| entry.result.status == :different }
+      return EXIT_USAGE if states.any? { |entry| entry.result.status == :inconclusive }
+
+      EXIT_OK
+    rescue Flexr::Error, Errno::ENOENT, Errno::EACCES, SyntaxError => e
+      err.puts render_error(e, options: options, path: path)
+      EXIT_USAGE
+    end
+
+    def diff_input(path, options)
+      parsed = read_spec(path)
+      backend = options.overrides.fetch(:backend, parsed.config.fetch(:backend))
+      Source::SemanticDiff::Input.new(parsed: parsed, compiled: compile(parsed, overrides: options.overrides), backend: backend)
+    end
+
+    def diff_state_json(entry)
+      result = entry.result
+      values = { state: diff_json_name(entry.state), status: result.status }
+      values[:reason] = result.reason if result.reason
+      if result.input
+        input = result.input.dup.force_encoding(Encoding::UTF_8)
+        values.merge!(input: input.valid_encoding? ? input : input.bytes, offset: result.offset,
+                      left: diff_match_json(result.left), right: diff_match_json(result.right))
+      end
+      values
+    end
+
+    def diff_match_json(match)
+      return unless match
+
+      effect = match.effect
+      if effect
+        operations = effect.state_operations.map { |operation, *arguments| [operation, *arguments.map { |target| diff_json_name(target) }] }
+        effects = { action: effect.action, token: diff_json_name(effect.token), channel: diff_json_name(effect.channel),
+                    state_operations: operations }
+      end
+      { rule: match.rule_index, length: match.length, effect: effects }
+    end
+
+    def diff_json_name(name)
+      return unless name
+
+      text = name.to_s
+      utf8 = text.encode(Encoding::UTF_8)
+      utf8.valid_encoding? ? utf8 : text.bytes
+    rescue EncodingError
+      text.bytes
+    end
+
+    def print_diff_state(entry, out)
+      result = entry.result
+      name = entry.state.to_s
+      name = name.inspect unless name.ascii_only? && /\A[a-zA-Z0-9_]+\z/.match?(name)
+      out.puts "state #{name}:"
+      if result.input
+        out.puts "  #{result.input.inspect} at byte #{result.offset}"
+        out.puts "  left  #{diff_match_description(result.left, result)}"
+        out.puts "  right #{diff_match_description(result.right, result)}"
+      elsif result.reason
+        out.puts "  #{result.status} (#{result.reason})"
+      else
+        out.puts "  no change"
+      end
+    end
+
+    def diff_match_description(match, result)
+      return "no match" unless match
+
+      effect = match.effect
+      text = result.input.byteslice(result.offset, match.length)
+      description = case effect&.action
+      when :emit then "#{effect.token.inspect}(#{text.inspect})"
+      when :skip then "skip(#{text.inspect})"
+      else "Ruby action on #{text.inspect}"
+      end
+      size = match.length == 1 ? "1 byte" : "#{match.length} bytes"
+      fields = [size, "rule #{match.rule_index}"]
+      fields << "channel #{effect.channel.inspect}" if effect&.channel
+      effect&.state_operations&.each do |operation, argument|
+        fields << (argument ? "#{operation} #{argument.inspect}" : operation.to_s)
+      end
+      "#{description} (#{fields.join(', ')})"
     end
 
     def fix(spec, options, out)
@@ -629,9 +732,10 @@ module Flexr
     def usage(out, status: EXIT_OK)
       out.puts <<~USAGE
         Usage: flexr [COMMAND] SPEC.rb [options]
+               flexr diff LEFT.rb RIGHT.rb [options]
                flexr new NAME --parser lrama|racc
 
-        Commands: check, fix, stats, tokens, dot, explain, trace, skeleton, bench, import, new
+        Commands: check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
         Options:
           -o, --output PATH          generated output path
           -b, --backend NAME         table | direct | firstmatch | auto

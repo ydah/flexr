@@ -4,6 +4,7 @@ The executable is `flexr`, with usage:
 
 ```text
 flexr [COMMAND] SPEC.rb [options]
+flexr diff LEFT.rb RIGHT.rb [options]
 flexr new NAME --parser lrama|racc
 ```
 
@@ -17,6 +18,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 |---|---|---|
 | `check SPEC` | Compile and render diagnostics | Human or JSON diagnostics |
 | `fix SPEC` | Apply supported diagnostic fixes | Updated spec, or full source with `--dry-run` |
+| `diff LEFT RIGHT` | Compare the first rule selection in each lexical state | Shortest differences, or a proof status |
 | `stats SPEC` | Report DFA states, byte classes, and table sizes | JSON |
 | `tokens SPEC` | Print names declared by `emits` | Space-separated names |
 | `dot SPEC` | Render the DFA as Graphviz DOT | DOT on stdout |
@@ -71,9 +73,10 @@ The complete help output is kept as a checked snapshot:
 
 <!-- flexr-help:start -->
 Usage: flexr [COMMAND] SPEC.rb [options]
+       flexr diff LEFT.rb RIGHT.rb [options]
        flexr new NAME --parser lrama|racc
 
-Commands: check, fix, stats, tokens, dot, explain, trace, skeleton, bench, import, new
+Commands: check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
 Options:
   -o, --output PATH          generated output path
   -b, --backend NAME         table | direct | firstmatch | auto
@@ -117,6 +120,40 @@ as quick fixes for DFA backends.
   at the first closing quote. It preserves the regexp's newline handling.
 - `FLEXR-I003` groups adjacent literal rules into a keyword table when the
   compiler verifies the change and there are no intervening comments.
+
+## Compare lexer specifications
+
+```sh
+flexr diff previous.flexr.rb updated.flexr.rb
+flexr diff previous.flexr.rb updated.flexr.rb --format json
+```
+
+For each lexical state, `diff` compares one longest-match rule selection.
+It checks the selected rule body's byte length, token type after keyword
+remapping, channel, and literal state operations. A skipped rule still
+selects a body. The command treats an unmatched position as a separate
+outcome. It reads both specifications statically and can compare
+trailing context, lookahead, and lookbehind.
+
+The shortest witness is measured in bytes. It includes any input prefix
+needed for left context. The reported offset marks where matching starts in the
+named state. UTF-8 witnesses contain complete Unicode scalars. Binary
+witnesses may contain any byte. In JSON, each entry in `states` gives a
+`status`. A witness adds `input`, `offset`, and the `left` and `right`
+selections. An input that cannot be represented as UTF-8 is a byte array.
+A selection includes the rule index, body byte length, and static effect.
+Names that cannot be encoded as UTF-8 also use byte arrays.
+
+The command compares declarations and accepts equal rules at different source
+indices. Token values, arbitrary Ruby actions, EOF handlers, and later tokens
+are outside the comparison. A reachable opaque action may make a state
+inconclusive. The same applies when the specifications use different encodings,
+when either uses the `firstmatch` backend, or when the comparison reaches
+`--max-dfa-states`.
+
+Exit status 0 means all compared states are equal. Exit status 1 means at
+least one state differs. Exit status 2 means the command encountered a
+compilation error or could not establish equality.
 
 ## New parser project
 

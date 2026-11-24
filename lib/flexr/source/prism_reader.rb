@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
+require_relative "action_effects"
+
 module Flexr
   module Source
       RuleDefinition = Struct.new(
       :index, :patterns, :trailing, :action_source, :action, :states, :bol_only, :end_anchor,
       :pattern_conditions, :bind_action, :reads_locals, :channel, :dynamic_channel, :priority, :emit_shorthand, :emits,
-      :span, keyword_init: true
+      :span, :action_steps, keyword_init: true
     )
       SpecSource = Struct.new(
         :source, :path, :class_name, :rules, :config, :dsl_spans, :first_dsl_offset, :constants,
@@ -479,7 +481,8 @@ module Flexr
           action_source: action_source, action: action, states: states.dup, channel: channel, dynamic_channel: dynamic_channel,
           emits: emits,
           bol_only: false, end_anchor: nil, priority: priority, emit_shorthand: bind_action && !emits && emit_shorthand(node.block),
-          span: [node.location.start_offset, node.location.end_offset], bind_action: bind_action, reads_locals: reads_locals
+          span: [node.location.start_offset, node.location.end_offset], bind_action: bind_action, reads_locals: reads_locals,
+          action_steps: (ActionEffects.steps(node.block) if bind_action)
         )
       end
 
