@@ -82,6 +82,7 @@ module Flexr
     extend DSL
     extend Rules::Use
 
+    def self.incremental: (String, ?filename: String?, ?error_mode: Symbol, ?pure_actions: bool) -> Runtime::Incremental
     def self.push: (?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?freeze_input: bool, ?chunk_size: Integer) -> Runtime::Push
     def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?freeze_input: bool, ?chunk_size: Integer) -> void
     def next_token: (?expect: Array[Symbol]?, ?parser_state: Integer?) -> token?
@@ -130,6 +131,19 @@ module Flexr
 
   module Runtime
     class Checkpoint
+    end
+
+    class Edit < ::Data
+      def self.new: (start_byte: Integer, end_byte: Integer, replacement: String) -> instance
+      attr_reader start_byte: Integer
+      attr_reader end_byte: Integer
+      attr_reader replacement: String
+    end
+
+    class Incremental
+      attr_reader input: String
+      attr_reader tokens: Array[token]
+      def relex: (Edit) -> self
     end
 
     class Push

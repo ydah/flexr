@@ -104,6 +104,11 @@ streamed = stream.feed("12")
 stream.feed(" ") { |_token| nil }.finish { |_token| nil }
 puts streamed
 
+# @type var document: Flexr::Runtime::Incremental
+document = PublicApiTypecheck::EmbeddedLexer.incremental("alpha", filename: "editor.txt")
+revision = document.relex(Flexr::Runtime::Edit.new(start_byte: 0, end_byte: 5, replacement: "beta"))
+puts revision.input, revision.tokens
+
 # @type var structured_token: Flexr::Runtime::Token
 structured_token = Flexr::Runtime::Token.new(type: :INTEGER, value: 12, location: location)
 # @type var immutable_record: Data
