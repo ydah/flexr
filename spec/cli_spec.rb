@@ -294,7 +294,7 @@ RSpec.describe Flexr::CLI do
     File.write(path, <<~RUBY)
       require "flexr"
       class InvalidCliLexer < Flexr::Lexer
-        rule(/(?=a)/) { emit :A }
+        rule(/(?<=a)b/) { emit :A }
       end
     RUBY
 
@@ -302,7 +302,7 @@ RSpec.describe Flexr::CLI do
 
     expect(status).to eq(1)
     expect(output).to be_empty
-    expect(errors).to include("FLEXR-E014", "look-around")
+    expect(errors).to include("FLEXR-E014", "lookbehind")
   ensure
     FileUtils.rm_f(path)
   end

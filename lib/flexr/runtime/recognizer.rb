@@ -71,7 +71,7 @@ module Flexr
 
           dfa.accepts.fetch(state).each do |acceptance|
             next if acceptance.bol_only && !bol
-            next if acceptance.end_anchor && !acceptance.valid_end?(byte)
+            next if acceptance.end_anchor && !acceptance.valid_end_at?(input, cursor)
 
             yield acceptance.rule_index, cursor
           end

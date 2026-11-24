@@ -28,6 +28,8 @@ require_relative "automaton/types"
 require_relative "automaton/byte_class_set"
 require_relative "automaton/nfa"
 require_relative "automaton/dfa"
+require_relative "runtime/contextual_regexp"
+require_relative "automaton/contextual_regexp_compiler"
 require_relative "automaton/reference_dfa"
 require_relative "automaton/compiler"
 require_relative "automaton/analysis"
@@ -57,6 +59,7 @@ require_relative "keywords"
 require_relative "lexer"
 require_relative "rules"
 require_relative "generated"
+require_relative "automaton/lookahead"
 
 
 module Flexr

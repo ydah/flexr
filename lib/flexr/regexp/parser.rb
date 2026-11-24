@@ -150,6 +150,8 @@ module Flexr
         expect(")")
         @options = saved_options if prefix
         return AST::Absence.new(child: node, loc: span(starting)) if prefix == :absence
+        return AST::Lookahead.new(child: node, negative: prefix == :negative_lookahead, loc: span(starting)) if
+          %i[positive_lookahead negative_lookahead].include?(prefix)
         return AST::NamedCapture.new(opening: prefix, child: node) if prefix.is_a?(String)
 
         node
@@ -182,14 +184,10 @@ module Flexr
           end
           raise_syntax("invalid inline option group")
         end
-        if peek_prefix?("=")
-          raise unsupported("look-around",
-                            "for a trailing positive lookahead, rewrite rule(/a(?=b)/) as rule(/a/, followed_by: /b/); keep the action")
-        end
-        if peek_prefix?("!") || peek_prefix?("<=") || peek_prefix?("<!")
-          raise unsupported("look-around",
-                            "use separate rules or states; followed_by: cannot express negative lookahead or lookbehind")
-        end
+        return :positive_lookahead if consume?("=")
+        return :negative_lookahead if consume?("!")
+        raise unsupported("lookbehind", "use separate rules or lexer states to track the preceding input") if
+          peek_prefix?("<=") || peek_prefix?("<!")
         if consume?(">")
           raise unsupported("atomic groups",
                             'for unescaped single-line quoted text, a DFA-compatible rewrite is rule(/"[^"\n]*"/); keep the action; removing atomic groups can change matches')
@@ -568,7 +566,7 @@ module Flexr
 
       def anchor_nodes(node)
         return [node] if node.is_a?(AST::Anchor)
-        return anchor_nodes(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat) || node.is_a?(AST::Absence)
+        return anchor_nodes(node.child) if node.is_a?(AST::Star) || node.is_a?(AST::Repeat) || node.is_a?(AST::Absence) || node.is_a?(AST::Lookahead)
         return [] unless node.respond_to?(:children)
 
         node.children.flat_map { |child| anchor_nodes(child) }

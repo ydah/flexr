@@ -146,6 +146,7 @@ module Flexr
         return warn_at(number, "rewrite Unicode property or POSIX class patterns before importing because Ruby and flexr may use different Unicode tables") if Regexp::Matcher.reference?(regexp, encoding: Encoding::UTF_8)
 
         ast = Regexp::Parser.new(regexp.source, options: regexp.options).parse
+        return warn_at(number, "rewrite regexp lookahead as separate rules or states before importing") if Regexp::AST.lookahead?(ast)
         return warn_at(number, "rewrite regexp anchors against the input position before importing") if anchor?(ast)
         return warn_at(number, "rewrite the regexp to consume input because it can match an empty string") if Regexp::AST.nullable?(ast)
         return warn_at(number, "rewrite absence groups before using the firstmatch backend") if Regexp::AST.absence?(ast)

@@ -177,7 +177,7 @@ module Flexr
         dfa = rule.trailing_dfa || trailing_dfa(rule.trailing)
         state = dfa.start
         cursor = position
-        longest = 0 if trailing_accept?(dfa, state, buffer, cursor, position)
+        longest = 0 if trailing_accept?(dfa, state, buffer, cursor, position, rule)
         while buffer.ensure_available?(cursor + 1)
           state = dfa.transition(state, buffer.getbyte(cursor))
           break unless state
@@ -186,18 +186,18 @@ module Flexr
           @lexer.consume_step!
           size = cursor - position
           @lexer.ensure_lookahead_size!(size, rule: rule)
-          longest = size if trailing_accept?(dfa, state, buffer, cursor, position)
+          longest = size if trailing_accept?(dfa, state, buffer, cursor, position, rule)
         end
         longest
       end
 
-      def trailing_accept?(dfa, state, buffer, ending, starting)
+      def trailing_accept?(dfa, state, buffer, ending, starting, rule)
         acceptance = dfa.accepts[state].first
         return false unless acceptance
         return false if acceptance.bol_only && !@lexer.__flexr_beginning_of_line_at?(starting, @lexer.byte_pos)
         return false unless @lexer.utf8_boundary?(ending)
 
-        !acceptance.end_anchor || acceptance.valid_end?(buffer.getbyte(ending))
+        acceptance.valid_end_at?(buffer, ending, @lexer, rule, starting)
       end
 
       def trailing_dfa(pattern)
@@ -212,8 +212,8 @@ module Flexr
           candidate = @rules.fetch(acceptance.rule_index)
           next if acceptance.bol_only && !@lexer.beginning_of_line?
           next if check_boundary && !@lexer.utf8_boundary?(cursor)
-          next unless !acceptance.end_anchor || acceptance.valid_end?(buffer.getbyte(cursor))
           next if expected && !expected_rule?(candidate, expected, buffer, position, cursor)
+          next unless acceptance.valid_end_at?(buffer, cursor, @lexer, candidate)
 
           trailing_size = trailing_length(candidate, buffer, cursor)
           next if candidate.trailing && trailing_size.nil?

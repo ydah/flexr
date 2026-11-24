@@ -32,7 +32,10 @@ module Flexr
         case kind
         when :empty then "ε"
         when :fail then "∅"
-        when :not_next_lf then '(?!\n)'
+        when :guard then "(?=#{expression(parts.first)})#{expression(parts.last)}"
+        when :first_ending then "first_ending(#{expression(parts.first)})"
+        when :prefix then "prefix(#{expression(parts.first)})"
+        when :suffix_graph then "lookahead[#{parts.first}][#{parts.last}]"
         when :byte then byte_range(*parts)
         when :sequence then parts.map { |part| expression(part) }.join
         when :union then "(?:#{parts.map { |part| expression(part) }.join('|')})"

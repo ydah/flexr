@@ -34,7 +34,7 @@ module Flexr
 
       def write(key, dfa, conditions, empty_absence)
         data = {
-          accepts: dfa.accepts.map { |row| row.map(&:to_a) }, ec: dfa.ec, class_count: dfa.class_count,
+          **dfa.acceptance_data, ec: dfa.ec, class_count: dfa.class_count,
           start: dfa.start, rule_ids: dfa.rule_ids, state_count: dfa.states, transitions: dfa.transitions
         }
         payload = JSON.generate(dfa: data, conditions: conditions, empty_absence: empty_absence)

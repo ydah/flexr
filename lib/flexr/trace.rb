@@ -210,7 +210,7 @@ module Flexr
           dfa.accepts[state].each do |acceptance|
             next if acceptance.bol_only && !@lexer.__flexr_beginning_of_line_at?(start, scan_start)
 
-            yield acceptance, cursor unless acceptance.end_anchor && !acceptance.valid_end?(@lexer.buffer.getbyte(cursor))
+            yield acceptance, cursor if acceptance.valid_end_at?(@lexer.buffer, cursor)
           end
         end
         break unless @lexer.buffer.ensure_available?(cursor + 1)

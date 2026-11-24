@@ -34,7 +34,7 @@ RSpec.describe "compiler diagnostic locations" do
     "FLEXR-E005" => "rule(/a*/, skip: true)",
     "FLEXR-E007" => "rule(/a{1001}/, skip: true)",
     "FLEXR-E009" => "rule(/a^b/, skip: true)",
-    "FLEXR-E014" => "rule(/a(?=b)/, skip: true)"
+    "FLEXR-E014" => "rule(/(?<=a)b/, skip: true)"
   }.each do |code, statement|
     it "locates #{code} in both check output and generator errors" do
       write_spec("  rule(/z/, skip: true)\n  #{statement}")
@@ -52,7 +52,7 @@ RSpec.describe "compiler diagnostic locations" do
   end
 
   it "locates errors in trailing context and preserves their exception class" do
-    statement = "rule(/a/, followed_by: /b(?=c)/, skip: true)"
+    statement = "rule(/a/, followed_by: /(?<=b)c/, skip: true)"
     write_spec("  #{statement}")
 
     expect { Flexr::Generator.new(@path).generate }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
@@ -63,7 +63,6 @@ RSpec.describe "compiler diagnostic locations" do
 
   it "preserves regexp rewrite examples in check JSON and generator errors" do
     {
-      "/a(?=b)/" => "rule(/a/, followed_by: /b/)",
       '/".*?"/' => 'rule(/"[^"\n]*"/)',
       '/"[^"\n]*+"/' => 'rule(/"[^"\n]*"/)',
       '/\q/' => 'rule(/q/)',
@@ -134,7 +133,7 @@ RSpec.describe "compiler diagnostic locations" do
   end
 
   it "locates regexp errors when empty matches bypass the initial validation" do
-    statement = "rule(/a(?=b)/, skip: true)"
+    statement = "rule(/(?<=a)b/, skip: true)"
     write_spec("  option :allow_empty_match\n  #{statement}")
 
     expect { Flexr::Generator.new(@path).generate }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
@@ -197,7 +196,7 @@ RSpec.describe "compiler diagnostic locations" do
   end
 
   it "renders compiler error source context through the CLI" do
-    write_spec("  rule(/a(?=b)/, skip: true)")
+    write_spec("  rule(/(?<=a)b/, skip: true)")
     output = StringIO.new
     errors = StringIO.new
 
@@ -206,8 +205,8 @@ RSpec.describe "compiler diagnostic locations" do
     expect(status).to eq(1)
     expect(output.string).to be_empty
     expect(errors.string).to include("error[FLEXR-E014]", "  --> #{@path}:3:3\n",
-                                    "3 |   rule(/a(?=b)/, skip: true)\n", "  |   ^",
-                                    "rule(/a/, followed_by: /b/)", "keep the action")
+                                    "3 |   rule(/(?<=a)b/, skip: true)\n", "  |   ^",
+                                    "separate rules or lexer states")
   end
 
   it "leaves location absent when compiling a runtime rule without source metadata" do

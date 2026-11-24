@@ -13,11 +13,14 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 - Use `\R` to match line breaks, including atomic CRLF pairs.
 
+- Support positive and negative regexp lookahead in streaming lexers, including named captures.
+
 - Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes.
   Set it to `nil` to disable the cache.
 
 - Use Ruby-style octal escapes in regexp rules and character classes, including
   UTF-8 sequences such as `\303\251` and binary bytes such as `\377`.
+
 - Use `--residuals` with `flexr explain` or `flexr trace` to see what a
   longest-match rule can still match at each DFA state.
 

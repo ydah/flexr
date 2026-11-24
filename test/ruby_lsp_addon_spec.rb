@@ -39,7 +39,7 @@ RSpec.describe "Ruby LSP flexr add-on" do
 
   { "utf-8" => 18, "utf-32" => 15 }.each do |encoding, column|
     it "uses negotiated #{encoding} positions" do
-      source = "class EditorLexer < Flexr::Lexer\n  label = '😀'; rule(/a(?=b)/, skip: true)\nend\n"
+      source = "class EditorLexer < Flexr::Lexer\n  label = '😀'; rule(/(a)\\1/, skip: true)\nend\n"
       open_server(source, encodings: [encoding]) do |server, uri|
         diagnostic = diagnostics(server, uri).find { |item| item.to_hash[:code] == "FLEXR-E014" }
         expect(diagnostic.range.start.to_hash).to eq(line: 1, character: column)
@@ -80,15 +80,15 @@ RSpec.describe "Ruby LSP flexr add-on" do
   end
 
   it "refreshes errors after unsaved edits and clears them when fixed" do
-    source = "class EditorLexer < Flexr::Lexer\n  rule(/a(?=b)/, skip: true)\nend\n"
+    source = "class EditorLexer < Flexr::Lexer\n  rule(/(a)\\1/, skip: true)\nend\n"
     open_server(source) do |server, uri|
       expect(diagnostics(server, uri).map(&:code)).to include("FLEXR-E014")
       server.process_message(method: "textDocument/didChange", params: {
         textDocument: { uri: uri, version: 2 },
         contentChanges: [{ range: { start: { line: 0, character: 0 }, end: { line: 3, character: 0 } },
-                           text: source.sub("a(?=b)", "ab") }]
+                           text: source.sub("(a)\\1", "a(?=b)") }]
       })
-      expect(server.instance_variable_get(:@store).get(uri).source).to include("rule(/ab/")
+      expect(server.instance_variable_get(:@store).get(uri).source).to include("rule(/a(?=b)/")
       expect(diagnostics(server, uri, id: 2).map(&:code)).not_to include("FLEXR-E014")
     end
   end
@@ -199,7 +199,7 @@ RSpec.describe "Ruby LSP flexr add-on" do
   end
 
   it "does not diagnose ordinary Ruby files or execute specification code" do
-    source = "raise 'must not execute'\nclass EditorLexer < Flexr::Lexer\n  rule(/a(?=b)/, skip: true)\nend\n"
+    source = "raise 'must not execute'\nclass EditorLexer < Flexr::Lexer\n  rule(/(a)\\1/, skip: true)\nend\n"
     open_server(source, path: "ordinary.rb") do |server, uri|
       expect(diagnostics(server, uri).map(&:source)).not_to include("flexr")
     end

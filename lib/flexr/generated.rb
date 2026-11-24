@@ -188,7 +188,7 @@ module Flexr
           location: definition[:span] || definition[:location], channel: channel,
           emits: Configuration.rule_emits!(definition[:emits]),
           priority: definition[:priority],
-          capture_patterns: definition[:capture_patterns],
+          capture_patterns: definition[:capture_patterns], contextual_patterns: definition[:contextual_patterns],
           trailing_dfa: definition[:trailing_dfa] && Generated.load_dfa(definition[:trailing_dfa]),
           pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
             next unless condition

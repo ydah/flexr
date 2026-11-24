@@ -129,6 +129,46 @@ RSpec.describe "runtime and generated parity" do
     expect(outcomes_for(source, "OctalParityLexer", [input], streaming: true).values).to all(eq(expected))
   end
 
+
+  %i[table direct].each do |backend|
+    it "preserves zero-width positive and negative lookahead in streamed #{backend} mode" do
+      source = <<~'RUBY'.sub("BACKEND", backend.to_s)
+        require "flexr"
+        class LookaheadParityLexer < Flexr::Lexer
+          backend :BACKEND
+          rule(/a(?=bc)b/, emit: :PREFIX)
+          rule(/-(?!\d)/, emit: :MINUS)
+          rule(/-\d+/, emit: :SIGNED)
+          rule(/./, emit: :OTHER)
+        end
+      RUBY
+      expected = [[["PREFIX", "ab"], ["OTHER", "c"], ["SIGNED", "-3"], ["MINUS", "-"]]]
+      expect(outcomes_for(source, "LookaheadParityLexer", ["abc-3-"], streaming: true).values).to all(eq(expected))
+    end
+  end
+
+
+  %i[table direct firstmatch].each do |backend|
+    it "keeps ordered captures with streamed lookahead in #{backend} mode" do
+      source = <<~RUBY.sub("BACKEND", backend.to_s)
+        require "flexr"
+        class LookaheadCaptureParityLexer < Flexr::Lexer
+          backend :BACKEND
+          rule(/a(?!bc)/, emit: :NEGATIVE)
+          rule(/(?<left>a)(?=(?<tail>bc))|(?<right>a)/) do
+            emit :POSITIVE, [captures[:left], captures[:tail], captures[:right]]
+          end
+          rule(/./, emit: :OTHER)
+        end
+      RUBY
+      expected = [
+        [["POSITIVE", ["a", "bc", nil]], %w[OTHER b], %w[OTHER c]],
+        [%w[NEGATIVE a], %w[OTHER b], %w[OTHER d]]
+      ]
+      expect(outcomes_for(source, "LookaheadCaptureParityLexer", %w[abc abd], streaming: true).values).to all(eq(expected))
+    end
+  end
+
   it "uses the following LF when replaying captures from a CR token" do
     source = <<~'RUBY'
       require "flexr"

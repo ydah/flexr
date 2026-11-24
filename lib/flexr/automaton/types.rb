@@ -37,6 +37,10 @@ module Flexr
         EndContext.mask(end_anchor).anybits?(EndContext.for_byte(byte))
       end
 
+      def valid_end_at?(input, cursor, *)
+        !end_anchor || valid_end?(input.getbyte(cursor))
+      end
+
       def inspect
         [rule_index, pattern_index, bol_only, end_anchor].inspect
       end

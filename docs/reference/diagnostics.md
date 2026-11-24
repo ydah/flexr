@@ -149,7 +149,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E021` | An action or state cycle made no input progress | Consume input or break the state cycle |
 | `FLEXR-E022` | The retained streaming buffer is too large | Shorten tokens, raise the limit, or disable retention |
 | `FLEXR-E023` | Runtime work exceeded `max_steps` | Raise the limit or simplify the specification |
-| `FLEXR-E024` | Trailing context exceeded its lookahead limit | Bound the context or raise the limit |
+| `FLEXR-E024` | An assertion or trailing context exceeded its lookahead limit | Bound the context or raise the limit |
 | `FLEXR-E025` | The lexical state stack overflowed | Remove recursive pushes or raise the limit |
 | `FLEXR-E026` | A cancellation callback stopped lexing | Resume with a new lexer when ready |
 | `FLEXR-E027` | An error callback returned an unknown action | Return `:skip`, `:raise`, `:token`, or `:halt` |
@@ -169,23 +169,6 @@ visits at least 16 states and more than doubles the larger operand. The
 `max_dfa_states` limit applies to operands, products, and the final DFA.
 
 ### Regexp rewrite help
-
-For positive lookahead, `FLEXR-E014` includes a concrete example:
-
-```text
-error[FLEXR-E014]: look-around is not supported by flexr
-  help: for a trailing positive lookahead, rewrite rule(/a(?=b)/) as rule(/a/, followed_by: /b/); keep the action
-```
-
-Keep the action or `emit:` / `skip:` options on the rewritten rule. The example
-consumes `a` only when `b` follows, leaving `b` for the next token. The combined
-body and trailing length participates in longest-match selection.
-
-Adapt this example to positive lookahead at the end of a rule's pattern,
-preserving the regexp options needed by each part. Lookahead inside a pattern
-needs a separate rewrite. Negative lookahead and lookbehind receive separate
-guidance to use rules or states because `followed_by:` cannot express those
-assertions.
 
 For lazy and possessive quantifiers, `FLEXR-E014` shows a negated character
 class for unescaped, single-line quoted text:

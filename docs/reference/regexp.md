@@ -17,7 +17,8 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `\h`, `\H` | Supported | Hexadecimal digits and their complement |
 | Octal escapes such as `\011` | Supported | Match bytes in binary mode and complete encoded characters in UTF-8 |
 | `\R` | Supported | Recognizes CRLF as one atomic line break |
-| Lookahead / lookbehind | Unsupported | Use `followed_by:` for trailing positive lookahead; other forms need rules or states; `FLEXR-E014` |
+| Positive `(?=...)` and negative `(?!...)` lookahead | Supported | See [lookahead](#lookahead) |
+| Positive and negative lookbehind | Unsupported | Track preceding input with rules or states |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
 | `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
 | `\A`, `\z`, `\Z` | Unsupported | The `^` / `$` examples in `FLEXR-E014` apply only to input without line feeds |
@@ -67,6 +68,31 @@ accepts CRLF followed by an additional LF. A CR followed by LF belongs to
 the pair even when the LF falls beyond the end of a candidate token.
 See [Ruby's line break syntax](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Shorthand+Character+Classes).
 
+## Lookahead
+
+A positive lookahead succeeds when its expression matches a prefix of the
+remaining input. A negative lookahead succeeds when no such prefix matches.
+Both assertions leave the lexer position unchanged. They can appear inside a
+pattern or at its end, and they can inspect bytes beyond the token in the
+active input source.
+
+```ruby
+rule(/-(?!\d)/, emit: :MINUS)
+rule(/-\d+/, emit: :SIGNED_NUMBER)
+rule(/a(?=bc)b/, emit: :PREFIX)
+```
+
+On `abc`, the last rule consumes `ab` and leaves `c` for the next token.
+Longest-match ranking counts the bytes matched by the regexp body.
+Rules using `followed_by:` keep their ranking by the combined body and
+trailing match lengths. The `firstmatch` backend preserves Ruby's choice of
+alternatives. Flexr's vendored case folding applies to these expressions.
+For example, Ruby 4.0.9 can match `SS` with `/(?i:ß)(?=a)/u` on `SSa`.
+Flexr's case folding for this expression matches the single-character
+forms `ß` and `ẞ`. A named group in a successful positive assertion can capture
+text beyond the token. A lookahead can read across chunks up to the
+`max_lookahead_size` limit.
+
 ## Absence groups
 
 `(?~X)` matches text containing no substring matched by `X`. The group
@@ -82,10 +108,11 @@ Each occurrence of the forbidden expression must fit within the group's
 own span. The normal longest-match rule still applies to the surrounding
 pattern, including delimiters that can overlap themselves.
 
-If `X` can match the empty string, the group has an empty language because
-every string contains the empty string. Otherwise the group can itself
-match empty input, so a rule consisting of `(?~X)` alone reports
-`FLEXR-E005` unless empty matches are enabled.
+If `X` matches the empty string at every position, the group has an empty
+language because every string contains the empty string. When `X` has a
+zero-width assertion, its result depends on the input at the position.
+A rule consisting of `(?~X)` alone reports `FLEXR-E005` if the group can
+match without consuming input and empty matches are disabled.
 
 The compiled automaton uses this language definition in runtime, generated,
 and standalone modes. Ruby 4.0.9's regexp matcher, for example, accepts

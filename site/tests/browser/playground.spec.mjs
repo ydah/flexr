@@ -53,7 +53,7 @@ test('runs actual edited Ruby, steps the trace, draws the DFA, and restores a sh
 
 test('shows source diagnostics and terminates runaway Ruby while the UI stays responsive', async ({ page }) => {
   await page.goto('/flexr/playground/');
-  await page.locator('#spec').fill('class Lexer < Flexr::Lexer\n rule(/a(?=b)/, emit: :A)\nend');
+  await page.locator('#spec').fill('class Lexer < Flexr::Lexer\n rule(/(a)\\1/, emit: :A)\nend');
   await page.locator('#input').fill('ab');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.locator('#diagnostics')).toContainText('FLEXR-E014', { timeout: 30_000 });
@@ -70,7 +70,7 @@ test('prepares an issue draft from the run with its exact version and diagnostic
   await page.goto('/flexr/playground/');
   const prepare = page.getByRole('button', { name: 'Prepare issue draft' });
   await expect(prepare).toBeDisabled();
-  const source = 'class ReportLexer < Flexr::Lexer\n rule(/a(?=b)/, emit: :A)\nend';
+  const source = 'class ReportLexer < Flexr::Lexer\n rule(/(a)\\1/, emit: :A)\nend';
   await page.locator('#spec').fill(source);
   await page.locator('#input').fill('ab');
   await page.getByRole('button', { name: 'Run', exact: true }).click();

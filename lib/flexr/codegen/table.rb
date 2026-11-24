@@ -29,6 +29,13 @@ module Flexr
       end
 
       def source(indent: "  ", direct: false, packed: false)
+        if compiled.machines.values.any? { |machine| machine.dfa.lookahead? }
+          return <<~RUBY.lines.map { |line| indent + line }.join
+            def scan_one
+              (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan
+            end
+          RUBY
+        end
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         memoized_body = compiled.machines.values.any?(&:backup_memo_states)

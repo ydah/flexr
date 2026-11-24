@@ -68,7 +68,9 @@ module Flexr
       def add_state(vector)
         state = @transitions.length
         @vectors << vector
-        @accepts << @terms.accepting_conditions(vector, @conditions)
+        @accepts << @terms.accepting_conditions(
+          vector, @conditions, ec: @ec, representatives: @representatives, &@state_limit
+        )
         @transitions << []
         @ids[vector] = state
       end
