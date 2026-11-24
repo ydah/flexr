@@ -131,10 +131,11 @@ module Flexr
           @__flexr_config.backend = auto_direct?(compiled) ? :direct : :table if @__flexr_config.backend == :auto
           freeze_specification!
           freeze_compiled!(compiled)
-          compiled
         end
       end
     end
+
+    def __flexr_compile_runtime! = compile!
 
     def dfa
       compile!
@@ -167,6 +168,8 @@ module Flexr
 
     attr_reader :__flexr_rules, :__flexr_states, :__flexr_config, :__flexr_compiled, :__flexr_generated_actions,
                 :__flexr_generated_eof_actions
+
+    alias __flexr_runtime_compiled __flexr_compiled
 
     def __flexr_add_generated_eof(state, action)
       __flexr_mutate! { @__flexr_eof_rules[state.to_sym] = action }
@@ -210,9 +213,8 @@ module Flexr
       end
     end
 
-    def freeze_specification!
-      include Runtime::Captures if @__flexr_rules.any?(&:capture_patterns)
-      @__flexr_rules.each do |rule|
+    def freeze_rules!(rules)
+      rules.each do |rule|
         rule.patterns.freeze
         rule.states.freeze
         rule.pattern_conditions&.each(&:freeze)
@@ -221,10 +223,14 @@ module Flexr
         rule.capture_patterns&.freeze
         rule.contextual_patterns&.freeze
         rule.freeze
-      end
+      end.freeze
+    end
+
+    def freeze_specification!
+      include Runtime::Captures if @__flexr_rules.any?(&:capture_patterns)
+      freeze_rules!(@__flexr_rules)
       @__flexr_states.each_value(&:freeze)
       @__flexr_eof_rules.freeze
-      @__flexr_rules.freeze
       @__flexr_states.freeze
       if (tables = @__flexr_config.options[:keyword_tables])
         tables.each_value do |table|
