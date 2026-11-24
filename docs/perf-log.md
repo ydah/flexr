@@ -940,3 +940,30 @@ On Ruby 4.0.9 on arm64-darwin25, seven alternating runs gave a median of
 443 ms for serial scanning and 232 ms for four Ractors. The ranges were
 430 to 465 ms and 184 to 286 ms. Parallel timings include planning,
 creating the workers, and collecting their tokens.
+
+## 2026-11-24: Select generated fast paths from a corpus
+
+The profile needs repeated observations and a mean run of at least 384 bytes
+before it selects an optimization. This keeps short tokens on the DFA loop,
+where YJIT can be faster than the call to `StringScanner`. A proven whole-token
+plan takes precedence when it covers every observed entry to a profiled loop.
+
+Train the example JSON lexer on 680 repetitions of `{"training": 13}` followed
+by 1,024 spaces. Use `flexr generate examples/json/lexer.flexr.rb --profile
+corpus.json -o profiled.rb` and generate a baseline without `--profile`. Scan
+680 repetitions of `{"answer": 42}` with the same spacing. The 705,840-byte
+input produced the same 3,400 tokens with both generated lexers. The profile
+selected a whole-token scan for the space byte.
+
+On Ruby 4.0.9 on arm64-darwin25, seven alternating scans of the frozen input
+gave these medians and ranges in milliseconds.
+
+| Engine | Baseline | Profiled |
+| --- | ---: | ---: |
+| Interpreter | 49.7 (48.8 to 50.1) | 8.8 (8.7 to 10.4) |
+| YJIT | 8.0 (7.4 to 8.1) | 7.8 (6.1 to 8.8) |
+| ZJIT | 49.1 (48.5 to 54.1) | 8.5 (8.2 to 11.8) |
+
+On this input the interpreter and ZJIT spent less time scanning the long
+whitespace runs. The YJIT ranges overlap. The mutable path uses the ordinary
+scanner.

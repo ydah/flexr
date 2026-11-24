@@ -16,6 +16,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 
 | Command | Purpose | Main output |
 |---|---|---|
+| `generate SPEC` | Compile a lexer specification | Generated Ruby file |
 | `check SPEC` | Compile and render diagnostics | Human or JSON diagnostics |
 | `fix SPEC` | Verify and apply supported diagnostic fixes | Updated spec, or full source with `--dry-run` |
 | `diff LEFT RIGHT` | Compare the first rule selection in each lexical state | Shortest differences, or a proof status |
@@ -51,6 +52,7 @@ are usable. The bound also excludes bytes read before the first acceptance.
 | `-b, --backend NAME` | `table`, `direct`, `firstmatch`, `auto` | Compilation |
 | `--token-kind KIND` | `array`, `struct`, `yield` | Generated/runtime contract |
 | `--accel MODE` | `auto`, `strscan`, `regexp`, `none` | Runtime optimization |
+| `--profile GLOB` | Paths to representative input files. Repeat to include multiple globs. | Static DFA generation |
 | `--standalone` | Flag | Generation |
 | `--eval` | Flag | Generation and check |
 | `--lrama-grammar PATH` | Lrama grammar file | Generation and static check |
@@ -81,12 +83,13 @@ Usage: flexr [COMMAND] SPEC.rb [options]
        flexr diff LEFT.rb RIGHT.rb [options]
        flexr new NAME --parser lrama|racc
 
-Commands: check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
+Commands: generate, check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
 Options:
   -o, --output PATH          generated output path
   -b, --backend NAME         table | direct | firstmatch | auto
       --token-kind KIND      array | struct | yield
       --accel MODE            auto | strscan | regexp | none
+      --profile GLOB          Tune generated DFA scanning from corpus files (repeatable)
       --standalone
       --eval
       --table-compression VALUE  none | rows | full
@@ -108,6 +111,27 @@ Options:
       --accept-changes        apply changed or unverified fixes (fix only)
       --from oedipus_lex      read an oedipus_lex .rex file (import only)
 <!-- flexr-help:end -->
+
+## Generate with a profile
+
+```sh
+flexr generate lexer.flexr.rb --profile 'corpus/**/*.json' -o lexer.rb
+```
+
+Quote each glob so Flexr expands it. The profile records DFA state visits,
+self-loop runs, and lengths along the matched rule bodies. With `accel :auto`,
+it uses those measurements to select fast paths for the generated scanner.
+The same lexer can scan inputs outside the corpus.
+
+Profiling requires a DFA backend and static compilation. It projects state changes that Flexr can
+read from rule actions. When it encounters an opaque action, its measurements
+assume the action leaves the scan position and lexer state unchanged. Use
+training data that this projection can scan. The generated lexer executes its
+actions normally.
+
+The generated header records a digest of the corpus bytes, aggregate counts,
+and chosen strategies. Use the same specification, options, and corpus contents
+to reproduce the profile.
 
 ## Check parser-state ambiguity
 

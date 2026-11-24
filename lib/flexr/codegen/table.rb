@@ -28,7 +28,7 @@ module Flexr
         ].join("\n")
       end
 
-      def source(indent: "  ", direct: false, shortest_states: nil, parser_contexts: false, packed: false)
+      def source(indent: "  ", direct: false, shortest_states: nil, parser_contexts: false, packed: false, profile: nil)
         if compiled.machines.values.any? { |machine| machine.dfa.starts || machine.dfa.lookahead? }
           expectation = "(@__flexr_parser_context&.expected)" if parser_contexts
           return <<~RUBY.lines.map { |line| indent + line }.join
@@ -38,7 +38,10 @@ module Flexr
           RUBY
         end
         lines = []
-        whole_tokens = compiled.machines.values.any?(&:whole_tokens)
+        profile_whole_tokens = profile&.whole_tokens&.any?
+        profile_loops = profile&.loops&.any?
+        lines.concat(profile_sources(indent, profile)) if profile_whole_tokens || profile_loops
+        whole_tokens = profile_whole_tokens || compiled.machines.values.any?(&:whole_tokens)
         memoized_body = compiled.machines.values.any?(&:backup_memo_states)
         memoized = memoized_body || compiled.machines.values.any?(&:backup_recovery_states)
         recovery_only = memoized && !memoized_body
@@ -79,7 +82,11 @@ module Flexr
           lines << "#{indent}      @__flexr_generated_backup = recovery || machine.backup_memo_states"
           lines << "#{indent}    end"
         end
-        lines << "#{indent}    @__flexr_generated_whole_tokens = machine.respond_to?(:whole_tokens) ? machine.whole_tokens : nil" if whole_tokens
+        if profile_whole_tokens
+          lines << "#{indent}    @__flexr_generated_whole_tokens = FLEXR_GENERATED_PROFILE_WHOLE_TOKENS[@state]"
+        elsif whole_tokens
+          lines << "#{indent}    @__flexr_generated_whole_tokens = machine.respond_to?(:whole_tokens) ? machine.whole_tokens : nil"
+        end
         lines << "#{indent}    #{scan_cache} = #{fast_path}(@__flexr_generated_scan_dfa)"
         lines << "#{indent}    @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)"
         if recovery_only
@@ -117,7 +124,7 @@ module Flexr
         lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless #{scan_cache}"
         lines << "#{indent}  position = byte_pos"
         lines << "#{indent}  return nil unless valid_utf8_at?(position)"
-        if whole_tokens
+        if whole_tokens && !profile_whole_tokens
           lines << "#{indent}  match = __flexr_whole_token_match(@__flexr_generated_whole_tokens, position) if @__flexr_generated_whole_tokens"
           lines << "#{indent}  return match if match"
         end
@@ -205,6 +212,18 @@ module Flexr
         lines << "#{indent}  best = nil"
         frozen_fast = "source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)"
         lines << "#{indent}  if #{frozen_fast}"
+        if profile_whole_tokens || profile_loops
+          lines << "#{indent}    if @__flexr_stable_scan_source && @accel_mode == :auto"
+          if profile_whole_tokens
+            lines << "#{indent}      if (plans = @__flexr_generated_whole_tokens) && (byte = source.getbyte(position)) && plans[byte] &&"
+            lines << "#{indent}          (source.encoding == ::Encoding::BINARY || source.encoding == ::Encoding::UTF_8)"
+            lines << "#{indent}        match = __flexr_whole_token_match(plans, position)"
+            lines << "#{indent}        return match if match"
+            lines << "#{indent}      end"
+          end
+          lines << "#{indent}      profile_loops = FLEXR_GENERATED_PROFILE_LOOPS[@state]" if profile_loops
+          lines << "#{indent}    end"
+        end
         if fast_winners
           lines << "#{indent}    winners = @__flexr_generated_scan_winners"
           if parser_contexts
@@ -229,6 +248,11 @@ module Flexr
         end
         lines << "#{indent}      running_tags&.advance(byte, cursor)" if track_tags
         lines << "#{indent}      cursor += 1"
+        if profile_loops
+          lines << "#{indent}      if profile_loops && (strategy = profile_loops[current])"
+          lines << "#{indent}        cursor = __flexr_generated_profile_skip(source, cursor, strategy)"
+          lines << "#{indent}      end"
+        end
         winner_lookup = fast_winners ? "winners[current]" : "accepts[current].first"
         lines << "#{indent}      acceptance = #{winner_lookup}"
         lines.concat(backup_suffix("#{indent}      ", "acceptance", update: true)) if memoized_body
@@ -419,6 +443,63 @@ module Flexr
       end
 
       private
+
+      def profile_sources(indent, profile)
+        lines = []
+        if profile.whole_tokens.any?
+          lines << "#{indent}FLEXR_GENERATED_PROFILE_WHOLE_TOKENS = if defined?(::Flexr::Automaton::WholeToken)"
+          lines << "#{indent}  {"
+          profile.whole_tokens.each do |name, plans|
+            lines << "#{indent}    #{name.inspect} => Array.new(256).tap do |plans|"
+            plans.group_by { |_, plan| plan }.each do |plan, entries|
+              lines << "#{indent}      plan = ::Flexr::Automaton::WholeToken.new(regexp: #{plan.regexp.inspect}, rule_index: #{plan.rule_index}).freeze"
+              lines << "#{indent}      #{entries.map(&:first).inspect}.each { |byte| plans[byte] = plan }"
+            end
+            lines << "#{indent}    end.freeze,"
+          end
+          lines << "#{indent}  }.freeze"
+          lines << "#{indent}else"
+          lines << "#{indent}  {}.freeze"
+          lines << "#{indent}end"
+          lines << "#{indent}private_constant :FLEXR_GENERATED_PROFILE_WHOLE_TOKENS"
+        end
+        if profile.loops.any?
+          lines << "#{indent}FLEXR_GENERATED_PROFILE_LOOPS = {"
+          profile.loops.each do |name, states|
+            entries = states.map do |state, strategy|
+              source = strategy.is_a?(String) ? "#{strategy.inspect}.b.freeze" : strategy.inspect
+              "#{state} => #{source}"
+            end.join(", ")
+            lines << "#{indent}  #{name.inspect} => {#{entries}}.freeze,"
+          end
+          lines << "#{indent}}.freeze"
+          lines << "#{indent}private_constant :FLEXR_GENERATED_PROFILE_LOOPS"
+          lines.concat(profile_skip_source(indent))
+        end
+        lines
+      end
+
+      def profile_skip_source(indent)
+        <<~RUBY.lines.map { |line| indent + line.chomp }
+          def __flexr_generated_profile_skip(source, cursor, strategy)
+            if strategy.is_a?(String)
+              return cursor unless source.encoding == ::Encoding::BINARY
+
+              return source.byteindex(strategy, cursor) || source.bytesize
+            end
+            return cursor unless defined?(::StringScanner)
+            return cursor unless source.encoding == ::Encoding::BINARY || source.encoding == ::Encoding::UTF_8
+
+            scanner = (@__flexr_generated_accel_scanner ||= ::StringScanner.new(source))
+            scanner.string = source unless scanner.string.equal?(source)
+            scanner.pos = cursor
+            cursor + scanner.skip(strategy).to_i
+          rescue ArgumentError
+            cursor
+          end
+          private :__flexr_generated_profile_skip
+        RUBY
+      end
 
       def scan_source(indent, memoized, probe: memoized)
         source = memoized ? "(@__flexr_generated_backup_capable ? buffer.scan_source : buffer.stable_source)" : "buffer.stable_source"
