@@ -7,7 +7,7 @@ module Flexr
     def initialize(input, filename: nil, error_mode: :raise, max_token_size: 16 * 1024 * 1024,
                    max_lookahead_size: nil, max_buffer_size: 64 * 1024 * 1024,
                    max_state_stack: 1024, max_steps: nil, cancellation: nil, retain_input: true,
-                   chunk_size: Runtime::Buffer::DEFAULT_CHUNK_SIZE)
+                   freeze_input: true, chunk_size: Runtime::Buffer::DEFAULT_CHUNK_SIZE)
       raise ArgumentError, "unsupported error_mode: #{error_mode.inspect}" unless %i[raise token panic].include?(error_mode)
       raise ArgumentError, "max_token_size must be non-negative" if max_token_size.to_i.negative?
       raise ArgumentError, "max_lookahead_size must be non-negative" if max_lookahead_size&.to_i&.negative?
@@ -16,13 +16,14 @@ module Flexr
       raise ArgumentError, "max_steps must be non-negative" if max_steps&.to_i&.negative?
       raise ArgumentError, "cancellation must respond to call" if cancellation && !cancellation.respond_to?(:call)
 
-      self.class.compile!
+      self.class.__flexr_compile_runtime!
       config = self.class.__flexr_config
       @buffer = Runtime::Buffer.new(
         input, chunk_size: chunk_size, max_buffer_size: max_buffer_size,
-        retain_input: retain_input, filename: filename
+        retain_input: retain_input, freeze_input: freeze_input, filename: filename
       )
       @retain_input = retain_input
+      @freeze_input = freeze_input
       @filename = filename
       @error_mode = error_mode
       @token_kind = config.token_kind
@@ -42,6 +43,10 @@ module Flexr
     attr_reader :filename, :error_mode, :buffer, :max_token_size, :max_lookahead_size, :steps
 
     attr_writer :on_error
+
+    def __flexr_recovers_unmatched?
+      @on_error || @error_mode != :raise
+    end
 
     def input
       @buffer.source
@@ -413,8 +418,10 @@ module Flexr
 
     def reset_input_cursor(input, encoding)
       @string_input = input.is_a?(String)
+      input = @buffer.source if @string_input
       @stable_input_end = @string_input && input.frozen? ? input.bytesize : nil
-      @valid_utf8_input = @stable_input_end && (encoding != Encoding::UTF_8 || begin
+      @__flexr_stable_scan_source = @stable_input_end && @retain_input && input
+      @valid_utf8_input = @stable_input_end && (encoding != Encoding::UTF_8 || input.ascii_only? || begin
         bytes = input.encoding == Encoding::UTF_8 ? input : input.dup.force_encoding(Encoding::UTF_8)
         bytes.valid_encoding?
       end)
