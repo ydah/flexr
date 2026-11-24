@@ -103,7 +103,7 @@ RSpec.describe "tagged trailing context" do
     subclass = Class.new(String) { include reader }
 
     [subclass.new("aaaa"), (+"aaaa").extend(reader)].each do |input|
-      expect(lexer.new(input).next_token).to eq([:BODY, "a"])
+      expect(lexer.new(input, freeze_input: false).next_token).to eq([:BODY, "a"])
     end
   end
 end

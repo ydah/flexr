@@ -8,7 +8,7 @@ module Flexr
       attr_reader :base_offset, :chunk_size, :max_buffer_size
 
       def initialize(input, chunk_size: DEFAULT_CHUNK_SIZE, max_buffer_size: 64 * 1024 * 1024,
-                     retain_input: true, filename: nil)
+                     retain_input: true, freeze_input: false, filename: nil)
         raise ArgumentError, "chunk_size must be positive" unless chunk_size.to_i.positive?
         raise ArgumentError, "max_buffer_size must be non-negative" if max_buffer_size.to_i.negative?
 
@@ -23,6 +23,10 @@ module Flexr
 
         @source = input.is_a?(String) ? input : String.new(encoding: Encoding::BINARY)
         @eof = @io.nil?
+        ensure_buffer_size!(@source.bytesize)
+        return unless freeze_input && input.is_a?(String) && !input.frozen?
+
+        @source = input.dup.freeze
         ensure_buffer_size!(@source.bytesize)
       end
 
@@ -39,11 +43,19 @@ module Flexr
       def source
         return @source if @window_start.zero?
 
-        @source.byteslice(@window_start..).to_s
+        retained = @source.byteslice(@window_start..).to_s
+        @source.frozen? ? retained.freeze : retained
       end
+
+      alias acceleration_source source
+      private :acceleration_source
 
       def stable_source
         @source if @retain_input && @window_start.zero? && base_offset.zero?
+      end
+
+      def scan_source
+        @source if @retain_input && @source.frozen? && @window_start.zero? && base_offset.zero?
       end
 
       def getbyte(position)
@@ -143,6 +155,7 @@ module Flexr
 
         ending = [position, bytesize].min
         removed = ending - base_offset
+        prune_backup_memos(ending) if @backup_memos
         @window_start += removed
         @base_offset = ending
         compact_storage!
@@ -205,6 +218,7 @@ module Flexr
       def compact_storage!
         return if @window_start.zero?
 
+        frozen_source = @source.frozen?
         if @window_start == @source.bytesize
           @source = String.new(encoding: @source.encoding)
           @window_start = 0
@@ -212,6 +226,7 @@ module Flexr
           @source = @source.byteslice(@window_start..)
           @window_start = 0
         end
+        @source.freeze if frozen_source
       end
     end
   end

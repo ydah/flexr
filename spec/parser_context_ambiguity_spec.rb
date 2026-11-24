@@ -43,7 +43,7 @@ RSpec.describe "parser-state lexical ambiguity diagnostics" do
   def ambiguity_diagnostics(rules)
     status, output, errors = check(rules)
     expect(status).to eq(0), errors
-    JSON.parse(output).select { |item| item.fetch("code") == "FLEXR-W023" }
+    JSON.parse(output).select { |item| item.fetch("code") == "FLEXR-W024" }
   end
 
   def after_prefix(diagnostics)
@@ -155,7 +155,7 @@ RSpec.describe "parser-state lexical ambiguity diagnostics" do
     LEXER
 
     expect(status).to eq(1), errors
-    expect(JSON.parse(output)).to include(hash_including("code" => "FLEXR-W023"))
+    expect(JSON.parse(output)).to include(hash_including("code" => "FLEXR-W024"))
   end
 
   it "reports an inconclusive check when a tied action's token is opaque" do
@@ -166,8 +166,8 @@ RSpec.describe "parser-state lexical ambiguity diagnostics" do
 
     expect(status).to eq(0), errors
     records = JSON.parse(output)
-    expect(records).to include(hash_including("code" => "FLEXR-W024", "severity" => "warning"))
-    expect(records).not_to include(hash_including("code" => "FLEXR-W023"))
+    expect(records).to include(hash_including("code" => "FLEXR-W025", "severity" => "warning"))
+    expect(records).not_to include(hash_including("code" => "FLEXR-W024"))
   end
 
   it "rejects explicit evaluation" do

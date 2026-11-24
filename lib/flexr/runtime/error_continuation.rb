@@ -15,19 +15,16 @@ module Flexr
       Edge = Data.define(:bytes, :targets)
       private_constant :WorkLimit, :Position, :Body, :Trailer, :End, :Guard, :Edge
 
-      def self.find(lexer, expected)
-        new(lexer, expected).find
-      rescue WorkLimit, CompileError
-        nil
-      end
-
       def initialize(lexer, expected)
-        @lexer = lexer
         @buffer = lexer.buffer
         @start = lexer.byte_pos
         @bol = lexer.beginning_of_line?
         @config = lexer.class.__flexr_config
-        @dfa = lexer.class.__flexr_compiled.machines.fetch(lexer.state).dfa
+        @dfa = lexer.class.__flexr_runtime_compiled.machines.fetch(lexer.state).dfa
+        @dfa_start = lexer.__flexr_dfa_start(@dfa, @start)
+        @more_start = lexer.more_text_start || @start
+        @layout_expected = expected && @config.options[:indentation] &&
+          lexer.__flexr_layout_candidate?(expected, @start, @more_start)
         @rules = lexer.class.__flexr_rules
         @expected = expected
         @work = MAX_WORK
@@ -50,6 +47,8 @@ module Flexr
         next_bytes = viable_bytes(prefix, edges, distances)
         suffix = shortest_suffix(prefix, edges, distances)
         LexError::Continuation.new(byte_pos: cursor, expected_bytes: next_bytes, suffix: suffix, eof: eof)
+      rescue WorkLimit, CompileError
+        nil
       end
 
       private
@@ -77,9 +76,6 @@ module Flexr
         @keywords = @expected && @config.options[:keyword_tables]
         @keyword_rows, @keyword_labels = trie(@keywords&.values&.flat_map(&:keys) || [])
         indentation = @expected && @config.options[:indentation]
-        # An empty lexeme can trigger indentation but cannot match a bracket.
-        @layout_expected = indentation &&
-          @lexer.__flexr_layout_candidate?(@expected, @start, @lexer.more_text_start || @start)
         brackets = indentation&.fetch(:brackets)&.flat_map(&:chars)
         @bracket_rows, @bracket_labels = trie(brackets || [])
         @distinguished_bytes = (@keyword_rows + @bracket_rows).flat_map(&:keys).to_h { |byte| [byte, true] }
@@ -101,11 +97,11 @@ module Flexr
       def start_position
         history = @left_graphs.map { |graph| @buffer.left_state_at(graph, @start) }
         bracket = 0
-        if !@bracket_labels.empty? && (starting = @lexer.more_text_start) && starting < @start
-          previous = @buffer.byteslice(starting...@start)
+        if !@bracket_labels.empty? && @more_start < @start
+          previous = @buffer.byteslice(@more_start...@start)
           bracket = previous.each_byte.reduce(bracket) { |state, byte| trie_step(@bracket_rows, state, byte) }
         end
-        branch = Body.new(state: @lexer.__flexr_dfa_start(@dfa, @start), history: history,
+        branch = Body.new(state: @dfa_start, history: history,
                           bol: @bol, keyword: 0, bracket: bracket)
         Position.new(encoding: 0, branch: branch, consumed: false)
       end

@@ -12,7 +12,7 @@ module Flexr
         return [] if contexts.empty?
 
         reason = unsupported_reason(input)
-        return [Diagnostics.warning("FLEXR-W024", "parser-state ambiguity check is incomplete", note: reason)] if reason
+        return [Diagnostics.warning("FLEXR-W025", "parser-state ambiguity check is incomplete", note: reason)] if reason
 
         sides = input.compiled.states.to_h { |state| [state, input.side(state)] }
         checked = {}
@@ -39,12 +39,12 @@ module Flexr
         context = "parser state #{id} in lexer state #{state.inspect}"
         prefix = [*path, "•"].join(" ")
         help = "parser path: #{prefix}"
-        return Diagnostics.warning("FLEXR-W024", "#{context}: ambiguity check is incomplete", help: help, note: result.reason) if
+        return Diagnostics.warning("FLEXR-W025", "#{context}: ambiguity check is incomplete", help: help, note: result.reason) if
           result.status == :inconclusive
 
         left, right = [result.left.effect.token, result.right.effect.token].sort
         Diagnostics.warning(
-          "FLEXR-W023", "#{context} accepts both #{left.inspect} and #{right.inspect} at the same winning length",
+          "FLEXR-W024", "#{context} accepts both #{left.inspect} and #{right.inspect} at the same winning length",
           help: help, note: "example input: #{result.input.inspect} (byte offset #{result.offset})"
         )
       end

@@ -28,7 +28,7 @@ RSpec.describe "tagged capture scanning" do
       end
     end
 
-    expect(lexer.new(+"ab").next_token).to eq([:CAPTURE, {left: "a", right: "c"}])
+    expect(lexer.new(+"ab", freeze_input: false).next_token).to eq([:CAPTURE, {left: "a", right: "c"}])
   end
 
   it "replays the selected body if reading a stream exposes mutable input during scanning" do

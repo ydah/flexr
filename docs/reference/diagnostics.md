@@ -283,10 +283,21 @@ the diagnostics apply when the escape reaches the parser unchanged.
 | `FLEXR-W018` | Token in `emits` is missing from the grammar | Add a `%token` declaration or remove it from `emits` |
 | `FLEXR-W020` | Structured records become immutable in v2.0 | Review consumer mutations; use `record.with(...)` in v2 |
 | `FLEXR-W022` | A competing rule shadows a spelling in a keyword table | Remove the redundant spelling or change the competing rule |
+| `FLEXR-W023` | A lexical state has unbounded DFA backup | Inspect the example and eliminate the nonaccepting cycle where practical |
+| `FLEXR-W024` | Two Lrama terminals tie at the winning match length | Inspect the example input and parser path |
+| `FLEXR-W025` | The parser-state ambiguity check is incomplete | Inspect the reason in the diagnostic |
 
-Warnings are reported by `check` according to `--warn`. The default omits the
-wall-clock `FLEXR-W016`; `--warn all` includes it, and `--warn none` suppresses
-warnings. `--warn-as-error` turns selected warnings into a failed command.
+`--warn all` includes `FLEXR-W023` for longest-match backends. Its note
+shows the shortest prefix that visits a nonaccepting cycle after an
+acceptance, followed by a byte sequence that can repeat in that cycle.
+For `/a/` and `/a*b/`, the prefix is `"aa"` and the repeatable sequence is
+`"a"`. The warning describes the rule-body DFA under the
+[backup bounds](cli.md#commands) reported by `explain`.
+
+Warnings are reported by `check` according to `--warn`. Use `--warn all`
+to include the startup timing and DFA backup warnings. `--warn none`
+suppresses warnings. `--warn-as-error` turns selected warnings into a failed
+command.
 
 ## Informational diagnostics
 

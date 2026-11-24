@@ -124,7 +124,7 @@ module Flexr
         probe_diagnostics = Grammar::ContextAmbiguity.diagnostics(ambiguity_input(probe_patterns), probe_rows, paths)
         parser_path = [*paths.fetch(target.ident), "•"].join(" ")
         probe = probe_diagnostics.find do |diagnostic|
-          diagnostic.code == "FLEXR-W023" && diagnostic.message.start_with?("parser state #{target.ident} ") &&
+          diagnostic.code == "FLEXR-W024" && diagnostic.message.start_with?("parser state #{target.ident} ") &&
             probe_tokens.all? { |token| diagnostic.message.include?(token.to_s) } &&
             diagnostic.note == "example input: #{example.inspect} (byte offset 0)" &&
             diagnostic.help == "parser path: #{parser_path}"

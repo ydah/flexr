@@ -24,7 +24,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `dot SPEC` | Render the DFA as Graphviz DOT | DOT on stdout |
 | `trace SPEC` | Print DFA states, or trace input when supplied | Human or JSON input trace |
 | `skeleton SPEC` | Build shortest inputs that cover DFA transitions | Human or JSON coverage report |
-| `explain SPEC` | List parsed rules and patterns | Text on stdout |
+| `explain SPEC` | List parsed rules, patterns, and DFA backup bounds | Text on stdout |
 | `bench SPEC` | Run the benchmark harness | Benchmark output |
 | `import INPUT` | Translate flex, Rexical, or oedipus_lex input | Ruby on stdout or `--output` |
 | `new NAME --parser PARSER` | Create a Racc or Lrama calculator project | New project directory |
@@ -35,6 +35,13 @@ In shortest-match states, an input trace compares eligible body lengths.
 With a live reader, it records the selected candidate without querying the
 reader for additional candidates.
 `dot` marks accepting states and accelerated regions for visual inspection.
+
+For longest-match backends, `explain`, structural `trace`, and `dot` show
+the maximum DFA backup in bytes for each lexical state. This is the longest path through nonaccepting
+states after an acceptance. A reachable nonaccepting cycle makes the bound
+unbounded. This analysis describes the rule-body DFA. Runtime conditions
+such as anchors, trailing context, and `expect:` can change which accepts
+are usable. The bound also excludes bytes read before the first acceptance.
 
 ## Options
 
@@ -108,12 +115,12 @@ Options:
 selection for the terminal sets used by generated Lrama parser contexts.
 It reads the specification statically and requires the Lrama 0.8 gem.
 
-- `FLEXR-W023` reports two distinct eligible terminals tied at the winning
+- `FLEXR-W024` reports two distinct eligible terminals tied at the winning
   match length for a parser state and a lexer state. The report gives a shortest
   example, the byte offset where matching starts, and a grammar-symbol path to
   the parser state. The path can contain nonterminals and describes a viable
   prefix reached by following selected shifts and goto transitions.
-- `FLEXR-W024` reports an incomplete check, for example when an opaque action
+- `FLEXR-W025` reports an incomplete check, for example when an opaque action
   could produce a tied terminal, the search reaches its state limit, or the
   specification uses indentation handling or the `firstmatch` backend.
 
