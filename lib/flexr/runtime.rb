@@ -55,6 +55,7 @@ require_relative "runtime/core"
 require_relative "runtime/whole_token"
 require_relative "runtime/backup_memo"
 require_relative "runtime/checkpoint"
+require_relative "runtime/boundary"
 require_relative "runtime/input_stack"
 require_relative "runtime/indentation"
 require_relative "runtime/channels"
@@ -78,6 +79,12 @@ require_relative "runtime/lookbehind"
 
 
 module Flexr
+  module Runtime
+    autoload :Edit, File.expand_path("runtime/incremental", __dir__)
+    autoload :Incremental, File.expand_path("runtime/incremental", __dir__)
+    autoload :RelexScanner, File.expand_path("runtime/relex_scanner", __dir__)
+  end
+
   class << self
     attr_reader :cache_dir
 

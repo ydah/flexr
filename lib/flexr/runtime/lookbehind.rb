@@ -86,6 +86,19 @@ module Flexr
           @replay_prefix.byteslice(-(base_offset - starting)..) + bytes
         end
 
+        def relex_left_context(ending)
+          states = @left_prefixes.keys.map { |graph| left_state_at(graph, ending) }.freeze
+          bytes = left_bytes_at(ending, @replay_bytes).freeze if @replay_bytes
+          [states, bytes].freeze
+        end
+
+        def restore_relex_left_context(ending, states)
+          @left_prefixes.each_key.with_index do |graph, index|
+            state = states.fetch(index)
+            @left_prefixes[graph] = Prefix.new(0, ending, state, ending, state)
+          end
+        end
+
         def discard_before(position)
           ending = [position, bytesize].min
           if ending > base_offset

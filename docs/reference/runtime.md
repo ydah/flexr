@@ -125,6 +125,39 @@ Token callbacks run in the calling fiber, including a fiber running under a
 scheduler. Rule actions run in the scanner's blocking fiber. A scan error or
 an interruption of a token callback closes the push lexer.
 
+## Edit a token stream
+
+`Lexer.incremental(input, filename: nil, error_mode: :raise, pure_actions: false)`
+creates a document with `input` and `tokens` readers. Runtime, generated, and
+standalone lexers return the same tokens for the same source.
+
+```ruby
+document = Lexer.incremental("12 34")
+edit = Flexr::Runtime::Edit.new(start_byte: 3, end_byte: 5, replacement: "6")
+updated = document.relex(edit)
+updated.input # => "12 6"
+```
+
+Edit offsets are bytes in the old input. The range includes `start_byte` and
+excludes `end_byte`. Equal offsets insert text. An empty replacement deletes
+the range. In UTF-8 mode, source and replacement must be valid UTF-8, and
+both offsets must fall on scalar boundaries. The original document stays
+available after an edit.
+
+An edit restarts from the last token boundary whose prior scans have not read
+the edited bytes. A scan can read beyond a token to test a longer match,
+trailing context, or an assertion. When the new scan reaches the old suffix
+with equivalent lexer state and left context, it reuses the remaining tokens
+and adjusts structured locations, including attached trivia.
+
+Rules with only `emit:` and `skip:` can reuse checkpoints automatically.
+Opaque rule blocks, custom scanner methods, or EOF actions cause a full scan.
+`pure_actions: true` allows reuse for rule blocks that depend only on their
+match and the recorded lexer state. Such blocks can use named captures and
+change the lexical state or stack. They must avoid side effects, custom
+instance state, reading beyond the match, and putting source coordinates into
+token values. The default is suitable for actions that need those capabilities.
+
 ## Parser token expectations
 
 Pass an array of token Symbols as `expect:` to select rules for one token
