@@ -16,7 +16,8 @@ module Flexr
       def initialize(lexer)
         @lexer = lexer
         klass = lexer.class
-        @compiled = klass.__flexr_compiled
+        @compiled = klass.__flexr_runtime_compiled
+        @lazy = !@compiled.equal?(klass.__flexr_compiled)
         @rules = klass.__flexr_rules
         @config = klass.__flexr_config
         @recover_backup = lexer.__flexr_recovers_unmatched?
@@ -49,7 +50,8 @@ module Flexr
         direct = dfa.direct
         direct_nxt = direct&.fetch(:nxt)
         direct_classes = direct&.fetch(:classes)
-        memo_states = (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
+        lazy = @lazy
+        memo_states = backup_memo_states_for(machine)
         source = @scan_source
         return scan_with_conditions(machine, position, nil, simple: true) unless
           source && !@lexer.scan_steps_guarded? && !@lexer.token_limit_required?
@@ -59,14 +61,21 @@ module Flexr
         best = nil
 
         while (byte = source.getbyte(cursor))
-          state = if direct_nxt
+          target = if direct_nxt
             class_id = ec[byte]
             value = direct_nxt[(state * direct_classes) + class_id]
             value >= 0 ? value : nil
           else
             transitions[state][ec[byte]]
           end
-          break unless state
+          unless target
+            if lazy && target.nil?
+              target = dfa.transition(state, byte)
+              memo_states = backup_memo_states_for(machine)
+            end
+            break unless target
+          end
+          state = target
 
           cursor += 1
           acceptance = accepts[state].first
@@ -95,13 +104,13 @@ module Flexr
 
       def scan_with_conditions(machine, position, expected, simple: false)
         buffer = @lexer.buffer
-        memo_states = (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
-        memo_states = nil if memo_states && @lexer.scan_steps_guarded?
+        memo_states = backup_memo_states_for(machine)
         state = machine.dfa.start
         best = nil
         cursor = position
         best = consider_acceptances(machine, state, cursor, position, buffer, best, expected) if @config.options[:allow_empty_match]
-        acceleration_regions = acceleration_regions_for(machine) if !simple && !expected && acceleration_enabled?
+        acceleration_regions = acceleration_regions_for(machine) if
+          !simple && !expected && !@lazy && acceleration_enabled?
 
         while buffer.ensure_available?(cursor + 1)
           if acceleration_regions && !memo_states&.[](state) && (region = acceleration_regions[state]) &&
@@ -122,6 +131,7 @@ module Flexr
           @lexer.consume_step!
           state = transition(machine.dfa, state, byte)
           break unless state
+          memo_states = backup_memo_states_for(machine) if @lazy
 
           cursor += 1
           acceptance = machine.dfa.accepts[state].first
@@ -137,14 +147,28 @@ module Flexr
         best
       end
 
-      def fast_path?(machine)
-        @fast_paths ||= {}
-        return @fast_paths[machine.dfa] if @fast_paths.key?(machine.dfa)
+      def backup_memo_states_for(machine)
+        return if @lexer.scan_steps_guarded?
 
-        rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
-        @fast_paths[machine.dfa] = !@config.options[:allow_empty_match] &&
-          rules.none?(&:trailing) && rules.none?(&:capture_patterns) &&
-          rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
+        if @lazy
+          dfa = machine.dfa
+          return (@recover_backup && dfa.backup_recovery_states) || dfa.backup_memo_states
+        end
+        (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
+      end
+
+      def fast_path?(machine)
+        return @fast_path if @fast_path_machine.equal?(machine)
+
+        paths = (@fast_paths ||= {}.compare_by_identity)
+        @fast_path = paths.fetch(machine) do
+          rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
+          paths[machine] = !@config.options[:allow_empty_match] &&
+            rules.none?(&:trailing) && rules.none?(&:capture_patterns) &&
+            rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
+        end
+        @fast_path_machine = machine
+        @fast_path
       end
 
       def trailing_length(rule, buffer, position)

@@ -20,6 +20,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Changed
 
+- Build uncached runtime table and direct DFA transitions on demand.
+  The default DFA state limit can be reached while scanning.
 - Take a frozen snapshot of mutable String inputs at `Lexer.new` and
   `push_input`. Pass `freeze_input: false` to borrow the original String.
 - Build lexer DFAs from regular-expression derivatives for runtime
