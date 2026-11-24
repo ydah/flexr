@@ -128,12 +128,14 @@ flexr diff previous.flexr.rb updated.flexr.rb
 flexr diff previous.flexr.rb updated.flexr.rb --format json
 ```
 
-For each lexical state, `diff` compares one longest-match rule selection.
-It checks the selected rule body's byte length, token type after keyword
-remapping, channel, and literal state operations. A skipped rule still
-selects a body. The command treats an unmatched position as a separate
-outcome. It reads both specifications statically and can compare
-trailing context, lookahead, and lookbehind.
+For each lexical state, `diff` compares one rule selection using each
+specification's backend. Under `firstmatch`, changing `/a|ab/` to `/ab|a/`
+produces the witness `ab`, with selected lengths of one and two bytes.
+The command checks the selected rule body's byte length, token type after
+keyword remapping, channel, and literal state operations. A skipped rule still
+selects a body. An unmatched position is a separate outcome. The command
+reads both specifications statically and can compare trailing context,
+lookahead, and lookbehind.
 
 The shortest witness is measured in bytes. It includes any input prefix
 needed for left context. The reported offset marks where matching starts in the
@@ -147,9 +149,11 @@ Names that cannot be encoded as UTF-8 also use byte arrays.
 The command compares declarations and accepts equal rules at different source
 indices. Token values, arbitrary Ruby actions, EOF handlers, and later tokens
 are outside the comparison. A reachable opaque action may make a state
-inconclusive. The same applies when the specifications use different encodings,
-when either uses the `firstmatch` backend, or when the comparison reaches
-`--max-dfa-states`.
+inconclusive. A state can also be inconclusive if the encodings differ, the
+comparison reaches `--max-dfa-states`, or a `firstmatch` pattern needs a
+matching operation the comparison does not model. Examples include Ruby's
+native case folding, some bounded repetitions that can match empty text,
+and lookahead with named captures.
 
 Exit status 0 means all compared states are equal. Exit status 1 means at
 least one state differs. Exit status 2 means the command encountered a

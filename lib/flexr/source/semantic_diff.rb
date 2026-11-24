@@ -8,8 +8,7 @@ module Flexr
     class SemanticDiff
       Input = Data.define(:parsed, :compiled, :backend, :rules) do
         def initialize(parsed:, compiled:, backend:)
-          rules = compiled.rules
-          rules = prepare_trailing(rules, parsed.config) unless backend == :firstmatch
+          rules = prepare_trailing(compiled.rules, parsed.config)
           super(parsed: parsed, compiled: compiled, backend: backend, rules: rules)
         end
 
@@ -69,17 +68,22 @@ module Flexr
 
       def incomparable_reason
         return "input encodings differ" unless @left.encoding == @right.encoding
-        return "firstmatch requires ordered regexp comparison" if [@left.backend, @right.backend].include?(:firstmatch)
-
         nil
       end
 
       def machine_inputs(input)
         effects = input.parsed.rules.to_h { |rule| [rule.index, ActionEffects.for_rule(rule)] }
         keyword_effects = keyword_effects(input, effects)
-        input.compiled.machines.transform_values do |machine|
-          Automaton::TokenDiff::Side.new(dfa: machine.dfa, rules: input.rules, effects: effects, keyword_effects: keyword_effects,
-                                         allow_empty_match: input.options[:allow_empty_match] == true)
+        input.compiled.machines.to_h do |name, machine|
+          side = if input.backend == :firstmatch
+            inclusive = input.parsed.states.fetch(name).fetch(:inclusive)
+            rules = input.rules.select { |rule| rule.states.include?(name) || (inclusive && rule.states.include?(:initial)) }
+            Automaton::TokenDiff::FirstmatchSide.new(rules: rules.sort_by(&:index), effects: effects, keyword_effects: keyword_effects)
+          else
+            Automaton::TokenDiff::Side.new(dfa: machine.dfa, rules: input.rules, effects: effects, keyword_effects: keyword_effects,
+                                          allow_empty_match: input.options[:allow_empty_match] == true)
+          end
+          [name, side]
         end
       end
 
