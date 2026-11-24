@@ -144,7 +144,8 @@ module Flexr
           raise ArgumentError, "--grammar is only valid for check" unless command == :check
           options.grammar = required_argument!(args, argument)
         when "--lrama-grammar"
-          raise ArgumentError, "--lrama-grammar is only valid for generation" unless command == :generate
+          raise ArgumentError, "--lrama-grammar is only valid for generation or check" unless %i[generate check].include?(command)
+
           options.set(:lrama_grammar, required_argument!(args, argument))
         when "--verify"
           raise ArgumentError, "--verify is only valid for the skeleton command" unless command == :skeleton
@@ -179,6 +180,8 @@ module Flexr
 
       options.validate!
       raise ArgumentError, "skeleton requires static compilation; remove --eval" if command == :skeleton && options.eval_mode
+      raise ArgumentError, "--lrama-grammar requires static check; remove --eval" if
+        command == :check && options.lrama_grammar && options.eval_mode
       raise ArgumentError, "choose --input or --input-file" if command_args.key?(:input) && command_args[:input_file]
       raise ArgumentError, "--generated requires --input or --input-file" if
         command_args[:generated] && !command_args.key?(:input) && !command_args[:input_file]
@@ -433,6 +436,7 @@ module Flexr
         require_relative "grammar"
         diagnostics.concat(Grammar.diagnostics(read_spec(spec), options.grammar))
       end
+      diagnostics.concat(parser_context_diagnostics(parsed, compiled, options)) if options.lrama_grammar
       diagnostics.select! do |diagnostic|
         options.warn_level == :all ||
           (options.warn_level == :default && diagnostic.severity != :info && diagnostic.code != "FLEXR-W016")
@@ -454,6 +458,16 @@ module Flexr
       return EXIT_FAILURE if options.warn_as_error && diagnostics.any?(&:warning?)
 
       EXIT_OK
+    end
+
+    def parser_context_diagnostics(parsed, compiled, options)
+      require_relative "grammar/lrama"
+      require_relative "grammar/context_ambiguity"
+
+      backend = options.overrides.fetch(:backend, parsed.config.fetch(:backend))
+      input = Source::SemanticDiff::Input.from_source(parsed: parsed, compiled: compiled, backend: backend)
+      rows, paths = Grammar::Lrama.read_with_paths(options.lrama_grammar)
+      Grammar::ContextAmbiguity.diagnostics(input, rows, paths, limit: options.max_dfa_states)
     end
 
     def emit_shorthand_suggestions(parsed)
@@ -781,7 +795,7 @@ module Flexr
               --warn-as-error
               --color WHEN            auto | always | never
               --format FMT            human | json | lrama (tokens only)
-              --lrama-grammar PATH    Precompute parser-state contexts for generation
+              --lrama-grammar PATH    Generate parser-state contexts or check their ambiguity
               --grammar PATH          compare emits with grammar %token declarations (check only)
               --input STRING          trace input (executes SPEC actions)
               --input-file PATH       trace or benchmark input

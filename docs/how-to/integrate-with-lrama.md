@@ -52,3 +52,13 @@ default action. The parser still validates the resulting token against its
 stack. For rule actions, channels, and keyword tables, the same
 [eligibility rules as `expect:`](../reference/runtime.md#parser-token-expectations)
 apply.
+
+Before generating the lexer, check whether two eligible terminals tie at the
+winning match length in any LR state.
+
+```sh
+flexr check lexer.flexr.rb --lrama-grammar parser.y --warn-as-error
+```
+
+A tie report includes an example input and a grammar-symbol path to the LR
+state. See [the diagnostic details](../reference/cli.md#check-parser-state-ambiguity).

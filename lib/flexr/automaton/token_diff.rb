@@ -18,15 +18,19 @@ module Flexr
       Result = Data.define(:status, :input, :offset, :left, :right, :reason)
 
       BYTE_ORDER = ((32..126).to_a + (0..31).to_a + (127..255).to_a).freeze
-      Candidate = Data.define(:rule_index, :effect, :end_pos)
+      Candidate = Data.define(:rule_index, :effect, :end_pos) do
+        def endpoints = [end_pos]
+
+        def with_endpoint_ranks(ranks) = with(end_pos: ranks.fetch(end_pos))
+      end
       Scan = Data.define(:state, :pending, :winner) do
         def settled? = state.nil? && pending.empty?
 
-        def endpoints = [winner&.end_pos, *pending.values.map(&:end_pos)].compact
+        def endpoints = [*winner&.endpoints, *pending.values.map(&:end_pos)]
 
         def with_endpoint_ranks(ranks)
-          ranked_winner = winner&.with(end_pos: ranks.fetch(winner.end_pos))
-          ranked_pending = pending.transform_values { |candidate| candidate.with(end_pos: ranks.fetch(candidate.end_pos)) }
+          ranked_winner = winner&.with_endpoint_ranks(ranks)
+          ranked_pending = pending.transform_values { |candidate| candidate.with_endpoint_ranks(ranks) }
           with(winner: ranked_winner, pending: ranked_pending)
         end
       end
@@ -52,6 +56,12 @@ module Flexr
         return result unless result.status == :equal && side.dfa.rule_ids.any? { |id| side.effects[id].nil? }
 
         result.with(status: :inconclusive, reason: "a rule in this state has an opaque action")
+      rescue SearchLimit
+        Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: "search limit reached")
+      end
+
+      def context_ambiguity(side, terminals:, encoding:, limit: 100_000)
+        ContextAmbiguitySearch.new(side, terminals, encoding, limit).compare
       rescue SearchLimit
         Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: "search limit reached")
       end
@@ -294,6 +304,8 @@ module Flexr
 
               rule = side.rules.fetch(label.rule_index)
               candidate = candidate_at(path, side, index, rule.index)
+              next unless candidate
+
               if rule.trailing
                 bol = !pos.left || pos.left.first != LeftContext::OTHER
                 remember(pending, [rule.index, start_state(rule.trailing_dfa, pos.left), bol], candidate)
@@ -306,23 +318,37 @@ module Flexr
             label = side.rules.fetch(rule).trailing_dfa.accepts.fetch(state).first
             candidates << candidate if label && eligible?(label, bol, pos.right)
           end
-          best = candidates.max_by do |candidate|
-            [side.rules.fetch(candidate.rule_index).priority, -candidate.rule_index, candidate.end_pos]
-          end
+          best = select_winner(side, candidates)
           Scan.new(state: scan.state, pending: pending, winner: best || scan.winner)
         end
 
         def resolve_shortest(path, side, index, scan)
           return scan if path.length == path.offset && !side.allow_empty_match
 
-          pos = path.position
-          label = side.dfa.accepts.fetch(scan.state).find do |acceptance|
-            eligible?(acceptance, pos.bol, pos.right) &&
-              trailing_prefix?(side.rules.fetch(acceptance.rule_index), pos)
-          end
-          return scan unless label
+          winner = select_winner(side, shortest_candidates(path, side, index, scan.state))
+          winner ? Scan.new(state: nil, pending: {}, winner: winner) : scan
+        end
 
-          Scan.new(state: nil, pending: {}, winner: candidate_at(path, side, index, label.rule_index))
+        def shortest_candidates(path, side, index, state)
+          return enum_for(__method__, path, side, index, state) unless block_given?
+
+          pos = path.position
+          side.dfa.accepts.fetch(state).each do |label|
+            next unless eligible?(label, pos.bol, pos.right)
+
+            candidate = candidate_at(path, side, index, label.rule_index)
+            next unless candidate && trailing_prefix?(side.rules.fetch(label.rule_index), pos)
+
+            yield candidate
+          end
+        end
+
+        def select_winner(side, candidates)
+          return candidates.first if side.shortest
+
+          candidates.max_by do |candidate|
+            [side.rules.fetch(candidate.rule_index).priority, -candidate.rule_index, candidate.end_pos]
+          end
         end
 
         def trailing_prefix?(rule, pos)
@@ -467,7 +493,77 @@ module Flexr
         def different?(candidates) = candidates.all?
       end
 
+      class ContextAmbiguitySearch < Search
+        Selection = Data.define(:candidates) do
+          def endpoints = candidates.map(&:end_pos)
+
+          def with_endpoint_ranks(ranks)
+            with(candidates: candidates.map { |candidate| candidate.with_endpoint_ranks(ranks) })
+          end
+        end
+        EMPTY = Selection.new(candidates: [].freeze).freeze
+        private_constant :Selection, :EMPTY
+
+        def initialize(side, terminals, encoding, limit)
+          super([side], encoding, limit)
+          @terminals = terminals.to_h { |terminal| [terminal, true] }
+        end
+
+        def compare
+          return outcome(:equal) if @terminals.size < 2
+
+          super
+        end
+
+        private
+
+        def candidate_at(path, side, index, rule_index)
+          candidate = super
+          rule = side.rules.fetch(rule_index)
+          return candidate if rule.skip? || rule.channel
+          return candidate if rule.emits&.any? { |terminal| @terminals.key?(terminal) }
+          return if rule.emits
+          return candidate unless rule.emit?
+
+          candidate if @terminals.key?(candidate.effect&.token || rule.action[1])
+        end
+
+        def select_winner(side, candidates)
+          by_rule = {}
+          candidates.each { |candidate| remember(by_rule, candidate.rule_index, candidate) }
+          return if by_rule.empty?
+
+          terminals = {}
+          opaque = nil
+          opaque_count = 0
+          by_rule.each_value do |candidate|
+            rule = side.rules.fetch(candidate.rule_index)
+            next if rule.skip? || rule.channel
+
+            effect = candidate.effect
+            if effect.nil?
+              opaque ||= candidate
+              opaque_count += 1
+            elsif effect.action == :emit && !effect.channel && @terminals.key?(effect.token)
+              terminals[effect.token] ||= candidate
+              return Selection.new(candidates: terminals.values) if terminals.size == 2
+            end
+          end
+
+          return Selection.new(candidates: [opaque]) if opaque && (opaque_count > 1 || !terminals.empty?)
+
+          EMPTY
+        end
+
+        def winners(scans) = scans.first.winner&.candidates || []
+
+        def different?(candidates) = candidates.length == 2
+
+        def settled_equal?(scans) = scans.first.settled? && winners(scans).empty?
+      end
+
       private_constant :BYTE_ORDER, :Candidate, :Scan, :Position, :Path, :Search, :ReachabilitySearch, :OverlapSearch,
+                       :ContextAmbiguitySearch,
                        :SearchLimit, :UnsupportedFirstmatch, :Firstmatch
     end
   end

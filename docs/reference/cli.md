@@ -46,7 +46,7 @@ reader for additional candidates.
 | `--accel MODE` | `auto`, `strscan`, `regexp`, `none` | Runtime optimization |
 | `--standalone` | Flag | Generation |
 | `--eval` | Flag | Generation and check |
-| `--lrama-grammar PATH` | Lrama grammar file | Generation |
+| `--lrama-grammar PATH` | Lrama grammar file | Generation and static check |
 | `--table-compression VALUE` | `none`, `rows`, `full` | Generation |
 | `--table-format VALUE` | `literal`, `packed` | Generation |
 | `--max-dfa-states N` | Positive integer | Compilation and comparison search. For `fix`, it limits the comparison search. |
@@ -89,7 +89,7 @@ Options:
       --warn-as-error
       --color WHEN            auto | always | never
       --format FMT            human | json | lrama (tokens only)
-      --lrama-grammar PATH    Precompute parser-state contexts for generation
+      --lrama-grammar PATH    Generate parser-state contexts or check their ambiguity
       --grammar PATH          compare emits with grammar %token declarations (check only)
       --input STRING          trace input (executes SPEC actions)
       --input-file PATH       trace or benchmark input
@@ -101,6 +101,30 @@ Options:
       --accept-changes        apply changed or unverified fixes (fix only)
       --from oedipus_lex      read an oedipus_lex .rex file (import only)
 <!-- flexr-help:end -->
+
+## Check parser-state ambiguity
+
+`flexr check lexer.flexr.rb --lrama-grammar parser.y` checks lexical rule
+selection for the terminal sets used by generated Lrama parser contexts.
+It reads the specification statically and requires the Lrama 0.8 gem.
+
+- `FLEXR-W023` reports two distinct eligible terminals tied at the winning
+  match length for a parser state and a lexer state. The report gives a shortest
+  example, the byte offset where matching starts, and a grammar-symbol path to
+  the parser state. The path can contain nonterminals and describes a viable
+  prefix reached by following selected shifts and goto transitions.
+- `FLEXR-W024` reports an incomplete check, for example when an opaque action
+  could produce a tied terminal, the search reaches its state limit, or the
+  specification uses indentation handling or the `firstmatch` backend.
+
+The check uses total length including trailing context in longest-match states
+and body length in shortest-match states. Runtime priority and rule order
+still decide which terminal wins a tie. The check considers each lexer state
+with each parser terminal set, so a grammar path and a lexer witness may
+describe separate parts of the input.
+
+Use `--format json` for machine-readable diagnostics. With
+`--warn-as-error`, either warning fails the check.
 
 ## Automatic fixes
 

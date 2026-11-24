@@ -9,16 +9,131 @@ module Flexr
       module_function
 
       def terminal_rows(parser)
-        table, check, defaults, pointers, _, _, _, _, _, _, tokens, _, reduce_count = parser::Racc_arg
-        pointers.each_with_index.map do |pointer, state|
+        args = parser::Racc_arg
+        actions = args.first(4)
+        tokens, _, reduce_count = args[10, 3]
+        actions.last.each_index.map do |state|
           tokens.filter_map do |name, id|
             next unless name && name != :error
 
-            offset = pointer + id if pointer
-            explicit = offset && offset.between?(0, check.length - 1) && check[offset] == state
-            name.to_sym unless (explicit ? table[offset] : defaults[state]) == -reduce_count
+            name.to_sym unless packed_entry(actions, state, id) == -reduce_count
           end.freeze
         end.freeze
+      end
+
+      def packed_entry(entries, row, column)
+        table, checks, defaults, pointers = entries
+        pointer = pointers.fetch(row)
+        offset = pointer + column if pointer
+        return table.fetch(offset) if offset && offset >= 0 && checks[offset] == row
+
+        defaults.fetch(row)
+      end
+
+      def grammar_states(directory, parser)
+        path = File.join(directory, "parser.y")
+        grammar = Racc::GrammarFileParser.new.parse(File.read(path), path).grammar
+        states = Racc::States.new(grammar).nfa.dfa
+        table = states.state_transition_table
+        fields = %i[action_table action_check action_default action_pointer goto_table goto_check goto_default
+                    goto_pointer nt_base reduce_table token_value_table shift_n reduce_n]
+        rebuilt = fields.map { |field| table.public_send(field) }
+        raise "parser.y did not reproduce Lrama's generated Racc tables" unless rebuilt == parser::Racc_arg.first(fields.length)
+
+        states.each_state.to_a
+      end
+
+      def grammar_paths(states, parser)
+        root = states.fetch(0)
+        paths = Array.new(states.length)
+        paths[root.ident] = []
+        queue = [root]
+        queue.each do |state|
+          state.gotos.each do |symbol, edge|
+            target = edge.to_state
+            if symbol.terminal?
+              action = state.action[symbol]
+              next unless action.is_a?(Racc::Shift) && action.goto_id == target.ident
+            end
+            next if paths.fetch(target.ident)
+
+            paths[target.ident] = [*paths.fetch(state.ident), symbol]
+            queue << target
+          end
+        end
+
+        args = parser::Racc_arg
+        actions = args.first(4)
+        gotos = args[4, 4]
+        nonterminal_base = args.fetch(8)
+        paths.map.with_index do |path, target|
+          raise "missing grammar path for Lrama state #{target}" unless path
+
+          state = path.reduce(root.ident) do |id, symbol|
+            if symbol.terminal?
+              packed_entry(actions, id, symbol.ident)
+            else
+              packed_entry(gotos, symbol.ident - nonterminal_base, id)
+            end
+          end
+          raise "grammar path for Lrama state #{target} ended in state #{state}" unless state == target
+
+          path.map { |symbol| symbol.value ? symbol.value.to_s : "$end" }
+        end
+      end
+
+      def ambiguity_input(patterns)
+        lexer = Class.new(Lexer) do
+          backend :direct
+          encoding Encoding::BINARY
+          rule(" ", skip: true)
+          patterns.each { |kind, pattern| rule(pattern, emit: kind) }
+        end
+        Source::SemanticDiff::Input.from_lexer(lexer)
+      end
+
+      def check_ambiguity(directory)
+        gem "racc", "1.8.1"
+        require "racc/grammarfileparser"
+        require "racc/state"
+        require "racc/statetransitiontable"
+        require_relative "../lib/flexr/grammar/context_ambiguity"
+        $LOAD_PATH.unshift(File.join(directory, "lib"))
+        require "lrama"
+
+        parser = ::Lrama::Parser
+        states = grammar_states(directory, parser)
+        paths = grammar_paths(states, parser)
+        rows = terminal_rows(parser)
+        patterns = lexer_patterns
+        diagnostics = Grammar::ContextAmbiguity.diagnostics(ambiguity_input(patterns), rows, paths)
+        raise "Lrama replay lexer ambiguity check returned #{diagnostics.map(&:to_h).inspect}" unless diagnostics.empty?
+
+        probe_tokens = %i[%token %type]
+        target = states.find do |state|
+          paths.fetch(state.ident).last == "%%" && probe_tokens.all? do |token|
+            state.action.any? { |symbol, action| symbol.value == token.to_s && action.is_a?(Racc::Shift) }
+          end
+        end
+        raise "no Lrama state shifts both #{probe_tokens.inspect} after %%" unless target
+
+        example = patterns.fetch(probe_tokens.first)
+        probe_patterns = patterns.merge(probe_tokens.last => example)
+        probe_rows = Array.new(rows.length, [].freeze)
+        probe_rows[target.ident] = rows.fetch(target.ident)
+        probe_diagnostics = Grammar::ContextAmbiguity.diagnostics(ambiguity_input(probe_patterns), probe_rows, paths)
+        parser_path = [*paths.fetch(target.ident), "•"].join(" ")
+        probe = probe_diagnostics.find do |diagnostic|
+          diagnostic.code == "FLEXR-W023" && diagnostic.message.start_with?("parser state #{target.ident} ") &&
+            probe_tokens.all? { |token| diagnostic.message.include?(token.to_s) } &&
+            diagnostic.note == "example input: #{example.inspect} (byte offset 0)" &&
+            diagnostic.help == "parser path: #{parser_path}"
+        end
+        raise "Lrama ambiguity probe did not report its state, example, and grammar path" unless probe
+
+        puts JSON.pretty_generate(lr_states: rows.length, terminal_sets: rows.uniq.length, grammar_paths: paths.length,
+                                 lexer_terminal_sets: rows.map { |row| row & patterns.keys }.uniq.length,
+                                 diagnostics: diagnostics.length, probe: probe.to_h)
       end
 
       def recording_parser
@@ -150,5 +265,10 @@ module Flexr
   end
 end
 
-Flexr::Benchmarking::LramaParserContexts.run(File.expand_path(ARGV.fetch(0)), iterations: Integer(ARGV.fetch(1, 9))) if
-  $PROGRAM_NAME == __FILE__
+if $PROGRAM_NAME == __FILE__
+  if ARGV.first == "--check-ambiguity"
+    Flexr::Benchmarking::LramaParserContexts.check_ambiguity(File.expand_path(ARGV.fetch(1)))
+  else
+    Flexr::Benchmarking::LramaParserContexts.run(File.expand_path(ARGV.fetch(0)), iterations: Integer(ARGV.fetch(1, 9)))
+  end
+end
