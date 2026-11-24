@@ -4,13 +4,14 @@ module Flexr
   module Runtime
     INPUT_STACK_FIELDS = (CHECKPOINT_FIELDS + %i[
       @buffer @filename @string_input @stable_input_end @valid_utf8_input @simple_location_input
-      @token_limit_required @__flexr_input_id
+      @token_limit_required @__flexr_input_id @__flexr_stable_scan_source
     ]).freeze
     private_constant :INPUT_STACK_FIELDS
 
     def push_input(input, filename: nil)
       buffer = Buffer.new(input, chunk_size: @buffer.chunk_size, max_buffer_size: @buffer.max_buffer_size,
-                          retain_input: @retain_input, filename: filename)
+                          retain_input: @retain_input, freeze_input: @freeze_input, filename: filename)
+      input = buffer.source if input.is_a?(String)
       (@__flexr_pending_inputs ||= []) << [buffer, input, filename]
       nil
     end

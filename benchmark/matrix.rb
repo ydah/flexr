@@ -8,6 +8,7 @@ module Flexr
   module Benchmarking
     class RubyMatrix
       ROOT = File.expand_path("..", __dir__)
+      WORKLOADS = %w[json toml graphql sql ruby_subset].freeze
       FLAGS = { "interpreter" => ["--disable=yjit,zjit"], "yjit" => ["--yjit"], "zjit" => ["--zjit"] }.freeze
       PROBE = <<~RUBY.lines.map(&:strip).join(";").freeze
         require "json"
@@ -46,16 +47,55 @@ module Flexr
         report
       end
 
+      def self.run_workloads(arguments:, verify_ratio:, matrix: self)
+        failed = []
+        workloads = WORKLOADS.to_h do |workload|
+          spec = File.join(ROOT, "examples", workload, "lexer.flexr.rb")
+          modes = INPUT_MODES.to_h do |mode|
+            command = [*arguments, "--spec", spec, "--input-mode", mode, "--verify-parity"]
+            report = matrix.new(arguments: command).run(verify_ratio: verify_ratio)
+            if verify_ratio
+              report.fetch("generated_runtime_ratio_check").fetch("failed_engines").each do |engine|
+                failed << { "workload" => workload, "input_mode" => mode, "engine" => engine }
+              end
+            end
+            [mode, report]
+          end
+          [workload, modes]
+        end
+        report = { "schema" => 1, "workloads" => workloads }
+        report["generated_runtime_ratio_check"] = { "minimum" => 1.0, "passed" => failed.empty?, "failed_cells" => failed } if verify_ratio
+        report
+      end
+
       def self.command(argv, out: $stdout, err: $stderr)
-        options = Benchmarking.parse(argv.dup)
-        return Benchmarking.usage(out) if options[:help]
+        arguments = argv.dup
+        workloads = arguments.delete("--workloads")
+        options = Benchmarking.parse(arguments.dup)
+        if options[:help]
+          Benchmarking.usage(out)
+          out.puts "       ruby benchmark/matrix.rb --workloads [--iterations N]"
+          return 0
+        end
         raise ArgumentError, "matrix results cannot share a baseline output file" if options[:write_baseline]
+        if workloads && (conflict = (arguments & %w[--spec --input-file --input-mode --baseline]).first)
+          raise ArgumentError, "--workloads selects fixed specifications and inputs and cannot be combined with #{conflict}"
+        end
 
         verify_ratio = ENV["FLEXR_BENCHMARK_CHECK_MATRIX"] == "1"
-        report = new(arguments: argv).run(verify_ratio: verify_ratio)
+        report = if workloads
+          run_workloads(arguments: arguments, verify_ratio: verify_ratio)
+        else
+          new(arguments: arguments).run(verify_ratio: verify_ratio)
+        end
         out.puts JSON.pretty_generate(report)
         if (check = report["generated_runtime_ratio_check"]) && !check.fetch("passed")
-          err.puts "matrix error: generated/runtime ratio check failed for #{check.fetch('failed_engines').join(', ')}"
+          failed = if workloads
+            check.fetch("failed_cells").map { |cell| cell.values_at("workload", "input_mode", "engine").join("/") }
+          else
+            check.fetch("failed_engines")
+          end
+          err.puts "matrix error: generated/runtime ratio check failed for #{failed.join(', ')}"
           return 1
         end
         0

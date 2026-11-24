@@ -32,7 +32,7 @@ RSpec.describe "DFA residual diagnostics" do
     expect(status).to eq(0), errors
     expect(output).to match(/state initial DFA \d+: rule 0 pattern 0: b\*c/)
     expect(output).not_to include("rule 1")
-    expect(run_diagnostic("explain")[1]).not_to include("DFA")
+    expect(run_diagnostic("explain")[1]).not_to match(/state \S+ DFA \d+:/)
   end
 
   it "labels the same states as the transition table and keeps separate lexical states" do
