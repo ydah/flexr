@@ -95,3 +95,53 @@ For Minitest, include `Flexr::Minitest::Assertions` and use
 `assert_disjoint_tokens Lexer, :INTEGER, :KEYWORD`,
 `assert_includes_language superset, subset`, or
 `assert_tokenize_like LexerV2, LexerV1, state: :initial`.
+
+## DFA transition coverage
+
+Share a coverage collector across test inputs for one runtime, generated, or
+standalone lexer class.
+
+```ruby
+require "flexr/testing"
+
+coverage = Flexr::Testing::Coverage.new(Lexer)
+expect(coverage.lexer("12 + 3").tokens).to eq([
+  [:INTEGER, 12], [:PLUS, "+"], [:INTEGER, 3]
+])
+
+report = coverage.report
+puts "#{report.fetch(:covered)}/#{report.fetch(:total)} transitions covered"
+```
+
+Each transition records the lexical state, source and target DFA states,
+byte class, and hit count. The collector runs the returned lexer through
+the DFA interpreter. Transitions explored while trying a longer token
+count even when the lexer later selects a shorter token or raises an error.
+To check the native generated scanner's tokens, use a separate token assertion.
+For example, a UTF-8 lexer with both a raw byte rule and a line anchor can
+return different tokens in the interpreter and the generated scanner.
+
+The collector follows the lexer's input stack. A delegated child runs in a
+separate lexer instance, and trailing-context checks use separate automata.
+
+`report[:uncovered]` contains the unvisited edges. When the skeleton can find
+a valid source, the edge includes `example: {input:, offset:}` with the
+shortest source in bytes and the byte offset where the scan starts. Replay an
+example in the reported lexical state.
+
+```ruby
+if (edge = report.fetch(:uncovered).find { |entry| entry.key?(:example) })
+  example = edge.fetch(:example)
+  scanner = coverage.lexer(example.fetch(:input), error_mode: :token)
+  scanner.begin_state(edge.fetch(:state))
+  scanner.seek(example.fetch(:offset))
+  scanner.next_token
+end
+```
+
+An example reaches the edge during that scan. It may end with an unmatched
+input error. Indentation lexers allow `seek` only at byte 0. For a nonzero
+offset, make the prefix tokenizable and advance through it in the test.
+An edge without an example has a reason such as
+`:no_valid_input` when no valid UTF-8 source reaches the edge.
+Coverage applies to DFA backends. `firstmatch` uses ordered regexp matching.
