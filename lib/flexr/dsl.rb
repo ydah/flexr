@@ -46,7 +46,7 @@ module Flexr
       nil
     end
 
-    def pattern(*values) = Pattern.build(*values)
+    def pattern(...) = Pattern.build(...)
     def upto(value) = Pattern.upto(value)
 
     def state(*names, inclusive: false, &block)

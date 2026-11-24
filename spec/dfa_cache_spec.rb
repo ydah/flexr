@@ -38,6 +38,23 @@ RSpec.describe "compiled DFA cache" do
     expect(status).to be_success, stderr
   end
 
+  it "retains the left-context transitions when restoring a cached DFA" do
+    Flexr.cache_dir = @directory
+    build = lambda do
+      Class.new(Flexr::Lexer) do
+        rule(/(?<=a)b/, emit: :AFTER_A)
+        rule(/./, skip: true)
+      end
+    end
+    input = "abb"
+    expect(build.call.new(input).tokens).to eq([[:AFTER_A, "b"]])
+
+    cache_file = File.join(@directory, Dir.children(@directory).fetch(0))
+    stamp = File.mtime(cache_file)
+    expect(build.call.new(input).tokens).to eq([[:AFTER_A, "b"]])
+    expect(File.mtime(cache_file)).to eq(stamp)
+  end
+
   it "recompiles when a pattern or either version changes" do
     Flexr.cache_dir = @directory
     expect(lexer_for(/ab/).new("ab").tokens).to eq([[:WORD, "ab"]])

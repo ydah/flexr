@@ -289,7 +289,7 @@ module Flexr
     def __flexr_dfa_start(dfa, position, scan_start = @position)
       return dfa.start unless dfa.starts
 
-      dfa.start_for(Automaton::LeftContext.at(position, __flexr_beginning_of_line_at?(position, scan_start)))
+      dfa.start_at(@buffer, position, __flexr_beginning_of_line_at?(position, scan_start))
     end
 
     def binary_input

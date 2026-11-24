@@ -6,6 +6,7 @@ module Flexr
       FAIL = 0
       EMPTY = 1
       UNIVERSE = 2
+      UNKNOWN = -1
 
       attr_reader :byte_classes, :expressions, :operations, :left_sensitive
 
@@ -47,6 +48,8 @@ module Flexr
           end_conditions
           predicate = prefix(from_ast(node.child))
           guard(node.negative ? negate(predicate) : predicate, EMPTY)
+        when Regexp::AST::Lookbehind
+          lookbehind(from_ast(node.child), node.negative)
         when Regexp::AST::ByteRange
           @byte_classes.add_range(node.lo, node.hi)
           intern(:byte, [node.lo, node.hi], FAIL)
@@ -104,11 +107,49 @@ module Flexr
         cache[class_id] ||= derive(id, byte, class_id, left)
       end
 
+      def compile_left_context(ec, representatives)
+        return unless @behind_bodies
+
+        # The residual for each body is the union of matches started at all preceding positions.
+        initial = [LeftContext::SOURCE_START, Array.new(@behind_bodies.length, FAIL), Array.new(@left_graphs.length, 0)]
+        @left_states = [initial]
+        ids = { initial => 0 }
+        rows = []
+        @left_states.each_with_index do |(_, residuals, graphs), left|
+          rows << representatives.each_with_index.map do |byte, class_id|
+            tails = @behind_bodies.each_with_index.map do |body, index|
+              union([derivative(body, byte, class_id, left), derivative(residuals.fetch(index), byte, class_id, left)])
+            end
+            prefixes = @left_graphs.each_with_index.map { |graph, index| graph.transition(graphs.fetch(index), byte) }
+            state = [LeftContext.after(byte), tails, prefixes]
+            ids[state] ||= begin
+              yield @left_states.length, "regexp left context"
+              @left_states.push(state).length - 1
+            end
+          end
+        end
+        @left_context = LeftContext::Graph.new(transitions: rows, ec: ec)
+      end
+
+      def context_kind(left)
+        @left_states ? @left_states.fetch(left).first : left
+      end
+
+      def next_left(left, byte)
+        @left_context ? @left_context.transition(left, byte) : LeftContext.after(byte)
+      end
+
       private
 
       def nullability(id, left)
+        return UNKNOWN if id == UNKNOWN
+
         value = @nullable.fetch(id)
-        value.is_a?(Array) ? value.fetch(left) : value
+        return left ? value.fetch(context_kind(left)) : UNKNOWN if value.is_a?(Array)
+        return value unless value.is_a?(Proc)
+        return UNKNOWN unless left
+
+        (@left_nullable[id] ||= [])[left] ||= value.call(left)
       end
 
       def term(kind, parts, &)
@@ -117,6 +158,10 @@ module Flexr
 
       # Each entry describes the suffix that permits an empty match at that left context.
       def conditional_nullability(&predicate)
+        if @behind_bodies
+          value = predicate.call(nil)
+          return value == UNKNOWN ? predicate : value
+        end
         return predicate.call(nil) unless @left_sensitive
 
         values = LeftContext::STATES.map(&predicate)
@@ -184,7 +229,29 @@ module Flexr
           @explicit_lookahead = true
           after_lf = end_conditions.fetch(EndContext::LF | EndContext::OTHER)
         end
-        intern(:left, [kind], [UNIVERSE, after_lf, FAIL].freeze)
+        values = [UNIVERSE, after_lf, FAIL]
+        term(:left, [kind]) { |left| left ? values.fetch(context_kind(left)) : UNKNOWN }
+      end
+
+      def enable_lookbehind
+        enable_left_context
+        return if @behind_bodies
+
+        @behind_bodies = []
+        @left_graphs = []
+        @left_nullable = []
+      end
+
+      def lookbehind(body, negative)
+        enable_lookbehind
+        index = @behind_bodies.index(body) || (@behind_bodies.push(body).length - 1)
+        term(:behind, [index, negative, body]) do |left|
+          next UNKNOWN unless left
+
+          residual = @left_states.fetch(left).fetch(1).fetch(index)
+          allowed = union([nullability(body, left), nullability(residual, left)])
+          negative ? negate(allowed) : allowed
+        end
       end
 
       def right_anchor(kind)
@@ -234,7 +301,7 @@ module Flexr
           else
             representatives.each_with_index.map do |byte, class_id|
               target = derivative(term, byte, class_id, context)
-              target = [target, LeftContext.after(byte)] if context
+              target = [target, next_left(context, byte)] if context && target != FAIL && target != UNIVERSE
               ids[target] ||= begin
                 yield states.length, "lookahead"
                 states.push(target).length - 1
@@ -285,6 +352,10 @@ module Flexr
       end
 
       def combine(kind, ids, identity:, absorbing:)
+        if @behind_bodies && ids.include?(UNKNOWN)
+          return ids.include?(absorbing) ? absorbing : UNKNOWN
+        end
+
         parts = flattened(kind, ids)
         return absorbing if parts.include?(absorbing)
 
@@ -300,6 +371,8 @@ module Flexr
       end
 
       def negate(id)
+        return UNKNOWN if id == UNKNOWN
+
         term = @expressions.fetch(id)
         return term.fetch(1) if term.first == :negate
 
@@ -320,7 +393,7 @@ module Flexr
       def derive(id, byte, class_id, left)
         kind, *parts = @expressions.fetch(id)
         case kind
-        when :empty, :fail, :left then FAIL
+        when :empty, :fail, :left, :behind then FAIL
         when :guard
           predicate, body = parts
           guard(derivative(predicate, byte, class_id, left), derivative(body, byte, class_id, left))
@@ -355,7 +428,7 @@ module Flexr
           suffix_term(graph, row.fetch(input.ec.fetch(byte)))
         when :entry
           graph_id = parts.first
-          derivative(graph_term(graph_id, @graphs.fetch(graph_id).start_for(left)), byte, class_id, left)
+          derivative(graph_term(graph_id, graph_start(graph_id, left)), byte, class_id, left)
         when :graph
           graph_id, state = parts
           target = @graphs.fetch(graph_id).transition(state, byte)
@@ -394,7 +467,21 @@ module Flexr
         dfa = @graphs.fetch(id)
         return graph_term(id, dfa.start) unless dfa.starts
 
-        term(:entry, [id]) { |left| nullability(graph_term(id, dfa.start_for(left)), left) }
+        if dfa.left_context
+          enable_lookbehind
+          @left_graphs << dfa.left_context unless @left_graphs.include?(dfa.left_context)
+        end
+        term(:entry, [id]) { |left| left ? nullability(graph_term(id, graph_start(id, left)), left) : UNKNOWN }
+      end
+
+      def graph_start(id, left)
+        dfa = @graphs.fetch(id)
+        context = if dfa.left_context
+          @left_states.fetch(left).fetch(2).fetch(@left_graphs.index(dfa.left_context))
+        else
+          context_kind(left)
+        end
+        dfa.start_for(context)
       end
 
       def graph_term(id, state)

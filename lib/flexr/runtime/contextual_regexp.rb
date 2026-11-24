@@ -2,10 +2,13 @@
 
 module Flexr
   module Runtime
-    class ContextualRegexp < Data.define(:regexp, :invalid_eof, :instructions, :entry, :left_context)
-      def initialize(regexp:, instructions:, entry:, invalid_eof: nil, left_context: false)
+    class ContextualRegexp < Data.define(:regexp, :invalid_eof, :instructions, :entry, :left_context,
+                                         :history_bytes, :invalid_left, :invalid_both)
+      def initialize(regexp:, instructions:, entry:, invalid_eof: nil, left_context: false, history_bytes: nil,
+                     invalid_left: nil, invalid_both: nil)
         super(regexp: regexp.freeze, invalid_eof: invalid_eof&.freeze,
-              instructions: instructions.each(&:freeze).freeze, entry: entry, left_context: left_context)
+              instructions: instructions.each(&:freeze).freeze, entry: entry, left_context: left_context,
+              history_bytes: history_bytes, invalid_left: invalid_left&.freeze, invalid_both: invalid_both&.freeze)
       end
 
       def match(lexer, rule, starting, ending: nil)
@@ -14,16 +17,21 @@ module Flexr
 
         subject = cursor.subject
         reference = (invalid_eof if cursor.invalid_end?) || regexp
-        origin = 0
-        # Ruby only needs the previous byte's line-break status to replay these anchors.
-        if left_context && starting.positive?
+        prefix = ""
+        if history_bytes
+          prefix, invalid_prefix = cursor.left_prefix(history_bytes)
+          reference = (invalid_both if cursor.invalid_end?) || invalid_left if invalid_prefix
+          # The rejected byte occupies a source position that Ruby can see but cannot consume.
+          subject << "\0" if cursor.invalid_end? && invalid_eof
+        elsif left_context && starting.positive?
+          # One marker reproduces the start and line anchors of a sliced subject.
           prefix = lexer.beginning_of_line? ? "\n" : " "
-          subject = prefix + subject
-          origin = 1
         end
+        subject = prefix + subject unless prefix.empty?
+        origin = prefix.length
         return reference.match(subject, origin) unless ending
 
-        offset = origin + ending - starting
+        offset = prefix.bytesize + ending - starting
         # Constrain Ruby's ordered capture replay to the endpoint chosen by the DFA.
         suffix_size = subject.byteslice(offset..).length
         groups, remainder = suffix_size.divmod(10_000)
@@ -55,6 +63,21 @@ module Flexr
 
         def subject
           @buffer.byteslice(@starting, @loaded_to - @starting).force_encoding(@utf8 ? Encoding::UTF_8 : Encoding::BINARY)
+        end
+
+        def left_prefix(bytes)
+          prefix = @buffer.left_bytes_at(@starting, bytes).force_encoding(@utf8 ? Encoding::UTF_8 : Encoding::BINARY)
+          return [prefix, false] if prefix.valid_encoding?
+
+          suffix = String.new(encoding: Encoding::UTF_8)
+          prefix.each_char do |char|
+            if char.valid_encoding?
+              suffix << char
+            else
+              suffix.clear
+            end
+          end
+          [" #{suffix}", true]
         end
 
         def walk(entry, starting, ending, assertion_origin = nil)
@@ -95,8 +118,12 @@ module Flexr
                 address = second
               when :context_predicate
                 input = AssertionInput.new(cursor: self, origin: assertion_origin || position)
-                at_line_start = @lexer.__flexr_beginning_of_line_at?(position, @starting)
-                context = Automaton::LeftContext.at(position, at_line_start)
+                context = if following
+                  @buffer.left_state_at(following, position)
+                else
+                  at_line_start = @lexer.__flexr_beginning_of_line_at?(position, @starting)
+                  Automaton::LeftContext.at(position, at_line_start)
+                end
                 break unless first.fetch(context)&.valid_end_at?(input, position)
 
                 address = second

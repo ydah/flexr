@@ -19,7 +19,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Octal escapes such as `\011` | Supported | Match bytes in binary mode and complete encoded characters in UTF-8 |
 | `\R` | Supported | Recognizes CRLF as one atomic line break |
 | Positive `(?=...)` and negative `(?!...)` lookahead | Supported | See [lookahead](#lookahead) |
-| Positive and negative lookbehind | Unsupported | Track preceding input with rules or states |
+| Positive `(?<=...)` and negative `(?<!...)` lookbehind | Supported | See [lookbehind](#lookbehind) |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
 | `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
 | `\G` | Unsupported | At the start of a rule, omit it: rules already match at the current lexer position |
@@ -121,6 +121,34 @@ Flexr's case folding for this expression matches the single-character
 forms `ß` and `ẞ`. A named group in a successful positive assertion can capture
 text beyond the token. A lookahead can read across chunks up to the
 `max_lookahead_size` limit.
+
+## Lookbehind
+
+Positive lookbehind succeeds when its expression can match a suffix of
+the active source ending at the assertion. Negative lookbehind succeeds
+when no such suffix matches. The assertion consumes zero bytes. It may
+inspect bytes from earlier tokens, including skipped tokens, in the same
+source. An included source starts with its own history.
+
+Use a Ruby regexp for a fixed-width lookbehind that Ruby accepts. Use the
+`regexp:` form of `pattern` for lookbehind expressions with variable length.
+
+```ruby
+rule(/(?<=:)name/, emit: :LABEL)
+rule(pattern(regexp: %q{(?<=[=(,]\s*)/(?:[^/\x5c\x0a]|\x5c.)+/}), emit: :REGEXP)
+```
+
+In the second rule, punctuation and any following whitespace can be
+separate tokens or skipped input. The regexp token starts at the first
+slash. A variable-width lookbehind uses Flexr's regular-language
+semantics because Ruby 4.0.9 rejects variable-width lookbehind in this
+form. Pattern values can be used with `table`, `direct`, and `auto`.
+
+A fixed-width Ruby regexp can expose named captures from inside a
+successful positive lookbehind. A streamed lexer keeps the DFA history
+after discarding input and retains the bounded text needed to replay
+fixed-width captures when the rule uses them. Looking behind in a live
+mutable string can reread its retained prefix after an edit.
 
 ## Absence groups
 

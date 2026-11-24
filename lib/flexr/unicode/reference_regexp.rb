@@ -14,9 +14,9 @@ module Flexr
         nil
       end
 
-      def compiled(pattern, encoding:, options: nil, unicode: false, anchored: false, following_lf: false, invalid_eof: false)
+      def compiled(pattern, encoding:, options: nil, unicode: false, anchored: false, following_lf: false, invalid_eof: false, invalid_left: false, invalid_tail_marker: false)
         effective_options = options.nil? ? pattern.options : options
-        key = [pattern.source, effective_options, encoding, unicode, anchored, following_lf, invalid_eof]
+        key = [pattern.source, effective_options, encoding, unicode, anchored, following_lf, invalid_eof, invalid_left, invalid_tail_marker]
         return CACHE[key] if CACHE.key?(key)
 
         captures = !pattern.names.empty?
@@ -24,14 +24,14 @@ module Flexr
         parser = Regexp::Parser.new(pattern.source, options: effective_options, encoding: encoding, unicode: unicode,
                                    preserve_captures: captures)
         ast = parser.parse
-        if invalid_eof
+        if invalid_eof && !invalid_tail_marker
           Regexp::AST.anchors(ast).each do |anchor|
             anchor.kind = :before_lf if anchor.kind == :line_end
             anchor.kind = :line_start_before_invalid if anchor.kind == :line_start
             anchor.kind = :never if %i[eof final_eol].include?(anchor.kind)
           end
         end
-        source = source_for(ast, binary: binary)
+        source = source_for(ast, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)
         if anchored
           ending = following_lf ? '(?=\n\z)' : '\z'
           source = "\\A(?:#{source})#{ending}"
@@ -41,14 +41,26 @@ module Flexr
         CACHE[key] = ::Regexp.new(source, regexp_options).freeze
       end
 
-      def source_for(node, binary: false)
+      def source_for(node, binary: false, invalid_left: false, invalid_tail_marker: false)
+        if invalid_tail_marker && (node.is_a?(Regexp::AST::ByteRange) || node.is_a?(Regexp::AST::CodepointRange) ||
+                                  node.is_a?(Regexp::AST::CharClass))
+          return "(?!(?m:.\\z))#{source_for(node, binary: binary)}"
+        end
+
         case node
         when Regexp::AST::Empty then ""
         when Regexp::AST::Anchor then anchor_source(node.kind)
         when Regexp::AST::Fail then "(?!)"
         when Regexp::AST::NotNextLineFeed then '(?!\n)'
+        when Regexp::AST::Lookbehind
+          branches = node.child.is_a?(Regexp::AST::Alt) ? node.child.children : [node.child]
+          source = branches.map do |child|
+            body = source_for(child, binary: binary, invalid_left: invalid_left)
+            invalid_left ? "(?<!\\A)#{body}" : body
+          end.join("|")
+          "(?<#{node.negative ? '!' : '='}#{source})"
         when Regexp::AST::Lookahead
-          "(?#{node.negative ? '!' : '='}#{source_for(node.child, binary: binary)})"
+          "(?#{node.negative ? '!' : '='}#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)})"
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
         when Regexp::AST::CodepointRange then character_class([[node.lo, node.hi]], binary: binary)
         when Regexp::AST::CharClass
@@ -63,18 +75,19 @@ module Flexr
           end
           ranges = complement(ranges) if node.negated
           character_class(ranges, binary: binary)
-        when Regexp::AST::Seq then node.children.map { |child| source_for(child, binary: binary) }.join
+        when Regexp::AST::Seq then node.children.map { |child| source_for(child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker) }.join
         when Regexp::AST::Alt
-          "(?:#{node.children.map { |child| source_for(child, binary: binary) }.join('|')})"
-        when Regexp::AST::Star then "(?:#{source_for(node.child, binary: binary)})*"
+          "(?:#{node.children.map { |child| source_for(child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker) }.join('|')})"
+        when Regexp::AST::Star then "(?:#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)})*"
         when Regexp::AST::Repeat
           maximum = node.maximum.nil? ? "" : node.maximum
-          "(?:#{source_for(node.child, binary: binary)}){#{node.minimum},#{maximum}}"
-        when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, binary: binary)})"
+          "(?:#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)}){#{node.minimum},#{maximum}}"
+        when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)})"
         when Regexp::AST::Absence
-          child = source_for(node.child, binary: binary)
+          child = source_for(node.child, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker)
           return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child) && !Regexp::AST.contextual?(node.child)
 
+          child = "(?:#{child})|(?m:.\\z)" if invalid_tail_marker
           "(?~(?:#{child}))"
         else
           raise CompileError, "unsupported reference AST node: #{node.class}"

@@ -50,6 +50,7 @@ module Flexr
 
     def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer, ?emits: (Symbol | Array[Symbol])?) ?{ () [self: Lexer] -> untyped } -> nil
     def pattern: (*pattern_operand) -> Pattern
+               | (regexp: String) -> Pattern
     def upto: (pattern_operand) -> Pattern
   end
 
@@ -61,6 +62,7 @@ module Flexr
   module DSL
     def rule: (pattern | Array[pattern], ?skip: bool, ?emit: untyped, ?followed_by: pattern?, ?channel: Symbol, ?priority: Integer, ?emits: (Symbol | Array[Symbol])?) ?{ () [self: Lexer] -> untyped } -> nil
     def pattern: (*pattern_operand) -> Pattern
+               | (regexp: String) -> Pattern
     def upto: (pattern_operand) -> Pattern
     def state: (*(Symbol | String), ?inclusive: bool) { () [self: singleton(Lexer)] -> untyped } -> void
     def all_states: () { () [self: singleton(Lexer)] -> untyped } -> void

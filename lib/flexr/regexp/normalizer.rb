@@ -43,8 +43,8 @@ module Flexr
           absence(node)
         when AST::NamedCapture
           AST::NamedCapture.new(opening: node.opening, child: normalize_node(node.child))
-        when AST::Lookahead
-          AST::Lookahead.new(child: normalize_node(node.child), negative: node.negative, loc: node.loc)
+        when AST::Lookahead, AST::Lookbehind
+          node.class.new(child: normalize_node(node.child), negative: node.negative, loc: node.loc)
         else
           raise CompileError, "unknown regexp AST node: #{node.class}"
         end
