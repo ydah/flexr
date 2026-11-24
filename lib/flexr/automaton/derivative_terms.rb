@@ -8,6 +8,13 @@ module Flexr
 
       attr_reader :byte_classes, :expressions, :operations
 
+      def advance(vector, byte, class_id)
+        vector.each_with_object({}) do |(pattern, term), residuals|
+          residual = derivative(term, byte, class_id)
+          residuals[pattern] = residual unless residual == FAIL
+        end.freeze
+      end
+
       def initialize
         @byte_classes = ByteClassSet.new
         @expressions = []
