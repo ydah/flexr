@@ -760,6 +760,38 @@ with `/\p{L}[\p{L}\p{N}_]*/`, and scanning one identifier took 176 ms
 with the disk cache disabled and 25 ms with a populated cache. Each figure
 is the median of five fresh Ruby 4.0.9 processes on the same machine.
 
+## Lrama parser-state contexts
+
+The probe uses the LR action tables for Lrama's own Racc grammar and runs
+its parser on 81 valid upstream fixtures. All 4,242 non-EOF requests had
+their token in the top state's terminal set. The parser has 232 states
+and 22 distinct terminal sets.
+[Pinned Lrama source](https://github.com/ruby/lrama/tree/22de9d99f6402290a637627f3516a1a2db6c9aab)
+
+Use that checkout with the benchmark.
+
+```sh
+bundle exec ruby benchmark/lrama_parser_contexts.rb /tmp/lrama 15
+```
+
+The timing uses a generated direct lexer over 3,359 original lexemes from
+those requests. It joins those lexemes with spaces into one frozen binary
+input and checks every token kind and value on each run. Lrama's C code
+blocks, strings, and other tokens handled by its native lexer contribute
+to the terminal-set check. The timed replay covers punctuation,
+directives, identifiers, integers, and tags.
+
+| Token request | Median | Range |
+| --- | ---: | ---: |
+| Unrestricted | 6.59 ms | 6.37 to 9.67 ms |
+| `parser_state:` | 7.15 ms | 6.78 to 9.25 ms |
+| Manual `expect:` | 29.31 ms | 28.08 to 33.11 ms |
+
+These are 15 interleaved runs per mode on Ruby 4.0.9 on arm64-darwin25.
+The parser-state mode reuses filtered acceptance rows. The manual
+`expect:` mode normalizes the expectations and checks eligibility during
+each scan. Both modes produced the same replayed token sequence.
+
 ## 2026-11-23: Construct runtime DFA transitions on demand
 
 The Unicode identifier fixture took 180.2 ms with eager derivatives and

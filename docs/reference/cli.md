@@ -53,6 +53,7 @@ are usable. The bound also excludes bytes read before the first acceptance.
 | `--accel MODE` | `auto`, `strscan`, `regexp`, `none` | Runtime optimization |
 | `--standalone` | Flag | Generation |
 | `--eval` | Flag | Generation and check |
+| `--lrama-grammar PATH` | Lrama grammar file | Generation |
 | `--table-compression VALUE` | `none`, `rows`, `full` | Generation |
 | `--table-format VALUE` | `literal`, `packed` | Generation |
 | `--max-dfa-states N` | Positive integer | Compilation and comparison search. For `fix`, it limits the comparison search. |
@@ -95,6 +96,7 @@ Options:
       --warn-as-error
       --color WHEN            auto | always | never
       --format FMT            human | json | lrama (tokens only)
+      --lrama-grammar PATH    Precompute parser-state contexts for generation
       --grammar PATH          compare emits with grammar %token declarations (check only)
       --input STRING          trace input (executes SPEC actions)
       --input-file PATH       trace or benchmark input

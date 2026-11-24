@@ -38,6 +38,7 @@ module Flexr
 
     def generate
       ArtifactWriter.ensure_distinct!(@path, @output) if @output
+      ArtifactWriter.ensure_distinct!(@options[:lrama_grammar], @output) if @output && @options[:lrama_grammar]
       # Keep generated source stable when a checkout presents the spec with
       # Windows line endings. All offsets consumed by the parser and
       # passthrough writer are relative to this normalized source.
@@ -58,9 +59,15 @@ module Flexr
       compiled = compile_parsed(parsed)
       @diagnostics = Array(compiled.diagnostics)
       validate_diagnostics!(compiled)
+      contexts = parser_contexts(compiled)
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      if contexts
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support parser-state contexts")' \
+          ' unless defined?(Flexr::Runtime::ParserContexts)'
+        install = "#{guard}\n#{indent}#{install}#{indent}Flexr::Runtime::ParserContexts.install(self, #{ruby_literal(contexts)})\n"
+      end
       shortest_states = parsed.config.dig(:options, :shortest_states)
       if shortest_states
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support shortest-match states")' \
@@ -137,7 +144,7 @@ module Flexr
       end
       scanner = Codegen::Table.new(compiled).source(
         indent: indent, direct: effective_backend(parsed) == :direct, shortest_states: shortest_states,
-        packed: table_format == :packed
+        parser_contexts: !contexts.nil?, packed: table_format == :packed
       )
       install = "#{install}#{scanner}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
@@ -164,8 +171,46 @@ module Flexr
         "# eval: #{@eval_mode}",
         "# standalone: #{standalone?(parsed)}"
       ].join("\n")
-      prefix = standalone?(parsed) ? "raise LoadError, \"flexr requires Ruby 3.4 or newer\" if RUBY_VERSION < \"3.4\"\nrequire \"json\"\nrequire \"monitor\"\n#{embedded_runtime(parsed, compiled)}\n" : ""
+      prefix = standalone_prefix(parsed, compiled, parser_contexts: !contexts.nil?) if standalone?(parsed)
       Source::Passthrough.insert_after_preamble(result, "#{header}\n#{prefix}")
+    end
+
+    def standalone_prefix(parsed, compiled, parser_contexts:)
+      source = embedded_runtime(parsed, compiled, parser_contexts: parser_contexts)
+      "raise LoadError, \"flexr requires Ruby 3.4 or newer\" if RUBY_VERSION < \"3.4\"\nrequire \"json\"\nrequire \"monitor\"\n#{source}\n"
+    end
+
+    def parser_contexts(compiled)
+      rows = lrama_terminal_rows
+      return unless rows
+
+      terminal_sets = []
+      indices = {}
+      states = rows.map do |terminals|
+        set = terminals.uniq.sort.freeze
+        indices[set] ||= begin
+          terminal_sets << set
+          terminal_sets.length - 1
+        end
+      end
+      rule_masks = terminal_sets.map do |terminals|
+        compiled.rules.reduce(0) do |mask, rule|
+          eligible = rule.skip? || rule.channel || if rule.emits
+            rule.emits.intersect?(terminals)
+          else
+            !rule.emit? || terminals.include?(rule.action[1])
+          end
+          eligible ? mask | (1 << rule.index) : mask
+        end
+      end
+      {states: states, terminal_sets: terminal_sets, rule_masks: rule_masks}
+    end
+
+    def lrama_terminal_rows
+      return unless (path = @options[:lrama_grammar])
+
+      require_relative "grammar/lrama"
+      Grammar::Lrama.read(path)
     end
 
     def generated_payload(parsed, compiled)
@@ -355,7 +400,7 @@ module Flexr
       @options.fetch(:table_format, :literal).to_sym
     end
 
-    def embedded_runtime(parsed, compiled)
+    def embedded_runtime(parsed, compiled, parser_contexts: false)
       sources = RUNTIME_SOURCES.dup
       sources << "automaton/end_context.rb" if regexp_end_context?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "automaton/left_context.rb" if regexp_left_context?(compiled)
@@ -380,6 +425,7 @@ module Flexr
       sources.push("automaton/tagged_dfa.rb", "runtime/tagged_captures.rb", "generated/tagged_capture_programs.rb") if
         compiled.rules.any? { |rule| rule.respond_to?(:tagged_capture_programs) && rule.tagged_capture_programs }
       sources << "runtime/tagged_trailing.rb" if effective_backend(parsed) != :firstmatch && compiled.rules.any?(&:trailing)
+      sources << "runtime/parser_contexts.rb" if parser_contexts
       sources.push("dsl/shortest_states.rb", "runtime/shortest_match.rb") if parsed.config.dig(:options, :shortest_states)
       sources << "runtime/delegation.rb" if uses_delegation?(parsed)
       sources << "rules.rb" if parsed.uses_rule_sets

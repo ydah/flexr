@@ -7,6 +7,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Generate parser-state token masks from an Lrama grammar with
+  `--lrama-grammar`, and select them with `next_token(parser_state:)`.
+
 - Opt in to shortest matching per state with `state(:raw, match: :shortest)`.
   Flexr selects the shortest eligible body and leaves trailing context available
   for the next token.

@@ -83,7 +83,7 @@ module Flexr
     extend Rules::Use
 
     def initialize: (String | _Input, ?filename: String?, ?error_mode: Symbol, ?max_token_size: Integer, ?max_lookahead_size: Integer?, ?max_buffer_size: Integer, ?max_state_stack: Integer, ?max_steps: Integer?, ?cancellation: cancellation?, ?retain_input: bool, ?freeze_input: bool, ?chunk_size: Integer) -> void
-    def next_token: (?expect: Array[Symbol]?) -> token?
+    def next_token: (?expect: Array[Symbol]?, ?parser_state: Integer?) -> token?
     def tokens: (?channels: (:default | :all)) -> Array[token]
     def each_token: () -> Enumerator[token, self]
                   | () { (untyped, ?untyped) -> untyped } -> self
