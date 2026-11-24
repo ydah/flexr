@@ -5,72 +5,42 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ## Unreleased
 
+## [2.3.0](https://github.com/ydah/flexr/compare/v2.2.0...v2.3.0) - 2026-11-25
+
 ### Added
 
-- Generate parser-state token masks from an Lrama grammar with
-  `--lrama-grammar`, and select them with `next_token(parser_state:)`.
-
-- Opt in to shortest matching per state with `state(:raw, match: :shortest)`.
-  Flexr selects the shortest eligible body and leaves trailing context available
-  for the next token.
-- Get the valid continuation bytes and shortest completion for a DFA lexical
-  error through `LexError#continuation`. Diagnostics mark the mismatch or EOF.
-- Collect DFA transition coverage from lexer tests. Uncovered transitions
-  include the shortest source and scan offset when a valid example exists.
-- Check token-language overlap, pattern inclusion, and equivalent rule selection
-  in RSpec and Minitest, with shortest counterexamples for violations.
-- Use `flexr diff` to find the shortest input that changes rule selection in
-  a lexical state, including comparisons between longest-match and
-  `firstmatch` lexers.
-- Use `\X` to match one extended grapheme cluster with the vendored Unicode data,
-  including across streamed chunks.
-
-- Inspect DFA backup bounds per lexical state with `flexr explain`, `trace`,
-  and `dot`. Use `flexr check --warn all` to see a repeatable example for
-  states where the number of bytes read after an acceptance is unbounded.
-- Use `\R` to match line breaks, including atomic CRLF pairs.
-
-- Support positive and negative regexp lookahead in streaming lexers, including named captures.
-- Support `\z`, `\Z`, and internal `$` in regexp rules so lexers can distinguish source end from line end.
-
-- Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes.
-  Set it to `nil` to disable the cache.
-
-- Use Ruby-style octal escapes in regexp rules and character classes, including
-  UTF-8 sequences such as `\303\251` and binary bytes such as `\377`.
-
-- Use `--residuals` with `flexr explain` or `flexr trace` to see what a
-  longest-match rule can still match at each DFA state.
+- Regexp rules support positive and negative lookahead and lookbehind, `\b` and `\B`, and `^`, `$`, `\A`, `\z`, and `\Z` inside rules. Assertions use the active source across chunk boundaries. Lookbehind cannot see into a parent input paused by `push_input`.
+- Use `\R` for line breaks, including atomic CRLF, and `\X` for extended grapheme clusters. Regexp rules also accept octal escapes, including multibyte UTF-8 sequences and binary bytes.
+- Set `state(:raw, match: :shortest)` to select the shortest eligible token body in a lexical state. The next token can still read the trailing context.
+- Feed chunks as they arrive with `Lexer.push`, `feed(bytes)`, and `finish`. Chunks can end inside a token, a UTF-8 character, or trailing context.
+- Use `Lexer.incremental` and `document.relex(edit)` to update token streams after byte-range edits. Flexr reuses tokens where it can verify the surrounding context and falls back to a full scan for opaque actions by default.
+- Use `Lexer.parallel_tokens` to scan large Strings with Ractors on CRuby 4.0.6 and later. Eligible table and direct lexers use declarative `emit:` and `skip:` rules. Other configurations use serial scanning.
+- Generate Lrama parser-state token masks with `flexr generate --lrama-grammar` and use them with `next_token(parser_state:)`. `flexr check --lrama-grammar` reports tied terminals with a witness and a grammar state path.
+- Use `flexr diff` to find the shortest input that changes rule selection, including comparisons between longest-match and `firstmatch` lexers. RSpec and Minitest helpers can check language inclusion, overlap, and equivalent rule selection with counterexamples.
+- Collect DFA transition coverage from lexer tests. Reports include a shortest input and scan offset for an uncovered transition when one is reachable.
+- Read valid continuation bytes and the shortest completion from `Flexr::LexError#continuation` for DFA lexical errors. The diagnostic points to the mismatching byte or EOF.
+- Inspect DFA backup bounds with `flexr explain`, `trace`, or `dot`. `flexr check --warn all` can report a repeatable input for unbounded backup, and `--residuals` shows what longest-match rules can still match.
+- Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes. Set it to `nil` to disable the cache.
+- Pass representative input files with `flexr generate --profile GLOB` to tune the generated DFA scanner while preserving its token stream.
+- Use `flexr generate --standalone --target-ruby 2.5` or `--target-ruby 3.0` to ship static DFA lexers for those versions without installing flexr on the target machine. The gem and generator still require Ruby 3.4 or later.
+- Use `flexr export SPEC --to rouge` to generate a `Rouge::RegexLexer` from supported static rules. Use `--token-map` to map token kinds and channels. If Rouge would select a different match, export stops with a witness and the relevant rule location.
 
 ### Changed
 
-- Track `followed_by:` boundaries during longest-match scans of fully buffered
-  input. Overlapping body matches can share trailing-context work.
-- Record named capture positions during longest-match scans for supported
-  patterns. Patterns that exceed tagged DFA limits use regexp replay and
-  report an informational diagnostic.
-- `flexr fix` verifies rule selection before writing. It shows the shortest
-  counterexample when a fix changes the selected token and asks for approval
-  when a fix changes behavior or cannot be verified.
-
-- Build uncached runtime table and direct DFA transitions on demand.
-  The default DFA state limit can be reached while scanning.
-- Take a frozen snapshot of mutable String inputs at `Lexer.new` and
-  `push_input`. Pass `freeze_input: false` to borrow the original String.
-- Build lexer DFAs from regular-expression derivatives for runtime
-  compilation and static generation.
-- Compile UTF-8 Unicode properties from prebuilt automata, reducing setup
-  time for lexers that use them.
-- Reuse failed longest-match scans so overlapping rules such as `/a/` and
-  `/a*b/` can tokenize a long run of `a` in linear time. Regenerate existing
-  scanners to use the optimization.
+- Longest-match scanners reuse failed scans to avoid quadratic rescanning on overlapping rules such as `/a/` and `/a*b/` over a run of `a`. Regenerate existing lexers to pick up the scanner optimization.
+- Runtime table and direct lexers build uncached DFA transitions on demand, and UTF-8 property rules use prebuilt automata. The DFA state limit can now be reported during scanning, even if lexer construction succeeded.
+- Longest-match scanners track supported named captures and `followed_by:` boundaries during scanning. Named captures that exceed the tagged DFA limits continue to use regexp replay and produce an informational diagnostic.
+- `flexr fix` checks rule selection before saving an edit. It shows a shortest counterexample if selection changes and asks for approval when a fix changes behavior or cannot be verified.
 
 ### Fixed
 
-- Preserve ordered `firstmatch` alternatives and greedy repeated groups across
-  input chunks when Flexr can compile an ordered matcher. Rerun `flexr generate`
-  to update existing lexers.
-- Reject overlong encodings, surrogate encodings, and out-of-range code points when a DFA tests a broad Unicode range.
+- Preserve ordered `firstmatch` alternatives and greedy repetition across chunk boundaries when Flexr can compile an ordered matcher. Regenerate existing `firstmatch` lexers to get the fix.
+- Reject overlong UTF-8, surrogate encodings, and out-of-range code points when matching broad Unicode ranges.
+
+### Upgrade notes
+
+- `Lexer.new` and `push_input` now take a frozen snapshot of mutable Strings. If the lexer needs to see later changes to the caller's String, pass `freeze_input: false`.
+- Deploy newly generated non-standalone lexers with the flexr 2.3 runtime when using the new scanner features. Standalone files embed the runtime.
 
 ## [2.2.0](https://github.com/ydah/flexr/compare/v2.1.0...v2.2.0)
 
