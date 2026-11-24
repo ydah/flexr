@@ -7,20 +7,37 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Inspect DFA backup bounds per lexical state with `flexr explain`, `trace`,
+  and `dot`. Use `flexr check --warn all` to see a repeatable example for
+  states where the number of bytes read after an acceptance is unbounded.
+
 - Use `\R` to match line breaks, including atomic CRLF pairs.
+
 - Support positive and negative regexp lookahead in streaming lexers, including named captures.
 - Support `\z`, `\Z`, and internal `$` in regexp rules so lexers can distinguish source end from line end.
+
+- Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes.
+  Set it to `nil` to disable the cache.
+
 - Use Ruby-style octal escapes in regexp rules and character classes, including
   UTF-8 sequences such as `\303\251` and binary bytes such as `\377`.
-- Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes. Set it to `nil` to disable the cache.
+
 - Use `--residuals` with `flexr explain` or `flexr trace` to see what a
   longest-match rule can still match at each DFA state.
 
 ### Changed
 
+- Build uncached runtime table and direct DFA transitions on demand.
+  The default DFA state limit can be reached while scanning.
+- Take a frozen snapshot of mutable String inputs at `Lexer.new` and
+  `push_input`. Pass `freeze_input: false` to borrow the original String.
 - Build lexer DFAs from regular-expression derivatives for runtime
   compilation and static generation.
-- Compile UTF-8 Unicode properties from prebuilt automata, reducing setup time for lexers that use them.
+- Compile UTF-8 Unicode properties from prebuilt automata, reducing setup
+  time for lexers that use them.
+- Reuse failed longest-match scans so overlapping rules such as `/a/` and
+  `/a*b/` can tokenize a long run of `a` in linear time. Regenerate existing
+  scanners to use the optimization.
 
 ### Fixed
 
