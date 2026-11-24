@@ -238,10 +238,10 @@ module Flexr
       end
 
       def dfa_match_lengths(dfa, input, offset: 0, encoding: Encoding::BINARY)
-        state = dfa.start
         cursor = offset
         matches = []
         at_line_start = offset.zero? || input.getbyte(offset - 1) == 0x0a
+        state = dfa.start_for(LeftContext.at(offset, at_line_start))
         loop do
           if encoding != Encoding::UTF_8 || input.byteslice(0, cursor).force_encoding(encoding).valid_encoding?
             dfa.accepts.fetch(state).each do |acceptance|

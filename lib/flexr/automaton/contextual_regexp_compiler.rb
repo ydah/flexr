@@ -9,9 +9,10 @@ module Flexr
         @accept = append(:accept)
       end
 
-      def compile(ast, regexp, invalid_eof: nil)
+      def compile(ast, regexp, invalid_eof: nil, left_context: false)
         entry = build(ast, @accept)
-        Runtime::ContextualRegexp.new(regexp: regexp, invalid_eof: invalid_eof, instructions: @instructions, entry: entry)
+        Runtime::ContextualRegexp.new(regexp: regexp, invalid_eof: invalid_eof, instructions: @instructions, entry: entry,
+                                      left_context: left_context)
       end
 
       private
@@ -24,7 +25,11 @@ module Flexr
       def build(node, following)
         case node
         when Regexp::AST::Empty then following
-        when Regexp::AST::Anchor then node.kind == :bol ? following : predicate(node, following)
+        when Regexp::AST::Anchor
+          return following if node.kind == :bol
+          return append(:left_anchor, node.kind, following) if Regexp::AST.left_anchor?(node)
+
+          predicate(node, following)
         when Regexp::AST::Fail then nil
         when Regexp::AST::ByteRange then append(:byte, node.lo, node.hi, following)
         when Regexp::AST::NotNextLineFeed then append(:not_lf, following)
@@ -48,6 +53,11 @@ module Flexr
 
       def predicate(node, following)
         dfa = language(node)
+        if dfa.starts
+          choices = dfa.starts.map { |state| dfa.accepts.fetch(state).first }.freeze
+          return append(:context_predicate, choices, following)
+        end
+
         acceptance = dfa.accepts.fetch(dfa.start).first
         return unless acceptance
         return following unless acceptance.end_anchor

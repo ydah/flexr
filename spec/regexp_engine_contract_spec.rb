@@ -67,8 +67,7 @@ RSpec.describe "regexp engine contracts" do
   {
     /foo\b:/ => [/foo:/, "surrounding literals already establish the boundary"],
     /foo\Bbar/ => [/foobar/, "surrounding literals already establish the non-boundary"],
-    /\Ga/ => [/a/, "at the start of a rule"],
-    /\Aa/ => [/^a/, "input without line feeds"]
+    /\Ga/ => [/a/, "at the start of a rule"]
   }.each do |original, (rewritten, condition)|
     it "shows a scoped boundary rewrite for #{original.inspect}" do
       expect { Flexr.parse_pattern(original) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
@@ -80,7 +79,7 @@ RSpec.describe "regexp engine contracts" do
 
     it "preserves token text and actions within the scope of the #{original.inspect} rewrite" do
       inputs = ["", "a", "aa", "ba", "ab", "foo:", "foobar", "xfoo:foobar", "éa"]
-      inputs += ["a\na", "foo:\nfoobar"] unless original.source.include?("\\A")
+      inputs += ["a\na", "foo:\nfoobar"]
       reference = Regexp.new("\\G(?:#{original.source})")
       %i[table direct auto firstmatch].each do |backend|
         lexer = Class.new(Flexr::Lexer) do
@@ -114,9 +113,6 @@ RSpec.describe "regexp engine contracts" do
       expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
         expect(error.diagnostic.help).to include("token edges need separate rules or state checks")
       end
-    end
-    expect { Flexr.parse_pattern(/\Aa/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-      expect(error.diagnostic.help).to include("line boundaries differ from string boundaries")
     end
     expect { Flexr.parse_pattern(/a\Gb/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
       expect(error.diagnostic.help).to include('interior \G needs a separate rewrite')
@@ -295,9 +291,6 @@ RSpec.describe "regexp engine contracts" do
   it "reports empty matches, nested anchors, and limits for absence operations" do
     expect { Flexr.compile_pattern(/(?~ab)/) }.to raise_error(Flexr::CompileError) { |error|
       expect(error.diagnostic.code).to eq("FLEXR-E005")
-    }
-    expect { Flexr.compile_pattern(/x(?~^ab)/) }.to raise_error(Flexr::CompileError) { |error|
-      expect(error.diagnostic.code).to eq("FLEXR-E009")
     }
     expect { Flexr.compile_pattern(/x(?~ab)/, options: { max_dfa_states: 3 }) }.to raise_error(Flexr::CompileError) { |error|
       expect(error.diagnostic.code).to eq("FLEXR-E006")

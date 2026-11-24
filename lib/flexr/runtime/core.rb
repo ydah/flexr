@@ -286,6 +286,12 @@ module Flexr
       position == scan_start ? beginning_of_line? : @buffer.getbyte(position - 1) == 0x0a
     end
 
+    def __flexr_dfa_start(dfa, position, scan_start = @position)
+      return dfa.start unless dfa.starts
+
+      dfa.start_for(Automaton::LeftContext.at(position, __flexr_beginning_of_line_at?(position, scan_start)))
+    end
+
     def binary_input
       source = @buffer.source
       source.encoding == ::Encoding::BINARY ? source : source.b

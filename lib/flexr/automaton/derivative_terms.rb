@@ -7,11 +7,11 @@ module Flexr
       EMPTY = 1
       UNIVERSE = 2
 
-      attr_reader :byte_classes, :expressions, :operations
+      attr_reader :byte_classes, :expressions, :operations, :left_sensitive
 
-      def advance(vector, byte, class_id)
+      def advance(vector, byte, class_id, left = nil)
         vector.each_with_object({}) do |(pattern, term), residuals|
-          residual = derivative(term, byte, class_id)
+          residual = derivative(term, byte, class_id, left)
           residuals[pattern] = residual unless residual == FAIL
         end.freeze
       end
@@ -39,7 +39,8 @@ module Flexr
         when Regexp::AST::Fail then FAIL
         when Regexp::AST::NotNextLineFeed
           guard(end_conditions.fetch(EndContext::EOF | EndContext::OTHER), EMPTY)
-        when Regexp::AST::Anchor then right_anchor(node.kind)
+        when Regexp::AST::Anchor
+          Regexp::AST.left_anchor?(node) ? left_anchor(node.kind) : right_anchor(node.kind)
         when Regexp::AST::NamedCapture then from_ast(node.child)
         when Regexp::AST::Lookahead
           @explicit_lookahead = true
@@ -65,9 +66,9 @@ module Flexr
         end
       end
 
-      def accepting_conditions(vector, conditions, ec:, representatives:, &state_limit)
+      def accepting_conditions(vector, conditions, ec:, representatives:, left: nil, &state_limit)
         vector.filter_map do |pattern, term|
-          nullable = nullability(term)
+          nullable = nullability(term, left)
           next if nullable == FAIL
 
           entry = conditions.fetch(pattern)
@@ -81,8 +82,9 @@ module Flexr
           condition = if !@explicit_lookahead && (mask = @masks_by_predicate[allowed])
             EndContext.condition(mask)
           else
-            lookahead = @lookaheads.fetch(allowed) do
-              @lookaheads[allowed] = build_lookahead(allowed, ec, representatives, &state_limit)
+            key = left ? [allowed, left] : allowed
+            lookahead = @lookaheads.fetch(key) do
+              @lookaheads[key] = build_lookahead(allowed, ec, representatives, left, &state_limit)
             end
             next unless lookahead
 
@@ -96,18 +98,29 @@ module Flexr
         @context_dependent_end || @explicit_lookahead || @graphs.any?(&:context_dependent_end?)
       end
 
-      def derivative(id, byte, class_id)
-        (@derivatives[id] ||= [])[class_id] ||= derive(id, byte, class_id)
+      def derivative(id, byte, class_id, left = nil)
+        cache = @derivatives[id] ||= []
+        cache = cache[left] ||= [] if left
+        cache[class_id] ||= derive(id, byte, class_id, left)
       end
 
       private
 
-      def nullability(id)
-        @nullable.fetch(id)
+      def nullability(id, left)
+        value = @nullable.fetch(id)
+        value.is_a?(Array) ? value.fetch(left) : value
       end
 
-      def term(kind, parts)
-        @ids[[kind, *parts]] || intern(kind, parts, yield)
+      def term(kind, parts, &)
+        @ids[[kind, *parts]] || intern(kind, parts, conditional_nullability(&))
+      end
+
+      # Each entry describes the suffix that permits an empty match at that left context.
+      def conditional_nullability(&predicate)
+        return predicate.call(nil) unless @left_sensitive
+
+        values = LeftContext::STATES.map(&predicate)
+        values.all? { |value| value == values.first } ? values.first : values.freeze
       end
 
       def guard(predicate, body)
@@ -117,22 +130,22 @@ module Flexr
         kind, nested, tail = @expressions.fetch(body)
         return guard(intersection([predicate, nested]), tail) if kind == :guard
 
-        term(:guard, [predicate, body]) { intersection([predicate, nullability(body)]) }
+        term(:guard, [predicate, body]) { |left| intersection([predicate, nullability(body, left)]) }
       end
 
       # A lookahead accepts an input suffix if its body can match any prefix,
       # including an empty one when that body's own assertions hold.
       def prefix(body)
         return FAIL if body == FAIL
-        return UNIVERSE if nullability(body) == UNIVERSE
+        return UNIVERSE if @nullable.fetch(body) == UNIVERSE
 
-        term(:prefix, [body]) { nullability(nullability(body)) }
+        term(:prefix, [body]) { |left| nullability(nullability(body, left), left) }
       end
 
       def first_ending(term)
         return term if [FAIL, EMPTY].include?(term)
 
-        intern(:first_ending, [term], nullability(term))
+        intern(:first_ending, [term], @nullable.fetch(term))
       end
 
       def predicate_for(condition)
@@ -157,6 +170,21 @@ module Flexr
         return FAIL if row == false
 
         intern(:suffix_graph, [id, state], graph.eof.fetch(state) ? UNIVERSE : FAIL)
+      end
+
+      def enable_left_context
+        @left_sensitive = true
+        @byte_classes.add_range(0x0a, 0x0a)
+      end
+
+      def left_anchor(kind)
+        enable_left_context
+        after_lf = FAIL
+        if kind == :line_start
+          @explicit_lookahead = true
+          after_lf = end_conditions.fetch(EndContext::LF | EndContext::OTHER)
+        end
+        intern(:left, [kind], [UNIVERSE, after_lf, FAIL].freeze)
       end
 
       def right_anchor(kind)
@@ -192,19 +220,21 @@ module Flexr
         end
       end
 
-      def build_lookahead(start, ec, representatives)
+      def build_lookahead(start, ec, representatives, left)
+        start = [start, left] if left
         ids = { start => 0 }
         states = [start]
         transitions = []
         eof = []
         index = 0
         while index < states.length
-          term = states.fetch(index)
+          term, context = states.fetch(index)
           row = if [FAIL, UNIVERSE].include?(term)
             term == UNIVERSE
           else
             representatives.each_with_index.map do |byte, class_id|
-              target = derivative(term, byte, class_id)
+              target = derivative(term, byte, class_id, context)
+              target = [target, LeftContext.after(byte)] if context
               ids[target] ||= begin
                 yield states.length, "lookahead"
                 states.push(target).length - 1
@@ -212,7 +242,7 @@ module Flexr
             end.freeze
           end
           transitions << row
-          eof << (nullability(term) == UNIVERSE)
+          eof << (nullability(term, context) == UNIVERSE)
           index += 1
         end
         Lookahead.new(transitions: transitions, eof: eof, ec: ec) if eof.any?
@@ -243,7 +273,7 @@ module Flexr
         return EMPTY if parts.empty?
         return parts.first if parts.one?
 
-        term(:sequence, parts) { intersection(parts.map { |id| nullability(id) }) }
+        term(:sequence, parts) { |left| intersection(parts.map { |id| nullability(id, left) }) }
       end
 
       def union(ids)
@@ -263,8 +293,8 @@ module Flexr
         return identity if parts.empty?
         return parts.first if parts.one?
 
-        term(kind, parts) do
-          predicates = parts.map { |id| nullability(id) }
+        term(kind, parts) do |left|
+          predicates = parts.map { |id| nullability(id, left) }
           kind == :union ? union(predicates) : intersection(predicates)
         end
       end
@@ -273,56 +303,59 @@ module Flexr
         term = @expressions.fetch(id)
         return term.fetch(1) if term.first == :negate
 
-        term(:negate, [id]) { negate(nullability(id)) }
+        term(:negate, [id]) { |left| negate(nullability(id, left)) }
       end
 
       def repeat(id, minimum, maximum)
         return EMPTY if id == EMPTY || maximum&.zero?
         return minimum.zero? ? EMPTY : FAIL if id == FAIL
 
-        nullable = nullability(id)
+        nullable = @nullable.fetch(id)
         minimum = 0 if nullable == UNIVERSE
         return id if minimum == 1 && maximum == 1
 
         intern(:repeat, [id, minimum, maximum], minimum.zero? ? UNIVERSE : nullable)
       end
 
-      def derive(id, byte, class_id)
+      def derive(id, byte, class_id, left)
         kind, *parts = @expressions.fetch(id)
         case kind
-        when :empty, :fail then FAIL
+        when :empty, :fail, :left then FAIL
         when :guard
           predicate, body = parts
-          guard(derivative(predicate, byte, class_id), derivative(body, byte, class_id))
+          guard(derivative(predicate, byte, class_id, left), derivative(body, byte, class_id, left))
         when :first_ending
           body = parts.first
-          before_ending = derivative(negate(nullability(body)), byte, class_id)
-          guard(before_ending, first_ending(derivative(body, byte, class_id)))
+          before_ending = derivative(negate(nullability(body, left)), byte, class_id, left)
+          guard(before_ending, first_ending(derivative(body, byte, class_id, left)))
         when :prefix
           body = parts.first
-          union([derivative(nullability(body), byte, class_id), prefix(derivative(body, byte, class_id))])
+          union([derivative(nullability(body, left), byte, class_id, left), prefix(derivative(body, byte, class_id, left))])
         when :byte then byte.between?(*parts) ? EMPTY : FAIL
-        when :sequence then derive_sequence(parts, byte, class_id)
-        when :union then union(parts.map { |part| derivative(part, byte, class_id) })
-        when :intersection then intersection(parts.map { |part| derivative(part, byte, class_id) })
-        when :negate then negate(derivative(parts.first, byte, class_id))
+        when :sequence then derive_sequence(parts, byte, class_id, left)
+        when :union then union(parts.map { |part| derivative(part, byte, class_id, left) })
+        when :intersection then intersection(parts.map { |part| derivative(part, byte, class_id, left) })
+        when :negate then negate(derivative(parts.first, byte, class_id, left))
         when :repeat
           part, minimum, maximum = parts
-          head = derivative(part, byte, class_id)
+          head = derivative(part, byte, class_id, left)
           return FAIL if head == FAIL
 
           remaining = [minimum - 1, 0].max
           maximum -= 1 if maximum
           consumed = sequence([head, repeat(part, remaining, maximum)])
-          return consumed if remaining.zero? || nullability(part) == FAIL
+          return consumed if remaining.zero? || nullability(part, left) == FAIL
 
-          skipped = derivative(nullability(part), byte, class_id)
+          skipped = derivative(nullability(part, left), byte, class_id, left)
           union([consumed, guard(skipped, sequence([head, repeat(part, 0, maximum)]))])
         when :suffix_graph
           graph, state = parts
           input = @suffix_graphs.fetch(graph)
           row = input.transitions.fetch(state)
           suffix_term(graph, row.fetch(input.ec.fetch(byte)))
+        when :entry
+          graph_id = parts.first
+          derivative(graph_term(graph_id, @graphs.fetch(graph_id).start_for(left)), byte, class_id, left)
         when :graph
           graph_id, state = parts
           target = @graphs.fetch(graph_id).transition(state, byte)
@@ -330,16 +363,16 @@ module Flexr
         end
       end
 
-      def derive_sequence(parts, byte, class_id)
+      def derive_sequence(parts, byte, class_id, left)
         choices = []
         condition = UNIVERSE
         parts.each_with_index do |part, index|
-          head = derivative(part, byte, class_id)
+          head = derivative(part, byte, class_id, left)
           choices << guard(condition, sequence([head, *parts.drop(index + 1)])) unless head == FAIL
-          nullable = nullability(part)
+          nullable = nullability(part, left)
           break if nullable == FAIL
 
-          condition = intersection([condition, derivative(nullable, byte, class_id)]) unless nullable == UNIVERSE
+          condition = intersection([condition, derivative(nullable, byte, class_id, left)]) unless nullable == UNIVERSE
           break if condition == FAIL
         end
         union(choices)
@@ -355,9 +388,13 @@ module Flexr
             @explicit_lookahead ||= dfa.lookahead?
             end_conditions
           end
+          enable_left_context if dfa.starts
           @graphs.push(dfa).length - 1
         end
-        graph_term(id, @graphs.fetch(id).start)
+        dfa = @graphs.fetch(id)
+        return graph_term(id, dfa.start) unless dfa.starts
+
+        term(:entry, [id]) { |left| nullability(graph_term(id, dfa.start_for(left)), left) }
       end
 
       def graph_term(id, state)

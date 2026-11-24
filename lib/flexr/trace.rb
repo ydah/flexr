@@ -61,7 +61,10 @@ module Flexr
       else
         "longest"
       end
-      bytes = @lexer.buffer.byteslice(start...ending) if @derivatives
+      if @derivatives
+        bytes = @lexer.buffer.byteslice(start...ending)
+        path = residual_path(state, start, bytes)
+      end
       yield
       pending = @lexer.instance_variable_get(:@pending)
       bytes ||= @lexer.buffer.byteslice(start...ending)
@@ -70,7 +73,7 @@ module Flexr
                rule: rule.index, patterns: rule.patterns.map(&:inspect), reason: reason,
                action: pending ? "emit" : "skip", token: pending&.inspect }
       step[:channel] = rule.channel if rule.channel
-      step[:dfa_path] = residual_path(state, start, bytes) if @derivatives
+      step[:dfa_path] = path if @derivatives
       @steps << step
     end
 
@@ -125,7 +128,7 @@ module Flexr
     def residual_path(state_name, start, bytes)
       machine = @derivatives.machines.fetch(state_name)
       dfa = machine.dfa
-      state = dfa.start
+      state = @lexer.__flexr_dfa_start(dfa, start, start)
       entries = [{ byte_offset: start, state: state, residuals: machine.residuals.describe(state) }]
       bytes.each_byte.with_index(1) do |byte, offset|
         state = dfa.transition(state, byte)
@@ -169,11 +172,16 @@ module Flexr
         matches = rule.patterns.each_with_index.filter_map do |pattern, index|
           condition = rule.pattern_conditions.fetch(index)
           next if condition.bol_only && !@lexer.beginning_of_line?
-          regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern))
-          reference = Regexp::Matcher.reference?(regexp, encoding: @config.encoding, unicode: @config.options[:unicode] == true)
-          match = Regexp::Matcher.match(regexp, subject, encoding: @config.encoding,
-                                       unicode: @config.options[:unicode] == true, reference: reference)
-          [match[0].bytesize, condition] if match&.begin(0)&.zero?
+          context = rule.contextual_patterns&.[](index)
+          match = if context
+            context.match(@lexer, rule, start)
+          else
+            regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern))
+            reference = Regexp::Matcher.reference?(regexp, encoding: @config.encoding, unicode: @config.options[:unicode] == true)
+            Regexp::Matcher.match(regexp, subject, encoding: @config.encoding,
+                                 unicode: @config.options[:unicode] == true, reference: reference)
+          end
+          [match[0].bytesize, condition] if match && (context || match.begin(0).zero?)
         end
         length, condition = matches.max_by(&:first)
         next unless length
@@ -203,7 +211,7 @@ module Flexr
     end
 
     def walk(dfa, start, scan_start: start)
-      state = dfa.start
+      state = @lexer.__flexr_dfa_start(dfa, start, scan_start)
       cursor = start
       loop do
         if @lexer.utf8_boundary?(cursor)

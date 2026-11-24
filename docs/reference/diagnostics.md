@@ -136,7 +136,7 @@ without a readable caller file still report the regeneration guidance.
 | `FLEXR-E005` | A rule can match an empty string | Make it consuming or opt into `allow_empty_match` |
 | `FLEXR-E006` | DFA state limit exceeded | Raise `max_dfa_states` or split rules |
 | `FLEXR-E007` | Bounded repetition exceeds 1000 | Use a smaller bound or split the rule |
-| `FLEXR-E009` | The beginning-of-line anchor is outside the start of the outermost rule pattern | Move `^` or split alternatives |
+| `FLEXR-E009` | A pattern value begins with `^` | Use the anchored regexp directly as a rule pattern |
 | `FLEXR-E010` | Prism reported source syntax errors | Fix Ruby syntax in the specification |
 | `FLEXR-E011` | Encoding is not UTF-8 or binary | Change `encoding` |
 | `FLEXR-E012` | Runtime token exceeded the size limit | Raise `max_token_size` or split the token |

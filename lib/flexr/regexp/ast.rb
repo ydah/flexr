@@ -65,12 +65,16 @@ module Flexr
         end
       end
 
-      def self.right_context?(node)
+      def self.left_anchor?(node)
+        node.is_a?(Anchor) && %i[source_start line_start].include?(node.kind)
+      end
+
+      def self.contextual?(node)
         case node
         when Lookahead then true
-        when Anchor then %i[eof final_eol line_end].include?(node.kind)
-        when Seq, Alt then node.children.any? { |child| right_context?(child) }
-        when Star, Repeat, Absence, NamedCapture then right_context?(node.child)
+        when Anchor then node.kind != :bol && node.kind != :eol
+        when Seq, Alt then node.children.any? { |child| contextual?(child) }
+        when Star, Repeat, Absence, NamedCapture then contextual?(node.child)
         else false
         end
       end

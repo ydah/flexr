@@ -43,7 +43,7 @@ module Flexr
       starting, ending = capture_data.byteoffset(capture)
       return unless starting
 
-      origin = @capture_match.start_pos
+      origin = @capture_match.start_pos - capture_data.byteoffset(0).first
       [origin + starting, origin + ending]
     rescue IndexError
       raise ArgumentError, "unknown delegated capture #{capture.inspect}"

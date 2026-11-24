@@ -153,7 +153,7 @@ module Flexr
         return empty_dfa if normalized.empty?
 
         dfa = determinize(normalized, lazy: lazy, &)
-        empty = dfa.accepts.fetch(dfa.start).first
+        empty = empty_acceptance(dfa)
         if empty && !@spec.options[:allow_empty_match]
           rule = rules.find { |candidate| candidate.index == empty.rule_index }
           reject_empty_match!(Diagnostics.rule_label(rule), location: rule.location)
@@ -199,7 +199,7 @@ module Flexr
         when :literal
           regexp = pattern_regexp(pattern.operands.first)
           ast = parse_regexp(regexp)
-          if contains_left_anchor?(ast)
+          if Regexp::AST.anchors(ast).any? { |anchor| anchor.kind == :bol }
             diagnostic = Diagnostics.error("FLEXR-E009", "the beginning-of-line anchor is not allowed inside pattern values",
                                            help: "use an anchored regexp directly as a rule pattern")
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
@@ -237,7 +237,7 @@ module Flexr
         else
           DFAOperations.product(left, right, intersection: %i[intersection upto].include?(operation), &limit)
         end
-        result = if operation == :upto && product.context_dependent_end? && @construction == :derivative
+        result = if operation == :upto && (product.starts || product.context_dependent_end?) && @construction == :derivative
           body = Regexp::AST::FirstEnding.new(Regexp::AST::EmbeddedDFA.new(product))
           value_dfa(body, expression)
         else
@@ -271,7 +271,7 @@ module Flexr
 
         accepts = product.accepts.map { |labels| labels.reject { |label| label.rule_index == overlap_probe.rule_index } }
         filtered = DFA.new(transitions: product.transitions, accepts: accepts, ec: product.ec,
-                           class_count: product.class_count, start: product.start, rule_ids: [0])
+                           class_count: product.class_count, start: product.start, starts: product.starts, rule_ids: [0])
         [filtered, true]
       end
 
@@ -364,24 +364,7 @@ module Flexr
         else
           Regexp::AST::Seq.new(children: children, loc: nil)
         end
-        if contains_left_anchor?(body)
-          diagnostic = Diagnostics.error(
-            "FLEXR-E009", "the beginning-of-line anchor is only valid at the outermost pattern start",
-            help: "split alternatives into separate rules or move ^ to the start of the pattern"
-          )
-          raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
-        end
         [body, bol_only, end_anchor]
-      end
-
-      def contains_left_anchor?(node)
-        return node.kind == :bol if node.is_a?(Regexp::AST::Anchor)
-        return contains_left_anchor?(node.child) if
-          node.is_a?(Regexp::AST::Repeat) || node.is_a?(Regexp::AST::Star) || node.is_a?(Regexp::AST::Absence) ||
-            node.is_a?(Regexp::AST::Lookahead) || node.is_a?(Regexp::AST::NamedCapture)
-        return false unless node.respond_to?(:children)
-
-        node.children.any? { |child| contains_left_anchor?(child) }
       end
 
       def subset_construction(nfa, ec, class_count, operation:)
@@ -507,13 +490,13 @@ module Flexr
                                              help: "use backend :table, :direct, or :auto")
               raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
             end
-            right_context = Regexp::AST.right_context?(ast)
-            if right_context && (@spec.backend == :firstmatch || !regexp.names.empty?)
+            contextual = Regexp::AST.contextual?(ast)
+            if contextual && (@spec.backend == :firstmatch || !regexp.names.empty?)
               contexts = rule.contextual_patterns ||= []
               contexts[index] = prepare_contextual_regexp(rule, regexp, ast)
             end
             prepare_capture_pattern(rule, index, regexp) unless regexp.names.empty?
-            next if @spec.options[:allow_empty_match] || right_context
+            next if @spec.options[:allow_empty_match] || contextual
             next unless has_absence ? Regexp::AST.nullable?(ast) : regexp.match?("")
 
             reject_empty_match!(Diagnostics.rule_label(rule))
@@ -534,18 +517,21 @@ module Flexr
         end
         body = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, prebuilt_properties: false).normalize
         options = { encoding: encoding, unicode: @spec.options[:unicode] == true }
-        reference = contextual_reference(regexp, options, terminal_line_end ? "$" : "")
-        if Regexp::AST.anchors(ast).any? { |anchor| anchor.kind != :bol }
+        anchors = Regexp::AST.anchors(ast)
+        left_context = anchors.any? { |anchor| Regexp::AST.left_anchor?(anchor) }
+        start = left_context ? '\G' : '\A'
+        reference = contextual_reference(regexp, options, start, terminal_line_end ? "$" : "")
+        if anchors.any? { |anchor| %i[line_start line_end eof final_eol].include?(anchor.kind) }
           before_lf = terminal_line_end ? '(?=\n)' : ""
-          invalid_eof = contextual_reference(regexp, options.merge(invalid_eof: true), before_lf)
+          invalid_eof = contextual_reference(regexp, options.merge(invalid_eof: true), start, before_lf)
         end
         compiler = ContextualRegexpCompiler.new { |state| enforce_state_limit!(state, "regexp context") }
-        compiler.compile(body, reference, invalid_eof: invalid_eof)
+        compiler.compile(body, reference, invalid_eof: invalid_eof, left_context: left_context)
       end
 
-      def contextual_reference(regexp, options, ending)
+      def contextual_reference(regexp, options, start, ending)
         reference = Unicode::ReferenceRegexp.compiled(regexp, **options)
-        ::Regexp.new("\\A(?:#{reference.source})#{ending}", reference.options)
+        ::Regexp.new("#{start}(?:#{reference.source})#{ending}", reference.options)
       end
 
       def prepare_capture_pattern(rule, index, regexp)
@@ -578,7 +564,7 @@ module Flexr
         end
         dfa = compile_pattern_value(pattern, rule)
         reject_empty_match!(Diagnostics.rule_label(rule)) if
-          !@spec.options[:allow_empty_match] && dfa.accepts.fetch(dfa.start).any?
+          !@spec.options[:allow_empty_match] && empty_acceptance(dfa)
         @pattern_dfas[[rule.index, index]] = dfa
       end
 
@@ -586,20 +572,28 @@ module Flexr
         if rule.trailing.is_a?(Pattern)
           rule.trailing_dfa = compile_pattern_value(rule.trailing, rule)
           reject_empty_match!("trailing context for #{Diagnostics.rule_label(rule)}") if
-            rule.trailing_dfa.accepts.fetch(rule.trailing_dfa.start).any?
+            empty_acceptance(rule.trailing_dfa)
           return
         end
         return unless rule.trailing.is_a?(::Regexp)
 
         ast = parse_regexp(rule.trailing)
-        return unless Regexp::AST.absence?(ast) || Regexp::AST.next_byte_assertion?(ast) || Regexp::AST.right_context?(ast)
+        return unless Regexp::AST.absence?(ast) || Regexp::AST.next_byte_assertion?(ast) || Regexp::AST.contextual?(ast)
         @active_rules = [rule]
         body, bol_only, end_anchor = strip_anchors(ast)
         condition = Acceptance.new(rule_index: 0, pattern_index: 0, bol_only: bol_only, end_anchor: end_anchor)
         rule.trailing_dfa = determinize([[normalize_regexp(rule.trailing, body), condition]])
-        return unless rule.trailing_dfa.accepts.fetch(rule.trailing_dfa.start).any?
+        return unless empty_acceptance(rule.trailing_dfa)
 
         reject_empty_match!("trailing context for #{Diagnostics.rule_label(rule)}")
+      end
+
+      def empty_acceptance(dfa)
+        (dfa.starts || [dfa.start]).each do |state|
+          acceptance = dfa.accepts.fetch(state).first
+          return acceptance if acceptance
+        end
+        nil
       end
 
       def reject_empty_match!(label, location: nil)

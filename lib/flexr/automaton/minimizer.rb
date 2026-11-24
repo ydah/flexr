@@ -72,9 +72,9 @@ module Flexr
       def rebuild(dfa, partitions, dead)
         groups = group_ids(partitions)
         dead_group = groups.fetch(dead)
-        start_group = groups.fetch(dfa.start)
+        start_groups = (dfa.starts || [dfa.start]).map { |start| groups.fetch(start) }
         representatives = partitions.map { |partition| partition.find { |state| state != dead } }
-        order = reachable_groups(dfa, groups, representatives, start_group, dead_group)
+        order = reachable_groups(dfa, groups, representatives, start_groups, dead_group)
         yield order.map { |group| representatives.fetch(group) } if block_given?
         index = order.each_with_index.to_h
         transitions = order.map do |group|
@@ -88,7 +88,7 @@ module Flexr
         accepts = order.map { |group| dfa.accepts.fetch(representatives.fetch(group)) }
         rule_ids = accepts.flatten.map(&:rule_index).uniq.sort
         DFA.new(transitions: transitions, accepts: accepts, ec: dfa.ec, class_count: dfa.class_count,
-                start: 0, rule_ids: rule_ids)
+                start: 0, starts: dfa.starts && start_groups.map { |group| index.fetch(group) }, rule_ids: rule_ids)
       end
 
       def group_ids(partitions)
@@ -97,15 +97,15 @@ module Flexr
         end
       end
 
-      def reachable_groups(dfa, groups, representatives, start_group, dead_group)
+      def reachable_groups(dfa, groups, representatives, start_groups, dead_group)
         result = []
-        queue = [start_group]
+        queue = start_groups.uniq
         seen = {}
         cursor = 0
         while cursor < queue.length
           group = queue.fetch(cursor)
           cursor += 1
-          next if seen[group] || (group == dead_group && group != start_group)
+          next if seen[group] || (group == dead_group && !start_groups.include?(group))
 
           seen[group] = true
           result << group

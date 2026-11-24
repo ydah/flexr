@@ -27,6 +27,7 @@ module Flexr
         if invalid_eof
           Regexp::AST.anchors(ast).each do |anchor|
             anchor.kind = :before_lf if anchor.kind == :line_end
+            anchor.kind = :line_start_before_invalid if anchor.kind == :line_start
             anchor.kind = :never if %i[eof final_eol].include?(anchor.kind)
           end
         end
@@ -72,7 +73,7 @@ module Flexr
         when Regexp::AST::NamedCapture then "(?#{node.opening}#{source_for(node.child, binary: binary)})"
         when Regexp::AST::Absence
           child = source_for(node.child, binary: binary)
-          return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child) && !Regexp::AST.right_context?(node.child)
+          return "(?:(?!)#{child})" if Regexp::AST.nullable?(node.child) && !Regexp::AST.contextual?(node.child)
 
           "(?~(?:#{child}))"
         else
@@ -82,6 +83,9 @@ module Flexr
 
       def anchor_source(kind)
         case kind
+        when :source_start then '\A'
+        when :line_start then "^"
+        when :line_start_before_invalid then '(?:^|(?<=\n)\z)'
         when :line_end then "$"
         when :eof then '\z'
         when :final_eol then '\Z'

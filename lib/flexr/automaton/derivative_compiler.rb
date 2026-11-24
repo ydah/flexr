@@ -15,7 +15,8 @@ module Flexr
         conditions = patterns.map(&:last)
         operation = terms.operations.join(" and ") unless terms.operations.empty?
         ec, count = terms.byte_classes.build
-        if lazy
+        # shortcut: left-context states compile eagerly until lazy DFAs track the source position.
+        if lazy && !terms.left_sensitive
           require_relative "lazy_derivative_dfa"
           return LazyDerivativeDFA.new(start, conditions, terms, ec, count) do |size|
             state_limit.call(size, operation)
@@ -23,19 +24,30 @@ module Flexr
         end
 
         representatives = ec.each_index.uniq { |byte| ec.fetch(byte) }
-        states = [start]
-        ids = { start => 0 }
+        if terms.left_sensitive
+          states = LeftContext::STATES.map do |left|
+            vector = left == LeftContext::OTHER ? start.reject { |pattern, _| conditions.fetch(pattern).bol_only }.freeze : start
+            [vector, left]
+          end
+          starts = states.each_index.to_a
+          starts.drop(1).each { |state| state_limit.call(state, operation) }
+        else
+          states = [start]
+        end
+        ids = states.each_with_index.to_h
         transitions = []
         accepts = []
 
         index = 0
         while index < states.length
-          vector = states.fetch(index)
-          accepts << terms.accepting_conditions(vector, conditions, ec: ec, representatives: representatives, &state_limit)
+          vector, left = states.fetch(index)
+          accepts << terms.accepting_conditions(vector, conditions, ec: ec, representatives: representatives,
+                                               left: left, &state_limit)
           transitions << representatives.each_with_index.map do |byte, class_id|
-            successor = terms.advance(vector, byte, class_id)
+            successor = terms.advance(vector, byte, class_id, left)
             next if successor.empty?
 
+            successor = [successor, LeftContext.after(byte)] if left
             ids[successor] ||= begin
               state_limit.call(states.length, operation)
               states.push(successor).length - 1
@@ -45,12 +57,15 @@ module Flexr
         end
 
         dfa = DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: count,
-                      start: 0, rule_ids: accepts.flatten.map(&:rule_index))
+                      start: 0, starts: starts, rule_ids: accepts.flatten.map(&:rule_index))
         return dfa unless minimize
         return Minimizer.minimize(dfa) unless retain_residuals
 
         Minimizer.minimize(dfa) do |representatives|
-          vectors = representatives.map { |state| states.fetch(state) }
+          vectors = representatives.map do |state|
+            vector = states.fetch(state)
+            starts ? vector.first : vector
+          end
           @residuals = DerivativeResiduals.new(terms.expressions, vectors, conditions)
         end
       end

@@ -98,7 +98,7 @@ RSpec.describe "state diagnostic locations" do
   end
 
   it "preserves rule locations when machine compilation fails within a state" do
-    statement = "rule(/a^b/, skip: true)"
+    statement = "rule(pattern(/^a/), skip: true)"
     write_spec("  option :allow_empty_match\n  state(:word) { #{statement} }")
 
     status, diagnostics = check

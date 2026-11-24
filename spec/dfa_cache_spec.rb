@@ -115,7 +115,7 @@ RSpec.describe "compiled DFA cache" do
     source = File.join(File.dirname(@directory), "lexer.flexr.rb")
     File.write(source, <<~RUBY)
       class CacheFixture < Flexr::Lexer
-        rule(/^(?<name>a)/, followed_by: /b/) { emit :FIRST, captures[:name] }
+        rule(/\\A(?<name>a)/, followed_by: /b/) { emit :FIRST, captures[:name] }
         rule(/[ab]/, emit: :LETTER)
         state :other do
           rule(/c/, emit: :OTHER)

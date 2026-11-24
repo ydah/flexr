@@ -104,8 +104,8 @@ module Flexr
 
       def scan_with_conditions(machine, position, expected, simple: false)
         buffer = @lexer.buffer
+        state = @lexer.__flexr_dfa_start(machine.dfa, position)
         memo_states = backup_memo_states_for(machine)
-        state = machine.dfa.start
         best = nil
         cursor = position
         best = consider_acceptances(machine, state, cursor, position, buffer, best, expected) if @config.options[:allow_empty_match]
@@ -163,7 +163,7 @@ module Flexr
         paths = (@fast_paths ||= {}.compare_by_identity)
         @fast_path = paths.fetch(machine) do
           rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
-          paths[machine] = !@config.options[:allow_empty_match] && !machine.dfa.context_dependent_end? &&
+          paths[machine] = !@config.options[:allow_empty_match] && !machine.dfa.starts && !machine.dfa.context_dependent_end? &&
             rules.none?(&:trailing) && rules.none?(&:capture_patterns) &&
             rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
         end
@@ -175,7 +175,7 @@ module Flexr
         return 0 unless rule.trailing
 
         dfa = rule.trailing_dfa || trailing_dfa(rule.trailing)
-        state = dfa.start
+        state = @lexer.__flexr_dfa_start(dfa, position)
         cursor = position
         longest = 0 if trailing_accept?(dfa, state, buffer, cursor, position, rule)
         while buffer.ensure_available?(cursor + 1)

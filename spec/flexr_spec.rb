@@ -91,13 +91,6 @@ RSpec.describe Flexr do
     expect(lexer_class.new("!b").tokens).to eq([[:CHAR, "!"], [:X, "b"]])
   end
 
-  it "diagnoses beginning-of-line anchors nested inside regexp alternation" do
-    [/^a|b/, /a|^b/].each do |pattern|
-      expect { Flexr.compile_pattern(pattern) }
-        .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E009") }
-    end
-  end
-
   it "consumes the separator in mixed inline regexp options" do
     lexer_class = Class.new(Flexr::Lexer) do
       rule(/(?i-m:a)/) { emit :X }
@@ -154,11 +147,9 @@ RSpec.describe Flexr do
     expect(child.__flexr_rules.length).to eq(1)
   end
 
-  it "reports parser limit and anchor diagnostics as compile errors" do
+  it "reports parser limit diagnostics as compile errors" do
     expect { Flexr::Regexp::Parser.new("a{1001}").parse }
       .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E007") }
-    expect { Flexr::Regexp::Parser.new("a^b").parse }
-      .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E009") }
   end
 
   it "parses public patterns and rejects malformed regexp sources" do

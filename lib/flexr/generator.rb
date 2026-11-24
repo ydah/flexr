@@ -78,11 +78,14 @@ module Flexr
           ' unless defined?(Flexr::Runtime::Captures)'
         install = "#{guard}\n#{indent}#{install}"
       end
-      if compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? } ||
-          compiled.rules.any? { |rule| rule.trailing_dfa&.context_dependent_end? || rule.capture_patterns&.any?(Array) }
-        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support next-byte conditions")' \
-          ' unless Flexr::Automaton::Acceptance.method_defined?(:valid_end?)'
-        install = "#{guard}\n#{indent}#{install}"
+      if regexp_end_context?(compiled) || compiled.rules.any? { |rule| rule.capture_patterns&.any?(Array) }
+        capability = if regexp_end_context?(compiled)
+          "defined?(Flexr::Automaton::EndContext)"
+        else
+          "Flexr::Automaton::Acceptance.method_defined?(:valid_end?)"
+        end
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support next-byte conditions")'
+        install = "#{guard} unless #{capability}\n#{indent}#{install}"
       end
       if compiled.rules.any?(&:contextual_patterns)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support ordered regexp context")' \
@@ -92,6 +95,11 @@ module Flexr
       if compiled.rules.any? { |rule| rule.contextual_patterns&.any? { |pattern| pattern&.invalid_eof } }
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp source-end assertions")'
         guard += ' unless defined?(Flexr::Runtime::ContextualRegexp) && Flexr::Runtime::ContextualRegexp.method_defined?(:invalid_eof)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
+      if regexp_left_context?(compiled)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp left context")' \
+          ' unless defined?(Flexr::Automaton::LeftContext)'
         install = "#{guard}\n#{indent}#{install}"
       end
       if regexp_lookahead?(compiled)
@@ -254,6 +262,7 @@ module Flexr
         **dfa.acceptance_data, ec: dfa.ec, class_count: dfa.class_count,
         state_count: dfa.states, start: dfa.start, rule_ids: dfa.rule_ids
       }
+      data[:starts] = dfa.starts if dfa.starts
       pack_tables = %i[rows full].include?(compression) || table_format == :packed
       if direct
         data[:direct] = direct
@@ -293,6 +302,8 @@ module Flexr
 
     def embedded_runtime(parsed, compiled)
       sources = RUNTIME_SOURCES.dup
+      sources << "automaton/end_context.rb" if regexp_end_context?(compiled) || compiled.rules.any?(&:contextual_patterns)
+      sources << "automaton/left_context.rb" if regexp_left_context?(compiled)
       sources << "automaton/lookahead.rb" if regexp_lookahead?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "runtime/contextual_regexp.rb" if compiled.rules.any?(&:contextual_patterns)
       sources.insert(sources.index("runtime/checkpoint.rb"), "runtime/backup_memo.rb") if
@@ -311,6 +322,16 @@ module Flexr
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")
+    end
+
+    def regexp_end_context?(compiled)
+      compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? } ||
+        compiled.rules.any? { |rule| rule.trailing_dfa&.context_dependent_end? }
+    end
+
+    def regexp_left_context?(compiled)
+      compiled.machines.values.any? { |machine| machine.dfa.starts } ||
+        compiled.rules.any? { |rule| rule.trailing_dfa&.starts || rule.contextual_patterns&.any?(&:left_context) }
     end
 
     def regexp_lookahead?(compiled)
@@ -440,6 +461,7 @@ module Flexr
       when Runtime::ContextualRegexp
         definition = value.to_h
         definition.delete(:invalid_eof) unless value.invalid_eof
+        definition.delete(:left_context) unless value.left_context
         "::Flexr::Runtime::ContextualRegexp.new(**#{ruby_literal(definition)})"
       when Pattern
         "::Flexr::Pattern.__flexr_restore(#{value.operation.inspect}, #{ruby_literal(value.operands)}, #{ruby_literal(value.name)})"
