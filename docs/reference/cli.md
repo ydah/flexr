@@ -45,7 +45,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--eval` | Flag | Generation and check |
 | `--table-compression VALUE` | `none`, `rows`, `full` | Generation |
 | `--table-format VALUE` | `literal`, `packed` | Generation |
-| `--max-dfa-states N` | Positive integer | Compilation and the verification search in `diff` and `fix` |
+| `--max-dfa-states N` | Positive integer | Compilation and comparison search. For `fix`, it limits the comparison search. |
 | `-W, --warn LEVEL` | `all`, `default`, `none` | Check and generation |
 | `--warn-as-error` | Flag | Check and generation |
 | `--color WHEN` | `auto`, `always`, `never` | Human diagnostics |
