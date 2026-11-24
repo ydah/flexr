@@ -97,10 +97,12 @@ RSpec.describe "parser-state token selection" do
 
   it "refuses to overwrite the grammar when it is also the output path" do
     with_parser_sources do |source, grammar, _directory|
+      original = grammar_source.gsub("\n", "\r\n").b
+      File.binwrite(grammar, original)
       generator = Flexr::Generator.new(source, output: grammar, options: {lrama_grammar: grammar})
 
       expect { generator.generate }.to raise_error(ArgumentError, /refusing to overwrite input file/)
-      expect(File.binread(grammar)).to eq(grammar_source)
+      expect(File.binread(grammar)).to eq(original)
     end
   end
 
