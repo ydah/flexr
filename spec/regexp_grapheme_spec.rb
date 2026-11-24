@@ -2,7 +2,6 @@
 
 require "open3"
 require "stringio"
-require "timeout"
 
 RSpec.describe "regexp grapheme clusters" do
   it "matches every extended cluster in the Unicode 15.1 grapheme break test" do
@@ -53,8 +52,11 @@ RSpec.describe "regexp grapheme clusters" do
       rule(/./m, emit: :SCALAR)
     end
 
-    tokens = Timeout.timeout(15) { lexer.new("ae\u0301").tokens }
-    expect(tokens).to eq([[:CLUSTER, "a"], [:CLUSTER, "e\u0301"]])
+    scan = Thread.new { lexer.new("ae\u0301").tokens }
+    expect(scan.join(15)).to be(scan), "lexer did not finish compiling within 15 seconds"
+    expect(scan.value).to eq([[:CLUSTER, "a"], [:CLUSTER, "e\u0301"]])
+  ensure
+    scan.kill.join if scan&.alive?
   end
 
   it "uses vendored boundaries when selecting and replaying named captures" do
