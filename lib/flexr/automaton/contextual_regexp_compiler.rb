@@ -9,9 +9,10 @@ module Flexr
         @accept = append(:accept)
       end
 
-      def compile(ast, regexp, **)
+      def compile(ast, regexp, replay: nil, **)
+        @replay = replay
         entry = build(ast, @accept)
-        Runtime::ContextualRegexp.new(regexp: regexp, instructions: @instructions, entry: entry, **)
+        Runtime::ContextualRegexp.new(regexp: regexp, instructions: @instructions, entry: entry, replay: replay, **)
       end
 
       def lookbehind_width(node)
@@ -52,6 +53,7 @@ module Flexr
         when Regexp::AST::Empty then following
         when Regexp::AST::Anchor
           return following if node.kind == :bol
+          return append(:line_end, following) if @replay == :ruby && node.kind == :eol
           return append(:left_anchor, node.kind, following) if Regexp::AST.left_anchor?(node)
 
           predicate(node, following)

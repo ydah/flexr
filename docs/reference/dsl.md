@@ -225,8 +225,13 @@ Selects `:table`, `:direct`, `:auto`, or `:firstmatch`
 backend. `:table`, `:direct`, and `:auto` preserve the stable longest-match
 contract. `:firstmatch` selects the first matching rule in source order,
 even when a later rule could consume more text. Within a rule, alternation
-also follows Ruby regexp order. Choose it when rule priority is intentional;
-the compiler reports possible differences from longest-match as `FLEXR-W010`.
+follows Ruby regexp order. When Flexr can compile an ordered matcher, the lexer
+reads the bytes needed to resolve an earlier alternative before choosing a
+shorter one. Patterns that use Ruby's native case folding can still depend on
+chunk boundaries. Rerun `flexr generate` to update existing lexers.
+
+Choose `:firstmatch` when rule priority is intentional. The compiler reports
+possible differences from longest-match as `FLEXR-W010`.
 The default remains `:table`.
 
 ## `token_kind(name)`

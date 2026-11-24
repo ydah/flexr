@@ -3,20 +3,23 @@
 module Flexr
   module Runtime
     class ContextualRegexp < Data.define(:regexp, :invalid_eof, :instructions, :entry, :left_context,
-                                         :history_bytes, :invalid_left, :invalid_both, :capture_names)
+                                         :history_bytes, :invalid_left, :invalid_both, :capture_names, :replay)
       def initialize(regexp:, instructions:, entry:, invalid_eof: nil, left_context: false, history_bytes: nil,
-                     invalid_left: nil, invalid_both: nil, capture_names: nil)
+                     invalid_left: nil, invalid_both: nil, capture_names: nil, replay: nil)
         super(regexp: regexp.freeze, invalid_eof: invalid_eof&.freeze,
               instructions: instructions.each(&:freeze).freeze, entry: entry, left_context: left_context,
               history_bytes: history_bytes, invalid_left: invalid_left&.freeze, invalid_both: invalid_both&.freeze,
-              capture_names: capture_names&.each(&:freeze)&.freeze)
+              capture_names: capture_names&.each(&:freeze)&.freeze, replay: replay)
       end
 
       def match(lexer, rule, starting, ending: nil)
         cursor = Cursor.new(lexer, rule, starting, ending, instructions)
-        return unless cursor.walk(entry, starting, ending)
+        endpoint = replay ? cursor.walk_streamed(entry, starting) : cursor.walk(entry, starting, ending)
+        return unless endpoint
 
         subject = cursor.subject
+        return regexp.match(subject, 0) if replay == :ruby
+
         reference = (invalid_eof if cursor.invalid_end?) || regexp
         prefix = ""
         if history_bytes
@@ -92,6 +95,66 @@ module Flexr
             end
           end
           [" #{suffix}", true]
+        end
+
+        def walk_streamed(entry, position)
+          active = [entry]
+          pending = []
+          seen = {}
+          accepted_at = nil
+          until active.empty?
+            active.reverse_each { |address| pending.push(address, 0) }
+            active.clear
+            seen.clear
+            byte = false
+            until pending.empty?
+              idle_loops = pending.pop
+              address = pending.pop
+              while address
+                key = address + (idle_loops * @instructions.length)
+                break if seen[key]
+
+                seen[key] = true
+                kind, first, second, following = @instructions.fetch(address)
+                case kind
+                when :accept
+                  # Only higher-priority paths already waiting for the next byte can replace this match.
+                  accepted_at = position
+                  pending.clear
+                  break
+                when :byte
+                  byte = read(position, nil) if byte == false
+                  active << following if byte&.between?(first, second)
+                  break
+                when :choice
+                  pending.push(second, idle_loops)
+                  address = first
+                when :loop
+                  pending.push(second, idle_loops)
+                  # These are the innermost loops entered since the last byte was consumed.
+                  idle_loops += 1
+                  address = first
+                when :loop_end
+                  address = idle_loops.zero? ? first : second
+                  idle_loops -= 1 unless idle_loops.zero?
+                when :line_end
+                  byte = read(position, nil) if byte == false
+                  break unless byte.nil? || byte == 0x0a
+
+                  address = first
+                when :not_lf
+                  byte = read(position, nil) if byte == false
+                  break if byte == 0x0a
+
+                  address = first
+                else
+                  raise "unexpected streaming regexp instruction: #{kind}"
+                end
+              end
+            end
+            position += 1
+          end
+          accepted_at
         end
 
         def walk(entry, starting, ending, assertion_origin = nil)

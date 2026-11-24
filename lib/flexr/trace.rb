@@ -173,6 +173,7 @@ module Flexr
           condition = rule.pattern_conditions.fetch(index)
           next if condition.bol_only && !@lexer.beginning_of_line?
           context = rule.contextual_patterns&.[](index)
+          context = nil if context&.replay
           match = if context
             context.match(@lexer, rule, start)
           else

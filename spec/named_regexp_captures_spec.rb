@@ -72,6 +72,21 @@ RSpec.describe "named regexp captures" do
     expect(outcomes(firstmatch, "ab")).to all(eq([%w[CAPTURE a], %w[B b]]))
   end
 
+  it "keeps firstmatch alternate captures across one-byte chunks in every execution mode" do
+    source = <<~RUBY
+      require "flexr"
+      class NamedCaptureLexer < Flexr::Lexer
+        backend :firstmatch
+        rule(/(?<heading>^header)/) { emit :HEADING, captures[:heading] }
+        rule(/(?<long>abc)|(?<short>a)/) { emit :WORD, [captures[:long], captures[:short]] }
+        rule(/./m, emit: :OTHER)
+      end
+    RUBY
+
+    expected = [%w[HEADING header], ["WORD", ["abc", nil]], ["WORD", [nil, "a"]], %w[OTHER b]]
+    expect(outcomes(source, "headerabcab")).to all(eq(expected))
+  end
+
   it "replays only the selected rule's captures after applying expectations and priority" do
     source = <<~RUBY
       require "flexr"
