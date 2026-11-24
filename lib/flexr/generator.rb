@@ -39,6 +39,12 @@ module Flexr
     end
 
     def generate
+      @legacy_ruby = if (target = @options[:target_ruby])
+        raise ArgumentError, "--target-ruby requires static generation; remove --eval" if @eval_mode
+
+        require_relative "source/legacy_ruby"
+        Source::LegacyRuby.new(target)
+      end
       ArtifactWriter.ensure_distinct!(@path, @output) if @output
       ArtifactWriter.ensure_distinct!(@options[:lrama_grammar], @output) if @output && @options[:lrama_grammar]
       # Keep generated source stable when a checkout presents the spec with
@@ -58,6 +64,11 @@ module Flexr
     private
 
     def generate_static(parsed)
+      if @legacy_ruby
+        raise ArgumentError, "--target-ruby requires --standalone" unless standalone?(parsed)
+
+        @legacy_ruby.validate_source!(parsed, backend: @options.fetch(:backend, parsed.config[:backend]).to_sym)
+      end
       compiled = compile_parsed(parsed)
       @diagnostics = Array(compiled.diagnostics)
       validate_diagnostics!(compiled)
@@ -148,6 +159,7 @@ module Flexr
         indent: indent, direct: effective_backend(parsed) == :direct, shortest_states: shortest_states,
         parser_contexts: !contexts.nil?, packed: table_format == :packed
       )
+      scanner = @legacy_ruby.lower(scanner) if @legacy_ruby
       install = "#{install}#{scanner}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
@@ -173,12 +185,23 @@ module Flexr
         "# eval: #{@eval_mode}",
         "# standalone: #{standalone?(parsed)}"
       ].join("\n")
+      header += "\n# target-ruby: #{@legacy_ruby.version}" if @legacy_ruby
       prefix = standalone_prefix(parsed, compiled, parser_contexts: !contexts.nil?) if standalone?(parsed)
-      Source::Passthrough.insert_after_preamble(result, "#{header}\n#{prefix}")
+      artifact = Source::Passthrough.insert_after_preamble(result, "#{header}\n#{prefix}")
+      @legacy_ruby&.validate_syntax!(artifact, path: parsed.path, generated: true)
+      artifact
     end
 
     def standalone_prefix(parsed, compiled, parser_contexts:)
       source = embedded_runtime(parsed, compiled, parser_contexts: parser_contexts)
+      if @legacy_ruby
+        target = @legacy_ruby.version
+        helpers = %w[source/legacy_ruby_record.rb]
+        helpers << "source/legacy_ruby_fiber.rb" if target == "2.5"
+        helpers << "source/legacy_ruby_match.rb" if compiled.rules.any? { |rule| rule.capture_patterns || rule.contextual_patterns }
+        source = @legacy_ruby.lower("#{read_runtime_sources(helpers)}\n#{source}")
+        return "raise LoadError, \"flexr requires Ruby #{target} or newer\" if RUBY_VERSION < \"#{target}\"\nrequire \"json\"\nrequire \"monitor\"\n#{source}\n"
+      end
       "raise LoadError, \"flexr requires Ruby 3.4 or newer\" if RUBY_VERSION < \"3.4\"\nrequire \"json\"\nrequire \"monitor\"\n#{source}\n"
     end
 
@@ -405,7 +428,8 @@ module Flexr
     end
 
     def embedded_runtime(parsed, compiled, parser_contexts: false)
-      sources = RUNTIME_SOURCES + INCREMENTAL_RUNTIME_SOURCES + PARALLEL_RUNTIME_SOURCES
+      sources = RUNTIME_SOURCES.dup
+      sources.concat(INCREMENTAL_RUNTIME_SOURCES, PARALLEL_RUNTIME_SOURCES) unless @legacy_ruby
       sources << "automaton/end_context.rb" if regexp_end_context?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "automaton/left_context.rb" if regexp_left_context?(compiled)
       sources << "runtime/lookbehind.rb" if regexp_lookbehind?(compiled)
@@ -434,6 +458,10 @@ module Flexr
       sources.push("dsl/shortest_states.rb", "runtime/shortest_match.rb") if parsed.config.dig(:options, :shortest_states)
       sources << "runtime/delegation.rb" if uses_delegation?(parsed)
       sources << "rules.rb" if parsed.uses_rule_sets
+      read_runtime_sources(sources)
+    end
+
+    def read_runtime_sources(sources)
       sources.map do |relative|
         File.binread(File.expand_path(relative, __dir__)).gsub(/\r\n?/, "\n")
       end.join("\n")

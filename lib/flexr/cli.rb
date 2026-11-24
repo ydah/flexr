@@ -9,7 +9,7 @@ require_relative "migration"
 
 module Flexr
   module CLI
-    COMMANDS = %w[check fix diff stats tokens dot explain trace skeleton bench import new].freeze
+    COMMANDS = %w[generate check fix diff stats tokens dot explain trace skeleton bench import new].freeze
     EXIT_OK = 0
     EXIT_FAILURE = 1
     EXIT_USAGE = 2
@@ -108,6 +108,10 @@ module Flexr
           options.set(:accel, required_argument!(args, argument).to_sym)
         when "--standalone"
           options.set(:standalone, true)
+        when "--target-ruby"
+          raise ArgumentError, "--target-ruby is only valid for generation" unless command == :generate
+
+          options.set(:target_ruby, required_argument!(args, argument))
         when "--eval"
           raise ArgumentError, "#{command} requires a statically readable spec" if %i[fix diff].include?(command)
           options.eval_mode = true
@@ -801,13 +805,14 @@ module Flexr
                flexr diff LEFT.rb RIGHT.rb [options]
                flexr new NAME --parser lrama|racc
 
-        Commands: check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
+        Commands: generate, check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
         Options:
           -o, --output PATH          generated output path
           -b, --backend NAME         table | direct | firstmatch | auto
               --token-kind KIND      array | struct | yield
               --accel MODE            auto | strscan | regexp | none
               --standalone
+              --target-ruby VERSION   Generate standalone Ruby for 3.0 or 2.5
               --eval
               --table-compression VALUE  none | rows | full
               --table-format VALUE       literal | packed
