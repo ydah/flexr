@@ -179,6 +179,28 @@ actually enabled and marks unavailable builds explicitly. It does not replace
 the baseline with a different engine's measurements. Use
 `ruby benchmark/matrix.rb --input-file PATH --iterations 3` for a custom input.
 
+### Fixed workload matrix
+
+Use `--workloads` to run the same corpus bytes as frozen and mutable strings
+for JSON, TOML, GraphQL, SQL, and the Ruby subset. Each result records the
+specification and input hashes, the input mode, and the measured Ruby engine.
+Before reporting a cell, the harness compares complete tokens from runtime,
+generated, and standalone scanners. The standalone check runs in a separate
+Ruby process. Parity checks run outside the timed scans.
+
+```sh
+ruby -Ilib benchmark/matrix.rb --workloads --iterations 10
+FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 10
+```
+
+The gate takes the median of three generated/runtime samples for every cell.
+A ratio below `1.0` or an unavailable engine fails the check and identifies
+its workload, input mode, and engine in the JSON report. Run this gate on
+the reference machine. For a single custom input, pass `--input-mode frozen`
+or `--input-mode mutable` to select the String mode explicitly.
+
+### Scan phase profiling
+
 `bundle exec rake bench:profile` provides an optional TracePoint profile without
 an extra gem. It excludes class loading and compilation after a warm-up run and
 reports non-overlapping time in scanning, actions, token handling, locations,
@@ -635,6 +657,49 @@ Runtime, generated, and standalone produced identical frozen-input
 token sequences on all three engines for the five stock workloads
 and the three direct variants.
 
+## Optional lexer feature costs
+
+Run the feature benchmark on a quiet machine. Each case uses the same
+input and checks emitted token types and values with and without the
+feature in both runtime and generated scanners. It reports bytes per
+second and time spent preparing each lexer. This includes static
+generation for the generated scanner and runtime compilation for the
+runtime scanner. The throughput measurement excludes both.
+
+```sh
+ruby -Ilib benchmark/feature_costs.rb --iterations 10 > feature-baseline.json
+ruby -Ilib benchmark/feature_costs.rb --iterations 10 --baseline feature-baseline.json
+```
+
+Capture the baseline on the revision before changing a feature. Run the
+same benchmark script against both revisions by pointing `-I` at each
+revision's `lib` directory. Keep the machine, Ruby build, JIT, and input
+mode fixed. The benchmark refuses baseline results with different input
+or token output. Use `--input-mode mutable` to benchmark mutable strings.
+
+The regression check compares the scanners that leave the feature unused.
+Each must reach at least 99% of its baseline throughput. The report shows
+which feature and scanner failed. The measurements with the feature
+enabled quantify its cost for the fixture without affecting that check.
+
+On 2026-11-23, Ruby 4.0.9 on arm64-darwin25 measured these ranges with
+three warmup scans and three samples of three timed scans. The range
+covers frozen and mutable inputs on the interpreter, YJIT, and ZJIT.
+The ratios compare throughput with the feature enabled to throughput
+of the fixture that leaves it unused. All 54 comparisons matched the
+token stream.
+
+| Feature | Runtime | Generated |
+| --- | ---: | ---: |
+| Captures | 0.13× to 0.36× | 0.44× to 0.89× |
+| Channels | 0.46× to 0.92× | 0.70× to 0.98× |
+| `expect:` | 0.34× to 0.75× | 0.30× to 2.03× |
+| Keyword tables | 0.98× to 1.01× | 0.98× to 1.04× |
+| Rule priority | 1.00× to 1.09× | 0.96× to 1.02× |
+| Pattern algebra | 0.96× to 1.01× | 0.83× to 1.06× |
+| Delegation | 0.08× to 0.18× | 0.15× to 0.50× |
+| Indentation | 0.53× to 0.86× | 0.64× to 0.82× |
+| `push_input` | 0.21× to 0.50× | 0.28× to 0.69× |
 ## 2026-11-23: Compiled DFA disk cache
 
 Fresh Ruby 4.0.9 processes on arm64-darwin25 compiled a lexer with
@@ -726,3 +791,126 @@ These are 15 interleaved runs per mode on Ruby 4.0.9 on arm64-darwin25.
 The parser-state mode reuses filtered acceptance rows. The manual
 `expect:` mode normalizes the expectations and checks eligibility during
 each scan. Both modes produced the same replayed token sequence.
+
+## 2026-11-23: Construct runtime DFA transitions on demand
+
+The Unicode identifier fixture took 180.2 ms with eager derivatives and
+19.4 ms with on-demand derivatives. Both measurements use five fresh
+Ruby 4.0.9 processes on arm64-darwin25, with the disk cache disabled. The
+timer covers requiring flexr, defining the lexer, and checking the first
+token.
+
+These ratios compare warm on-demand runtime throughput with eager runtime
+throughput. Each ratio divides the median of three on-demand runs by the
+median of three eager runs. Runs alternate which compiler goes first.
+The [workload matrix](https://github.com/ydah/flexr/pull/105) checks identical
+typed tokens across runtime, generated, and standalone modes in each cell.
+
+| Workload | Frozen interpreter | Frozen YJIT | Frozen ZJIT | Mutable interpreter | Mutable YJIT | Mutable ZJIT |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| JSON | 1.042 | 1.064 | 1.017 | 1.006 | 1.112 | 0.996 |
+| TOML | 1.072 | 1.250 | 1.063 | 1.072 | 1.133 | 1.123 |
+| GraphQL | 1.088 | 1.181 | 1.065 | 1.051 | 1.068 | 1.015 |
+| SQL | 1.102 | 1.241 | 1.095 | 1.062 | 1.175 | 1.077 |
+| Ruby subset | 1.089 | 1.179 | 1.059 | 1.038 | 1.132 | 1.048 |
+
+Mutable JSON on ZJIT measured 0.996 in the full matrix and 1.016 in a
+separate seven-run comparison with the same implementation.
+## 2026-11-23: Frozen and mutable workload baseline
+
+Ruby 4.0.9 on arm64-darwin25 measured the scanners from `f718499` using the
+fixed workload matrix. Each cell is the median of three samples, each with
+three warmup and three timed scans. The values show generated/runtime
+throughput for frozen input followed by mutable input. All 30 cells matched
+complete tokens across runtime, generated, and standalone lexers.
+
+| Workload | Interpreter | YJIT | ZJIT |
+|---|---:|---:|---:|
+| json | 1.219x / 1.144x | 1.230x / 0.587x | 1.119x / 0.238x |
+| toml | 0.797x / 0.918x | 0.592x / 0.426x | 0.867x / 0.241x |
+| graphql | 0.872x / 0.960x | 0.654x / 0.454x | 0.904x / 0.278x |
+| sql | 0.844x / 0.932x | 0.647x / 0.415x | 0.886x / 0.246x |
+| ruby_subset | 0.841x / 0.944x | 0.672x / 0.442x | 0.903x / 0.252x |
+
+The `1.0x` gate passed in 4 of 30 cells. The lowest ratio was
+`0.238x`. Use this matrix to locate slow workloads and compare changes on
+the same machine.
+
+```sh
+FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 3
+```
+
+## 2026-11-23: Snapshot mutable String input
+
+The same Ruby 4.0.9 machine and fixed workload matrix compared mutable
+inputs before and after taking one frozen snapshot per lexer. Each cell
+is the median of three samples with three warmup and three timed scans per
+sample. Runtime, generated, and standalone token parity passed in all 30
+cells, including frozen inputs. This table shows the generated/runtime
+ratios for inputs supplied as mutable Strings.
+
+| Workload | Interpreter | YJIT | ZJIT |
+|---|---:|---:|---:|
+| json | 1.144x to 1.215x | 0.587x to 1.221x | 0.238x to 1.109x |
+| toml | 0.918x to 0.810x | 0.426x to 0.592x | 0.241x to 0.871x |
+| graphql | 0.960x to 0.874x | 0.454x to 0.665x | 0.278x to 0.918x |
+| sql | 0.932x to 0.849x | 0.415x to 0.652x | 0.246x to 0.883x |
+| ruby_subset | 0.944x to 0.842x | 0.442x to 0.659x | 0.252x to 0.902x |
+
+All six JSON cells met the `1.0x` threshold. Across the full matrix the
+lowest ratio was `0.592x`. The other four workloads still need
+attention before the gate can pass.
+
+## 2026-11-23: Reuse failed longest-match continuations
+
+For rules `/a/` and `/a*b/` on a frozen string of `a` bytes, Ruby 4.0.9 on
+arm64-darwin25 returned the expected single-byte tokens at each input size.
+Times include collecting every token, with compilation outside the timed
+region. Each value is the median of three runs.
+
+| Input bytes | Seconds |
+| ---: | ---: |
+| 125,000 | 0.187 |
+| 250,000 | 0.365 |
+| 500,000 | 0.737 |
+| 1,000,000 | 1.490 |
+
+The five workload specifications were also measured against the combined
+backup-analysis and snapshot baseline (`a31b39f`). Three alternating
+baseline and candidate pairs per condition used three warmup and three
+timed scans. Each column shows the lowest median candidate-to-baseline
+throughput ratio across frozen and mutable inputs and the interpreter,
+YJIT, and ZJIT.
+
+| Workload | Runtime | Generated |
+| --- | ---: | ---: |
+| JSON | 1.0556x | 1.0046x |
+| TOML | 1.0681x | 1.1938x |
+| GraphQL | 1.0437x | 1.1364x |
+| SQL | 1.0652x | 1.1910x |
+| Ruby subset | 1.0521x | 1.1749x |
+
+Every condition was within the 1% regression threshold. The workload
+matrix separately confirmed typed token parity across runtime, generated,
+and standalone scanners in all 30 conditions.
+
+## 2026-11-23: Reuse the generated scan layout
+
+Ruby 4.0.9 on arm64-darwin25 measured the five workload specifications
+with `FLEXR_BENCHMARK_CHECK_MATRIX=1 ruby -Ilib benchmark/matrix.rb --workloads --iterations 3`.
+The generated scanner materializes one dense layout per lexical DFA for
+small tables and reuses it across tokens. Explicit packed artifacts keep
+their packed lookup path. Each cell reports generated/runtime throughput
+on frozen input followed by mutable input. Runtime, generated, and
+standalone token streams matched in all 30 conditions.
+
+| Workload | Interpreter | YJIT | ZJIT |
+| --- | ---: | ---: | ---: |
+| json | 1.231x / 1.196x | 1.166x / 1.201x | 1.008x / 1.011x |
+| toml | 1.234x / 1.232x | 1.068x / 1.037x | 1.033x / 1.034x |
+| graphql | 1.226x / 1.221x | 1.076x / 1.082x | 0.961x / 0.976x |
+| sql | 1.179x / 1.218x | 1.059x / 1.055x | 1.039x / 1.045x |
+| ruby_subset | 1.222x / 1.262x | 1.216x / 1.220x | 1.061x / 1.054x |
+
+The 1.0x gate passed in 28 conditions. GraphQL on ZJIT measured
+0.961x for frozen input and 0.976x for mutable input.

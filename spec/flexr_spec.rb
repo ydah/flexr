@@ -212,7 +212,7 @@ RSpec.describe Flexr do
     FileUtils.rm_f(output) if output
   end
 
-  it "uses acceleration in generated binary lexers" do
+  it "uses acceleration in generated binary lexers that borrow input" do
     path = File.join(Dir.tmpdir, "flexr-generated-accel-#{Process.pid}.flexr.rb")
     output = "#{path}.generated.rb"
     File.write(path, <<~RUBY)
@@ -231,7 +231,7 @@ RSpec.describe Flexr do
     load output
 
     expect(Flexr::Automaton::Accel).to receive(:extract).and_call_original
-    expect(BinaryAccelFixture.new("a".b * 100).tokens).to eq([[:A, "a".b * 100]])
+    expect(BinaryAccelFixture.new("a".b * 100, freeze_input: false).tokens).to eq([[:A, "a".b * 100]])
   ensure
     Object.send(:remove_const, :BinaryAccelFixture) if Object.const_defined?(:BinaryAccelFixture, false)
     FileUtils.rm_f(path) if path
