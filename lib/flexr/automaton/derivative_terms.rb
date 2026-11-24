@@ -69,6 +69,10 @@ module Flexr
         end.uniq
       end
 
+      def context_dependent_end?
+        @nullable.any? { |mask| !mask.zero? && EndContext.condition(mask).is_a?(Integer) }
+      end
+
       def derivative(id, byte, class_id)
         (@derivatives[id] ||= [])[class_id] ||= derive(id, byte, class_id)
       end

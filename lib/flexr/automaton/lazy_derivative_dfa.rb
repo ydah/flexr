@@ -29,6 +29,10 @@ module Flexr
 
       def direct = nil
 
+      def context_dependent_end?
+        @terms.context_dependent_end?
+      end
+
       def transition(state, byte)
         class_id = @ec.fetch(byte)
         targets = @transitions.fetch(state)
