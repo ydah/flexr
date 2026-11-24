@@ -13,11 +13,14 @@ module Flexr
   end
 
   class LexError < Error
-    attr_reader :line, :text
+    Continuation = Data.define(:byte_pos, :expected_bytes, :suffix, :eof)
 
-    def initialize(message, filename: nil, byte_pos: nil, line: nil, text: nil, diagnostic: nil)
+    attr_reader :line, :text, :continuation
+
+    def initialize(message, filename: nil, byte_pos: nil, line: nil, text: nil, diagnostic: nil, continuation: nil)
       @line = line
       @text = text
+      @continuation = continuation
       super(message, diagnostic: diagnostic, filename: filename, byte_pos: byte_pos)
     end
   end

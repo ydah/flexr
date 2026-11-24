@@ -72,6 +72,12 @@ Flexr::Lexer.new("12", cancellation: PublicApiTypecheck::ContextCancellation.new
 lexer.on_error = ->(_error) { :skip }
 lexer.on_error = PublicApiTypecheck::ErrorHandler.new
 lexer.on_error = PublicApiTypecheck::ErrorHandler.new.method(:call)
+lexer.on_error = lambda do |error|
+  if (continuation = error.continuation)
+    puts continuation.byte_pos, continuation.expected_bytes, continuation.suffix, continuation.eof
+  end
+  :skip
+end
 lexer.on_error = nil
 # @type var bookmark: Flexr::Runtime::Checkpoint
 bookmark = lexer.checkpoint

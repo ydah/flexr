@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "token_diff/right_context"
-require_relative "token_diff/utf8"
+require_relative "utf8"
 require_relative "token_diff/firstmatch"
 require_relative "token_diff/inclusion"
 

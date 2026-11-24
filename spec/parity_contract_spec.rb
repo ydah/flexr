@@ -77,6 +77,7 @@ RSpec.describe "runtime and generated parity" do
         lexer.new(JSON.parse(ARGV.fetch(2)), filename: "input.txt", **JSON.parse(ARGV.fetch(3), symbolize_names: true)).tokens
         outcome = { kind: "tokens" }
       rescue => error
+        continuation = error.continuation if error.respond_to?(:continuation)
         outcome = {
           kind: "error", class: error.class.name, message: error.message,
           code: error.respond_to?(:diagnostic) && error.diagnostic&.code,
@@ -86,7 +87,9 @@ RSpec.describe "runtime and generated parity" do
           filename: error.respond_to?(:filename) && error.filename,
           byte_pos: error.respond_to?(:byte_pos) && error.byte_pos,
           line: error.respond_to?(:line) && error.line,
-          text: error.respond_to?(:text) && error.text
+          text: error.respond_to?(:text) && error.text,
+          continuation: continuation && [continuation.byte_pos, continuation.expected_bytes.map { |range| [range.begin, range.end] },
+                                         continuation.suffix&.bytes, continuation.eof]
         }
       end
       puts JSON.generate(outcome)
@@ -113,6 +116,24 @@ RSpec.describe "runtime and generated parity" do
     expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
     expect(outcomes[:runtime]).to include("code" => "FLEXR-E021", "byte_pos" => 5, "location" => [5, 5],
                                           "note" => "rule /a/", "rule" => 1)
+  end
+
+  %i[table direct].each do |backend|
+    it "reports the same incomplete-token continuation for #{backend} in all execution modes" do
+      source = <<~RUBY
+        require "flexr"
+        class ContinuationParityLexer < Flexr::Lexer
+          backend :#{backend}
+          rule(/ab[cd]/, emit: :WORD)
+        end
+      RUBY
+
+      outcomes = error_outcomes_for(source, "ContinuationParityLexer", "ab")
+      expect(outcomes.values.uniq.one?).to be(true), outcomes.inspect
+      expect(outcomes[:runtime]).to include(
+        "byte_pos" => 0, "location" => [2, 2], "continuation" => [2, [[0x63, 0x64]], [0x63], true]
+      )
+    end
   end
 
   it "scans octal byte escapes in runtime, generated, and standalone lexers" do

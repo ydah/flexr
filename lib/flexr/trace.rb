@@ -23,7 +23,7 @@ module Flexr
 
       private
 
-      def handle_unmatched_byte
+      def handle_unmatched_byte(...)
         @flexr_trace.record_unmatched { super }
       end
     end

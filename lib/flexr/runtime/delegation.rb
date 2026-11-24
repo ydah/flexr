@@ -97,6 +97,9 @@ module Flexr
       rebased.instance_variable_set(:@filename, @filename)
       rebased.instance_variable_set(:@byte_pos, error.byte_pos && (byte + error.byte_pos))
       rebased.instance_variable_set(:@line, error.line && (line + error.line - 1))
+      if (continuation = error.continuation)
+        rebased.instance_variable_set(:@continuation, continuation.with(byte_pos: byte + continuation.byte_pos))
+      end
       if (diagnostic = error.diagnostic) && diagnostic.location
         diagnostic = diagnostic.dup
         diagnostic.location = diagnostic.location.map { |position| byte + position }

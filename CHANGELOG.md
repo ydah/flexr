@@ -7,6 +7,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Get the valid continuation bytes and shortest completion for a DFA lexical
+  error through `LexError#continuation`. Diagnostics mark the mismatch or EOF.
 - Collect DFA transition coverage from lexer tests. Uncovered transitions
   include the shortest source and scan offset when a valid example exists.
 - Check token-language overlap, pattern inclusion, and equivalent rule selection
