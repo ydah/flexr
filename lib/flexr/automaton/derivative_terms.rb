@@ -10,6 +10,13 @@ module Flexr
 
       attr_reader :byte_classes, :expressions, :operations, :left_sensitive
 
+      def advance(vector, byte, class_id, left = nil)
+        vector.each_with_object({}) do |(pattern, term), residuals|
+          residual = derivative(term, byte, class_id, left)
+          residuals[pattern] = residual unless residual == FAIL
+        end.freeze
+      end
+
       def initialize
         @byte_classes = ByteClassSet.new
         @expressions = []
@@ -90,6 +97,10 @@ module Flexr
           end
           entry.dup.tap { |copy| copy.end_anchor = condition }
         end.uniq
+      end
+
+      def context_dependent_end?
+        @context_dependent_end || @explicit_lookahead || @graphs.any?(&:context_dependent_end?)
       end
 
       def derivative(id, byte, class_id, left = nil)
@@ -285,6 +296,7 @@ module Flexr
 
       def end_conditions
         @end_conditions ||= begin
+          @context_dependent_end = true
           @byte_classes.add_range(0x0a, 0x0a)
           lf = prefix(intern(:byte, [0x0a, 0x0a], FAIL))
           eol = union([EMPTY, lf])
