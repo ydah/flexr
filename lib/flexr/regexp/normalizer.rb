@@ -28,6 +28,8 @@ module Flexr
         case node
         when AST::Empty, AST::Fail, AST::ByteRange, AST::CodepointRange, AST::Anchor, AST::NotNextLineFeed
           normalize_leaf(node)
+        when AST::WordBoundary
+          node.dup.tap { |boundary| boundary.word = boundary_word(node.binary) }
         when AST::CharClass
           char_class(node)
         when AST::Seq
@@ -56,6 +58,17 @@ module Flexr
           byte_sequences_for_ranges([[node.lo, node.hi]], loc: node.loc)
         else
           node
+        end
+      end
+
+      def boundary_word(binary)
+        @boundary_word ||= begin
+          fragment = Unicode::PropertyAutomata.boundary_word unless binary
+          if fragment
+            AST::ByteAutomaton.new(fragment)
+          else
+            byte_sequences_for_ranges(Unicode::Property.boundary_word_ranges(binary: binary), loc: nil)
+          end
         end
       end
 

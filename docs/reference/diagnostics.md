@@ -215,13 +215,7 @@ excluded expression accepts the empty string, an unreachable rule may
 report that the absence language is empty with `FLEXR-W001`. See
 [absence groups](regexp.md#absence-groups) for the matching rules.
 
-For word boundaries, the help uses examples where the surrounding literals
-already determine the assertion. Rewrite `rule(/foo\b:/)` as `rule(/foo:/)`:
-`o` is a word character and `:` is not. Similarly, `rule(/foo\Bbar/)` becomes
-`rule(/foobar/)` because `o` and `b` are both word characters. Keep the action.
-These examples do not cover boundaries at token edges, such as `/if\b/`;
-those need separate rules or state checks. Inside a character class, `[\b]`
-remains a supported backspace escape. The escapes `\A`, `\B`, `\G`, `\z`,
+Inside a character class, `[\b]` matches backspace. The escapes `\A`, `\B`, `\G`, `\z`,
 `\Z`, `\K`, `\g`, and `\X` inside character classes receive literal-character examples,
 such as rewriting `rule(/[\A]/)` as `rule(/[A]/)` with the same action.
 

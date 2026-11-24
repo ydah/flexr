@@ -20,6 +20,7 @@ module Flexr
       NamedCapture = Struct.new(:opening, :child, keyword_init: true)
       Anchor = Struct.new(:kind, :loc, keyword_init: true)
       NotNextLineFeed = Struct.new(:loc, keyword_init: true)
+      WordBoundary = Struct.new(:negative, :binary, :word, :loc, keyword_init: true)
       Lookahead = Struct.new(:child, :negative, :loc, keyword_init: true)
       Lookbehind = Struct.new(:child, :negative, :loc, keyword_init: true)
       TrailMark = Struct.new(:rule_id, :loc, keyword_init: true)
@@ -34,6 +35,7 @@ module Flexr
           when "ByteRange" then "ByteRange(#{lo}..#{hi})"
           when "CodepointRange" then "CodepointRange(#{lo}..#{hi})"
           when "Anchor" then "Anchor(#{kind})"
+          when "WordBoundary" then negative ? '\B' : '\b'
           when "Star", "Absence", "Lookahead", "Lookbehind" then "#{name}(#{child})"
           when "Repeat" then "Repeat(#{child}, #{minimum}, #{maximum || '∞'})"
           when "Seq", "Alt" then "#{name}(#{children.join(', ')})"
@@ -44,7 +46,7 @@ module Flexr
       end
 
       [Empty, Fail, ByteRange, CodepointRange, Seq, Alt, Star, Repeat, Absence, Difference, Intersection,
-       Anchor, NotNextLineFeed, Lookahead, Lookbehind, TrailMark, CharClass].each do |node_class|
+       Anchor, NotNextLineFeed, WordBoundary, Lookahead, Lookbehind, TrailMark, CharClass].each do |node_class|
         node_class.include(Formatting)
       end
 
@@ -72,7 +74,7 @@ module Flexr
 
       def self.contextual?(node)
         case node
-        when Lookahead, Lookbehind then true
+        when Lookahead, Lookbehind, WordBoundary then true
         when Anchor then node.kind != :bol && node.kind != :eol
         when Seq, Alt then node.children.any? { |child| contextual?(child) }
         when Star, Repeat, Absence, NamedCapture then contextual?(node.child)
@@ -89,12 +91,19 @@ module Flexr
         end
       end
 
-      def self.lookbehind?(node)
+      def self.history?(node)
+        lookbehind?(node, boundaries: true)
+      end
+
+      def self.lookbehind?(node, boundaries: false)
         case node
         when Lookbehind then true
-        when Seq, Alt then node.children.any? { |child| lookbehind?(child) }
-        when Star, Repeat, Absence, Lookahead, NamedCapture, FirstEnding then lookbehind?(node.child)
-        when Difference, Intersection then lookbehind?(node.left) || lookbehind?(node.right)
+        when WordBoundary then boundaries
+        when Seq, Alt then node.children.any? { |child| lookbehind?(child, boundaries: boundaries) }
+        when Star, Repeat, Absence, Lookahead, NamedCapture, FirstEnding
+          lookbehind?(node.child, boundaries: boundaries)
+        when Difference, Intersection
+          lookbehind?(node.left, boundaries: boundaries) || lookbehind?(node.right, boundaries: boundaries)
         when EmbeddedDFA then !node.dfa.left_context.nil?
         else false
         end
@@ -121,7 +130,7 @@ module Flexr
 
       def self.nullable?(node)
         case node
-        when Empty, Anchor, NotNextLineFeed, Lookahead, Lookbehind, Star then true
+        when Empty, Anchor, NotNextLineFeed, WordBoundary, Lookahead, Lookbehind, Star then true
         when Repeat then node.minimum.zero? || nullable?(node.child)
         when NamedCapture then nullable?(node.child)
         when Seq then node.children.all? { |child| nullable?(child) }

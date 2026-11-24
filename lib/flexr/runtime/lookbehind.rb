@@ -17,7 +17,9 @@ module Flexr
       end
 
       def self.contextual_patterns(compiled)
-        compiled.rules.flat_map { |rule| Array(rule.contextual_patterns).compact }
+        compiled.rules.flat_map do |rule|
+          (Array(rule.contextual_patterns) + Array(rule.capture_patterns)).select { |pattern| pattern.respond_to?(:instructions) }
+        end.uniq(&:object_id)
       end
 
       def self.install(klass, compiled)

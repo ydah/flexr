@@ -41,6 +41,7 @@ module Flexr
           end_conditions
           predicate = prefix(from_ast(node.child))
           guard(node.negative ? negate(predicate) : predicate, EMPTY)
+        when Regexp::AST::WordBoundary then word_boundary(from_ast(node.word), node.negative)
         when Regexp::AST::Lookbehind
           lookbehind(from_ast(node.child), node.negative)
         when Regexp::AST::ByteRange
@@ -78,9 +79,10 @@ module Flexr
           condition = if !@explicit_lookahead && (mask = @masks_by_predicate[allowed])
             EndContext.condition(mask)
           else
-            key = left ? [allowed, left] : allowed
+            context = left if left && uses_left_context?(allowed)
+            key = context ? [allowed, context] : allowed
             lookahead = @lookaheads.fetch(key) do
-              @lookaheads[key] = build_lookahead(allowed, ec, representatives, left, &state_limit)
+              @lookaheads[key] = build_lookahead(allowed, ec, representatives, context, &state_limit)
             end
             next unless lookahead
 
@@ -91,6 +93,7 @@ module Flexr
       end
 
       def derivative(id, byte, class_id, left = nil)
+        left = nil if left && !uses_left_context?(id)
         cache = @derivatives[id] ||= []
         cache = cache[left] ||= [] if left
         cache[class_id] ||= derive(id, byte, class_id, left)
@@ -129,6 +132,19 @@ module Flexr
       end
 
       private
+
+      def uses_left_context?(id)
+        @uses_left_context ||= {}
+        @uses_left_context.fetch(id) do
+          kind, *parts = @expressions.fetch(id)
+          @uses_left_context[id] = case kind
+          when :left, :behind, :word_boundary, :entry then true
+          when :sequence, :union, :intersection, :guard then parts.any? { |part| uses_left_context?(part) }
+          when :repeat, :negate, :first_ending, :prefix then uses_left_context?(parts.first)
+          else false
+          end
+        end
+      end
 
       def nullability(id, left)
         return UNKNOWN if id == UNKNOWN
@@ -229,6 +245,18 @@ module Flexr
         @behind_bodies = []
         @left_graphs = []
         @left_nullable = []
+      end
+
+      def word_boundary(word, negative)
+        @explicit_lookahead = true
+        before = lookbehind(word, false)
+        after = prefix(word)
+        term(:word_boundary, [word, negative]) do |left|
+          previous = nullability(before, left)
+          next UNKNOWN if previous == UNKNOWN
+
+          (previous == UNIVERSE) == negative ? after : negate(after)
+        end
       end
 
       def lookbehind(body, negative)
@@ -381,7 +409,7 @@ module Flexr
       def derive(id, byte, class_id, left)
         kind, *parts = @expressions.fetch(id)
         case kind
-        when :empty, :fail, :left, :behind then FAIL
+        when :empty, :fail, :left, :behind, :word_boundary then FAIL
         when :guard
           predicate, body = parts
           guard(derivative(predicate, byte, class_id, left), derivative(body, byte, class_id, left))
