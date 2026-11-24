@@ -23,6 +23,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Changed
 
+- `flexr fix` verifies rule selection before writing. It shows the shortest
+  counterexample when a fix changes the selected token and asks for approval
+  when a fix changes behavior or cannot be verified.
 - Build lexer DFAs from regular-expression derivatives for runtime
   compilation and static generation.
 - Compile UTF-8 Unicode properties from prebuilt automata, reducing setup time for lexers that use them.

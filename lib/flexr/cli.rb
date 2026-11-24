@@ -16,7 +16,7 @@ module Flexr
 
     module_function
 
-    def run(argv, out: $stdout, err: $stderr)
+    def run(argv, out: $stdout, err: $stderr, input: $stdin)
       args = argv.dup
       command = COMMANDS.include?(args.first) ? args.shift.to_sym : :generate
       if args.include?("--help") || args.include?("-h")
@@ -35,7 +35,7 @@ module Flexr
       end
       raise ArgumentError, "unexpected argument: #{positionals.first}" unless positionals.empty?
 
-      execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: command_args)
+      execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: command_args, input: input)
     rescue ArgumentError => e
       err.puts "error: #{e.message}"
       command == :new ? new_project_usage(err, status: EXIT_USAGE) : usage(err, status: EXIT_USAGE)
@@ -114,6 +114,9 @@ module Flexr
         when "--dry-run"
           raise ArgumentError, "--dry-run is only valid for fix" unless command == :fix
           options.dry_run = true
+        when "--accept-changes"
+          raise ArgumentError, "--accept-changes is only valid for fix" unless command == :fix
+          command_args[:accept_changes] = true
         when "--table-compression"
           options.set(:table_compression, required_argument!(args, argument).to_sym)
         when "--table-format"
@@ -183,12 +186,12 @@ module Flexr
       raise ArgumentError, "invalid option value: #{e.message}"
     end
 
-    def execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: {})
+    def execute(command, spec, options, output, rule_number, benchmark_args, out, err, command_args: {}, input: $stdin)
       case command
       when :check
         check(spec, options, out)
       when :fix
-        fix(spec, options, out)
+        fix(spec, options, out, err, input: input, accept_changes: command_args[:accept_changes])
       when :diff
         print_diff(spec, command_args.fetch(:comparison), options, out, err)
       when :stats
@@ -249,13 +252,17 @@ module Flexr
       else
         states.each { |entry| print_diff_state(entry, out) }
       end
+      diff_exit_status(states)
+    rescue Flexr::Error, Errno::ENOENT, Errno::EACCES, SyntaxError => e
+      err.puts render_error(e, options: options, path: path)
+      EXIT_USAGE
+    end
+
+    def diff_exit_status(states)
       return EXIT_FAILURE if states.any? { |entry| entry.result.status == :different }
       return EXIT_USAGE if states.any? { |entry| entry.result.status == :inconclusive }
 
       EXIT_OK
-    rescue Flexr::Error, Errno::ENOENT, Errno::EACCES, SyntaxError => e
-      err.puts render_error(e, options: options, path: path)
-      EXIT_USAGE
     end
 
     def diff_input(path, options)
@@ -334,7 +341,7 @@ module Flexr
       "#{description} (#{fields.join(', ')})"
     end
 
-    def fix(spec, options, out)
+    def fix(spec, options, out, err, input:, accept_changes:)
       require_relative "source/fixes"
       path = File.realpath(spec)
       parsed = read_spec(path)
@@ -349,22 +356,64 @@ module Flexr
           raise
         end
 
+        original_error ||= e
         repaired = Source::Fixes.apply(parsed.source, repairs)
         parsed = Source::PrismReader.new(repaired, path: path).read
         retry
       end
       edits = Source::Fixes.edits(parsed, compiled)
       fixed = Source::Fixes.apply(parsed.source, edits)
-      compile(Source::PrismReader.new(fixed, path: path).read) unless edits.empty?
+      if fixed != original.source
+        proposed = parsed
+        proposed_compiled = compiled
+        if fixed != parsed.source
+          proposed = Source::PrismReader.new(fixed, path: path).read
+          proposed_compiled = compile(proposed)
+        end
+        status = if original_error
+          err.puts "Could not verify fixes because the original spec does not compile."
+          err.puts render_error(original_error, options: options, path: path)
+          EXIT_USAGE
+        else
+          verify_fix(original, compiled, proposed, proposed_compiled, options.max_dfa_states, err)
+        end
 
-      if options.dry_run
-        out.write(fixed)
-      elsif fixed != original.source
-        raise CompileError, "spec changed while preparing fixes: #{spec}" unless File.binread(path) == original.source.b
+        unless options.dry_run
+          return status unless status == EXIT_OK || accept_changes || confirm_fix?(input, err)
 
-        ArtifactWriter.write!(path, fixed)
+          unchanged = File.realpath(spec) == path && File.binread(path) == original.source.b
+          raise CompileError, "spec changed while preparing fixes: #{spec}" unless unchanged
+
+          ArtifactWriter.write!(path, fixed)
+        end
       end
+      out.write(fixed) if options.dry_run
       EXIT_OK
+    end
+
+    def verify_fix(original, compiled, proposed, proposed_compiled, limit, err)
+      require_relative "source/semantic_diff"
+
+      left, right = [[original, compiled], [proposed, proposed_compiled]].map do |parsed, result|
+        Source::SemanticDiff::Input.new(parsed: parsed, compiled: result, backend: parsed.config.fetch(:backend))
+      end
+      states = Source::SemanticDiff.new(left, right, limit: limit).states.reject { |entry| entry.result.status == :equal }
+      unless states.empty?
+        err.puts "Fix verification (left is the original spec and right is the proposed spec)"
+        states.each { |entry| print_diff_state(entry, err) }
+      end
+      diff_exit_status(states)
+    end
+
+    def confirm_fix?(input, err)
+      unless input.tty? && err.tty?
+        err.puts "Review the proposed fix with --dry-run, then pass --accept-changes to apply it."
+        return false
+      end
+
+      err.print "Apply the proposed fix? [y/N] "
+      err.flush
+      %w[y yes].include?(input.gets.to_s.b.strip.downcase)
     end
 
     def check(spec, options, out)
@@ -739,6 +788,7 @@ module Flexr
               --verify                verify skeleton across all modes (executes SPEC actions)
               --target 2.0            report migration requirements (static check only)
               --dry-run               print the fixed spec without writing (fix only)
+              --accept-changes        apply changed or unverified fixes (fix only)
               --from oedipus_lex      read an oedipus_lex .rex file (import only)
       USAGE
       status

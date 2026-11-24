@@ -17,7 +17,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | Command | Purpose | Main output |
 |---|---|---|
 | `check SPEC` | Compile and render diagnostics | Human or JSON diagnostics |
-| `fix SPEC` | Apply supported diagnostic fixes | Updated spec, or full source with `--dry-run` |
+| `fix SPEC` | Verify and apply supported diagnostic fixes | Updated spec, or full source with `--dry-run` |
 | `diff LEFT RIGHT` | Compare the first rule selection in each lexical state | Shortest differences, or a proof status |
 | `stats SPEC` | Report DFA states, byte classes, and table sizes | JSON |
 | `tokens SPEC` | Print names declared by `emits` | Space-separated names |
@@ -45,7 +45,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--eval` | Flag | Generation and check |
 | `--table-compression VALUE` | `none`, `rows`, `full` | Generation |
 | `--table-format VALUE` | `literal`, `packed` | Generation |
-| `--max-dfa-states N` | Positive integer | Compilation |
+| `--max-dfa-states N` | Positive integer | Compilation and the verification search in `diff` and `fix` |
 | `-W, --warn LEVEL` | `all`, `default`, `none` | Check and generation |
 | `--warn-as-error` | Flag | Check and generation |
 | `--color WHEN` | `auto`, `always`, `never` | Human diagnostics |
@@ -53,6 +53,7 @@ inspect rule selection, pass `--input STRING` or `--input-file PATH`.
 | `--grammar PATH` | Grammar path | Compare `%token` names with `emits` during check |
 | `--target 2.0` | none | Static check migration requirements and structured-token declarations |
 | `--dry-run` | Flag | Preview fixes on stdout |
+| `--accept-changes` | Flag | Approve changed or unverified fixes |
 | `--rule N` | Non-negative integer | Explain |
 | `--input STRING` | Literal input, including an empty string | Trace |
 | `--input-file PATH` | Input file | Trace and bench |
@@ -92,14 +93,28 @@ Options:
       --verify                verify skeleton across all modes (executes SPEC actions)
       --target 2.0            report migration requirements (static check only)
       --dry-run               print the fixed spec without writing (fix only)
+      --accept-changes        apply changed or unverified fixes (fix only)
       --from oedipus_lex      read an oedipus_lex .rex file (import only)
 <!-- flexr-help:end -->
 
 ## Automatic fixes
 
-`flexr fix lexer.flexr.rb --dry-run` prints the proposed Ruby source.
-Run `flexr fix lexer.flexr.rb` to apply it. The command validates the resulting
-specification before saving and preserves its line endings.
+`flexr fix lexer.flexr.rb` compiles the proposed specification and compares
+rule selection before and after the change. It saves fixes that preserve rule
+selection and keeps the original line endings.
+
+When rule selection changes, the command shows the shortest input that
+demonstrates the change, with the selection before and after the fix. An
+inconclusive comparison reports its reason. This can happen when a fix repairs
+a specification that could not compile.
+
+In an interactive terminal, answer `y` or `yes` to apply either kind of fix.
+In a script, pass `--accept-changes` to approve such a fix. Without approval,
+the command exits with status 1 for a change or 2 for an inconclusive comparison.
+
+`flexr fix lexer.flexr.rb --dry-run` prints the proposed Ruby source to
+stdout. Any counterexample or inconclusive result goes to stderr. A valid
+preview exits with status 0 and leaves the file untouched.
 
 The command reads the specification statically. Ruby LSP offers the same edits
 as quick fixes for DFA backends.
