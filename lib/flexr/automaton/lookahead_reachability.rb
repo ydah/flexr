@@ -3,6 +3,8 @@
 module Flexr
   module Automaton
     class LookaheadReachability
+      PREDECESSOR_WORK_PER_STATE = 16
+
       def initialize(dfa, encoding:, limit:)
         @dfa = dfa
         @encoding = encoding
@@ -18,6 +20,7 @@ module Flexr
             [label.rule_index, label.bol_only, mask, ids[anchor]]
           end
         end
+        @predecessor_cost = @labels.length + @guards.sum { |guard| guard.transitions.length }
         @bytes = 256.times.uniq do |byte|
           [dfa.ec.fetch(byte), EndContext.for_byte(byte), *@guards.map { |guard| guard.ec.fetch(byte) }]
         end
@@ -52,6 +55,7 @@ module Flexr
         queue = [[initial, nil]]
         seen = { initial => true }
         cursor = 0
+        budget = @limit * PREDECESSOR_WORK_PER_STATE
         while cursor < queue.length
           (guards, later, ending), suffix = queue.fetch(cursor)
           now = 0
@@ -76,6 +80,10 @@ module Flexr
           return true if @winners.length == @dfa.rule_ids.length
 
           @bytes.each do |byte|
+            # A single suffix state can require a full pass over every body and guard row per byte.
+            budget -= @predecessor_cost
+            return false if budget.negative?
+
             next_guards = @guards.each_with_index.map do |guard, id|
               guard_predecessors(guard, byte, guards.fetch(id))
             end

@@ -7,10 +7,12 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Use `\X` to match one extended grapheme cluster with the vendored Unicode data,
+  including across streamed chunks.
+
 - Inspect DFA backup bounds per lexical state with `flexr explain`, `trace`,
   and `dot`. Use `flexr check --warn all` to see a repeatable example for
   states where the number of bytes read after an acceptance is unbounded.
-
 - Use `\R` to match line breaks, including atomic CRLF pairs.
 
 - Support positive and negative regexp lookahead in streaming lexers, including named captures.

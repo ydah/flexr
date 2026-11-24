@@ -63,7 +63,7 @@ module Flexr
           @operations << operation unless @operations.include?(operation)
           intersection([from_ast(node.left), negate(from_ast(node.right))])
         when Regexp::AST::Intersection then intersection([from_ast(node.left), from_ast(node.right)])
-        when Regexp::AST::EmbeddedDFA then from_graph(node.dfa)
+        when Regexp::AST::EmbeddedDFA, Regexp::AST::Grapheme then from_graph(node.dfa)
         when Regexp::AST::FirstEnding then first_ending(from_ast(node.child))
         when Regexp::AST::ByteAutomaton then from_graph(node.fragment)
         else raise CompileError, "cannot derive #{node.class}"

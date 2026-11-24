@@ -20,6 +20,7 @@ module Flexr
       NamedCapture = Struct.new(:opening, :child, keyword_init: true)
       Anchor = Struct.new(:kind, :loc, keyword_init: true)
       NotNextLineFeed = Struct.new(:loc, keyword_init: true)
+      Grapheme = Struct.new(:binary, :dfa, :loc, keyword_init: true)
       WordBoundary = Struct.new(:negative, :binary, :word, :loc, keyword_init: true)
       Lookahead = Struct.new(:child, :negative, :loc, keyword_init: true)
       Lookbehind = Struct.new(:child, :negative, :loc, keyword_init: true)
@@ -35,6 +36,7 @@ module Flexr
           when "ByteRange" then "ByteRange(#{lo}..#{hi})"
           when "CodepointRange" then "CodepointRange(#{lo}..#{hi})"
           when "Anchor" then "Anchor(#{kind})"
+          when "Grapheme" then '\X'
           when "WordBoundary" then negative ? '\B' : '\b'
           when "Star", "Absence", "Lookahead", "Lookbehind" then "#{name}(#{child})"
           when "Repeat" then "Repeat(#{child}, #{minimum}, #{maximum || '∞'})"
@@ -46,7 +48,7 @@ module Flexr
       end
 
       [Empty, Fail, ByteRange, CodepointRange, Seq, Alt, Star, Repeat, Absence, Difference, Intersection,
-       Anchor, NotNextLineFeed, WordBoundary, Lookahead, Lookbehind, TrailMark, CharClass].each do |node_class|
+       Anchor, NotNextLineFeed, Grapheme, WordBoundary, Lookahead, Lookbehind, TrailMark, CharClass].each do |node_class|
         node_class.include(Formatting)
       end
 
@@ -74,7 +76,7 @@ module Flexr
 
       def self.contextual?(node)
         case node
-        when Lookahead, Lookbehind, WordBoundary then true
+        when Lookahead, Lookbehind, WordBoundary, Grapheme then true
         when Anchor then node.kind != :bol && node.kind != :eol
         when Seq, Alt then node.children.any? { |child| contextual?(child) }
         when Star, Repeat, Absence, NamedCapture then contextual?(node.child)

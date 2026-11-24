@@ -259,18 +259,6 @@ Keep the action and use the corresponding hexadecimal value for other
 characters. Ruby may already normalize these escapes in regexp literals;
 the diagnostics apply when the escape reaches the parser unchanged.
 
-For a standalone `\X` token with ASCII-only input, use:
-
-```ruby
-rule(/\r\n|[\x00-\x7f]/) { emit :GRAPHEME }
-```
-
-This keeps CRLF together and consumes other ASCII characters individually.
-Keep the original action; the CRLF alternative must come first for `firstmatch`.
-The example does not cover Unicode graphemes or `\X` inside larger patterns.
-Unicode graphemes need separate segmentation, such as Ruby's
-[`String#each_grapheme_cluster`](https://docs.ruby-lang.org/en/4.0/String.html#method-i-each_grapheme_cluster).
-
 ## Warnings
 
 | Code | Meaning | First fix to try |

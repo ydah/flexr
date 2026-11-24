@@ -44,7 +44,7 @@ RSpec.describe "regexp engine contracts" do
   end
 
   it "rejects unknown and unsupported escapes instead of treating them as literals" do
-    %w[\\q \\g<name> \\X \\cA \\M-a].each do |source|
+    %w[\\q \\g<name> \\cA \\M-a].each do |source|
       expect { Flexr::Regexp::Parser.new(source).parse }
         .to raise_error(Flexr::UnsupportedRegexpError) do |error|
           expect(error.diagnostic.code).to eq("FLEXR-E014")

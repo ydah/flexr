@@ -197,8 +197,13 @@ module Flexr
         def append_span_ends(pending, dfa, input, following, position, ending, loop_position)
           state = @lexer.__flexr_dfa_start(dfa, position, @starting)
           loop do
-            pending << [following, position, loop_position] if
-              dfa.accepts.fetch(state).any? { |label| label.valid_end_at?(input, position) }
+            accepted = dfa.accepts.fetch(state).any? do |label|
+              next true unless label.end_anchor
+
+              boundary = input.origin ? input : AssertionInput.new(cursor: self, origin: position)
+              label.valid_end_at?(boundary, position)
+            end
+            pending << [following, position, loop_position] if accepted
             break if ending == position
 
             byte = input.getbyte(position)

@@ -79,7 +79,6 @@ RSpec.describe "compiler diagnostic locations" do
       '/[\Z]/' => 'rule(/[Z]/)',
       '/a\Kb/' => 'rule(/a/, followed_by: /b/) { begin_state :suffix }',
       '/(a|b)\g<1>/' => 'rule(/[ab]{2}/)',
-      '/\X/' => 'rule(/\r\n|[\x00-\x7f]/)',
       '/[\K]/' => 'rule(/[K]/)',
       '/[\g]/' => 'rule(/[g]/)',
       '/[\X]/' => 'rule(/[X]/)'
