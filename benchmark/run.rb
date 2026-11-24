@@ -3,7 +3,10 @@
 require "digest"
 require "fileutils"
 require "json"
+require "open3"
+require "rbconfig"
 require "tempfile"
+require "tmpdir"
 
 require_relative "../lib/flexr"
 require_relative "baselines/json_handwritten"
@@ -11,12 +14,14 @@ require_relative "baselines/json_handwritten"
 module Flexr
   module Benchmarking
     DEFAULT_SPEC = File.expand_path("../examples/json/lexer.flexr.rb", __dir__)
+    INPUT_MODES = %w[frozen mutable].freeze
     DEFAULT_INPUTS = {
       %r{/examples/json/} => ('{"answer": 42}' * 10_000).freeze,
       %r{/examples/toy_lang/} => ("answer + 12" * 10_000).freeze,
       %r{/examples/toml/} => ('title = "flexr" ' * 10_000).freeze,
       %r{/examples/graphql/} => ('query { user(id: 12) { name } } ' * 10_000).freeze,
-      %r{/examples/sql/} => ('select name from users where id >= 12; ' * 10_000).freeze
+      %r{/examples/sql/} => ('select name from users where id >= 12; ' * 10_000).freeze,
+      %r{/examples/ruby_subset/} => ('class Foo "ok" end ' * 10_000).freeze
     }.freeze
 
     module_function
@@ -52,7 +57,7 @@ module Flexr
     def parse(args)
       options = {
         spec: DEFAULT_SPEC, input_file: nil, baseline: nil, write_baseline: nil,
-        iterations: 3, threshold: 0.10, json: false, help: false
+        iterations: 3, threshold: 0.10, json: false, help: false, input_mode: nil, verify_parity: false
       }
       until args.empty?
         case (argument = args.shift)
@@ -62,6 +67,13 @@ module Flexr
           options[:spec] = required_argument!(args, argument)
         when "--input-file"
           options[:input_file] = required_argument!(args, argument)
+        when "--input-mode"
+          mode = required_argument!(args, argument)
+          raise ArgumentError, "--input-mode must be frozen or mutable" unless INPUT_MODES.include?(mode)
+
+          options[:input_mode] = mode
+        when "--verify-parity"
+          options[:verify_parity] = true
         when "--baseline"
           options[:baseline] = required_argument!(args, argument)
         when "--write-baseline"
@@ -106,7 +118,8 @@ module Flexr
     end
 
     def usage(out, status: 0)
-      out.puts "Usage: ruby benchmark/run.rb [--spec PATH] [--baseline PATH] [--write-baseline PATH] [--json]"
+      out.puts "Usage: ruby benchmark/run.rb [--spec PATH] [--input-file PATH] [--input-mode frozen|mutable] " \
+               "[--verify-parity] [--baseline PATH] [--write-baseline PATH] [--json]"
       status
     end
 
@@ -119,8 +132,12 @@ module Flexr
         source_path = File.expand_path(@options.fetch(:spec))
         source = File.binread(source_path)
         input = input_for(source_path)
-        runtime = measure(source_path, input, generated: false)
-        generated = measure(source_path, input, generated: true)
+        runtime_class = load_runtime(source_path)
+        runtime = measure_class(runtime_class, input)
+        expected = token_digest(runtime_class, input) if @options[:verify_parity]
+        generated_class = load_generated(source_path)
+        generated = measure_class(generated_class, input)
+        verify_parity(source_path, generated_class, input, expected) if expected
         {
           "schema" => 1,
           "spec" => relative_path(source_path),
@@ -128,10 +145,12 @@ module Flexr
           "source_bytes" => source.bytesize,
           "input_sha256" => Digest::SHA256.hexdigest(input),
           "input_bytes" => input.bytesize,
+          "input_mode" => input.frozen? ? "frozen" : "mutable",
           "tokens" => runtime.fetch("tokens"),
           "iterations" => @options.fetch(:iterations),
           "modes" => { "runtime" => runtime, "generated" => generated }
         }.tap do |result|
+          result["parity_verified"] = true if expected
           next unless source_path.match?(%r{/examples/json/})
 
           handwritten = measure_class(FlexrBenchmark::JsonHandwrittenLexer, input)
@@ -146,17 +165,56 @@ module Flexr
       private
 
       def input_for(source_path)
-        return File.binread(@options.fetch(:input_file)) if @options[:input_file]
-
-        DEFAULT_INPUTS.each do |pattern, input|
-          return input if source_path.match?(pattern)
+        input = if @options[:input_file]
+          File.binread(@options.fetch(:input_file))
+        else
+          DEFAULT_INPUTS.find { |pattern, _| source_path.match?(pattern) }&.last
         end
-        raise ArgumentError, "--input-file is required for #{source_path}"
+        raise ArgumentError, "--input-file is required for #{source_path}" unless input
+
+        case @options[:input_mode]
+        when "frozen" then input.freeze
+        when "mutable" then input.dup
+        else input
+        end
       end
 
-      def measure(source_path, input, generated:)
-        klass = generated ? load_generated(source_path) : load_runtime(source_path)
-        measure_class(klass, input)
+      def token_digest(klass, input)
+        digest = Digest::SHA256.new
+        # Hash tokens separately so equal values can share objects across tokens.
+        klass.new(input).tokens.each { |token| digest << Marshal.dump(token) }
+        digest.hexdigest
+      end
+
+      def verify_parity(source_path, generated_class, input, expected)
+        raise "generated token parity failed for #{source_path}" unless token_digest(generated_class, input) == expected
+
+        Dir.mktmpdir("flexr-benchmark-parity-") do |directory|
+          standalone = File.join(directory, "standalone.rb")
+          bytes = File.join(directory, "input.dat")
+          File.binwrite(standalone, Flexr::Generator.new(source_path, options: { standalone: true }).generate)
+          File.binwrite(bytes, input)
+          program = <<~RUBY
+            require ARGV.fetch(0)
+            bytes = File.binread(ARGV.fetch(1)).force_encoding(ARGV.fetch(3))
+            bytes.freeze if ARGV.fetch(4) == "frozen"
+            digest = Digest::SHA256.new
+            Object.const_get(ARGV.fetch(2)).new(bytes).tokens.each { |token| digest << Marshal.dump(token) }
+            puts digest.hexdigest
+          RUBY
+          engine = if defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?
+            "--yjit"
+          elsif defined?(RubyVM::ZJIT) && RubyVM::ZJIT.enabled?
+            "--zjit"
+          else
+            "--disable=yjit,zjit"
+          end
+          mode = input.frozen? ? "frozen" : "mutable"
+          stdout, stderr, status = Open3.capture3({ "RUBYOPT" => nil, "RUBYLIB" => nil }, RbConfig.ruby, "--disable-gems", engine,
+                                                "-rdigest", "-e", program, standalone, bytes, generated_class.name,
+                                                input.encoding.name, mode)
+          raise "standalone token parity failed for #{source_path}: #{stderr}" unless status.success? && stdout.strip == expected
+        end
       end
 
       def measure_class(klass, input)
@@ -246,6 +304,8 @@ module Flexr
       end
 
       def identity_matches?(baseline, result)
+        return false if baseline.key?("input_mode") && baseline["input_mode"] != result["input_mode"]
+
         %w[spec source_sha256 source_bytes input_sha256 input_bytes tokens].all? do |key|
           baseline[key] == result[key]
         end
