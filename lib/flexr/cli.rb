@@ -269,7 +269,7 @@ module Flexr
       parsed = read_spec(path)
       backend = options.overrides.fetch(:backend, parsed.config.fetch(:backend))
       compiled = compile(parsed, overrides: options.overrides, retain_firstmatch_order: backend == :firstmatch)
-      Source::SemanticDiff::Input.new(parsed: parsed, compiled: compiled, backend: backend)
+      Source::SemanticDiff::Input.from_source(parsed: parsed, compiled: compiled, backend: backend)
     end
 
     def diff_state_json(entry)
@@ -395,7 +395,7 @@ module Flexr
       require_relative "source/semantic_diff"
 
       left, right = [[original, compiled], [proposed, proposed_compiled]].map do |parsed, result|
-        Source::SemanticDiff::Input.new(parsed: parsed, compiled: result, backend: parsed.config.fetch(:backend))
+        Source::SemanticDiff::Input.from_source(parsed: parsed, compiled: result, backend: parsed.config.fetch(:backend))
       end
       states = Source::SemanticDiff.new(left, right, limit: limit).states.reject { |entry| entry.result.status == :equal }
       unless states.empty?

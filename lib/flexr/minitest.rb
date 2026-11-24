@@ -19,6 +19,24 @@ module Flexr
         end
         assert_equal expected, actual, "token snapshot differs: #{path}"
       end
+
+      def assert_disjoint_tokens(lexer, first, second, state: :initial)
+        assert_language Testing::Languages.disjoint_tokens(lexer, first, second, state: state)
+      end
+
+      def assert_includes_language(superset, subset, encoding: Encoding::UTF_8, unicode: false)
+        assert_language Testing::Languages.include_language(superset, subset, encoding: encoding, unicode: unicode)
+      end
+
+      def assert_tokenize_like(actual, expected, state: :initial)
+        assert_language Testing::Languages.tokenize_like(actual, expected, state: state)
+      end
+
+      private
+
+      def assert_language(result)
+        assert result.status == :equal, result.failure_message
+      end
     end
   end
 end
