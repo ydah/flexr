@@ -12,7 +12,7 @@ module Flexr
       def initialize(dfa)
         @dfa = dfa
         @accepting = dfa.accepts.map { |acceptances| !acceptances.empty? }
-        @edges = dfa.transitions.map { |row| row.compact.uniq }
+        @edges = dfa.transitions.map { |row| row.grep(Integer).uniq }
         @extensions = @edges.map { |destinations| destinations.reject { |state| @accepting[state] } }
       end
 

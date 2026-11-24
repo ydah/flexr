@@ -38,9 +38,8 @@ module Flexr
             if targets[class_id].nil?
               state_count = states
               targets[class_id] = successor(state, class_id)
-              if targets[class_id].is_a?(Integer) && targets[class_id] < state_count
-                @backup_memo_states, @backup_recovery_states = Analysis.backup_memo_states(self)
-              end
+              @backup_memo_states, @backup_recovery_states = Analysis.backup_memo_states(self) if
+                targets[class_id].is_a?(Integer) && targets[class_id] < state_count
             end
             targets[class_id]
           end
