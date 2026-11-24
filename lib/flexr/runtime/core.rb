@@ -91,7 +91,7 @@ module Flexr
         end
         unless match
           unless eof?
-            token = handle_unmatched_byte
+            token = handle_unmatched_byte(expected)
             next unless token
 
             return token
@@ -311,7 +311,11 @@ module Flexr
     end
 
     def error!(message)
-      error = LexError.new(message, filename: @filename, byte_pos: @match_start, line: @text_line, text: text)
+      continuation = @__flexr_error_continuation
+      @__flexr_error_continuation = nil
+      diagnostic = unmatched_input_diagnostic(continuation) if continuation
+      error = LexError.new(message, filename: @filename, byte_pos: @match_start, line: @text_line, text: text,
+                           continuation: continuation, diagnostic: diagnostic)
       if @on_error
         action = @on_error.call(error)
         return @pending = nil if action == :skip
@@ -495,8 +499,10 @@ module Flexr
       @bol = @match_end.zero? || @buffer.getbyte(@match_end - 1) == 0x0a
     end
 
-    def handle_unmatched_byte
+    def handle_unmatched_byte(expected = nil)
       bad = @buffer.byteslice(@position, 1)
+      continuation = ErrorContinuation.find(self, expected) if
+        (@on_error || @error_mode == :raise) && self.class.__flexr_config.backend != :firstmatch
       @match_start = @position
       @match_end = @position + 1
       @text_start = @match_start
@@ -507,11 +513,47 @@ module Flexr
       @non_progress_signatures.clear
       advance_location!(@match_start, @match_end)
       @bol = bad.to_s.b == "\n"
-      error!("unexpected byte #{bad.inspect}")
+      previous_continuation = @__flexr_error_continuation
+      @__flexr_error_continuation = continuation
+      begin
+        error!("unexpected byte #{bad.inspect}")
+      ensure
+        @__flexr_error_continuation = previous_continuation
+      end
       token = @pending
       @pending = nil
       discard_consumed_input! unless @retain_input
       token
+    end
+
+    def unmatched_input_diagnostic(continuation)
+      byte_pos = continuation.byte_pos
+      first = last = byte_pos
+      if continuation.eof
+        message = "unexpected end of input"
+      else
+        last += 1
+        if utf8_input?
+          # Editor diagnostic ranges cannot split a UTF-8 character.
+          start_limit = [@buffer.base_offset, byte_pos - 3].max
+          first -= 1 while first > start_limit && (@buffer.getbyte(first) & 0xc0) == 0x80
+          end_limit = [@buffer.bytesize, first + 4].min
+          last += 1 while last < end_limit && (@buffer.getbyte(last) & 0xc0) == 0x80
+        end
+        unexpected = @buffer.byteslice(first...last)
+        if utf8_input?
+          unexpected.force_encoding(Encoding::UTF_8)
+          last = first unless unexpected.valid_encoding?
+        end
+        message = "unexpected input #{unexpected.inspect}"
+      end
+      suffix = continuation.suffix
+      help = if suffix == ""
+        "remove input after the matched prefix"
+      elsif suffix
+        continuation.eof ? "append #{suffix.inspect}" : "complete the matched prefix with #{suffix.inspect}"
+      end
+      Diagnostics.error("FLEXR-E000", message, location: [first, last], help: help)
     end
 
     def eof?

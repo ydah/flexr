@@ -47,9 +47,16 @@ test('renders real diagnostic source locations and rejects malformed Ruby', asyn
   assert.match(result.error, /\^/);
   const syntax = await runtime.run({ source: 'class Lexer <', input: '', mode: 'runtime' });
   assert.match(syntax.error, /FLEXR-E010/);
-  const unmatched = await runtime.run({ source: 'class Lexer < Flexr::Lexer\n rule(/a/, emit: :A)\nend', input: 'b', mode: 'runtime' });
-  assert.match(unmatched.error, /unexpected byte/);
-  assert.match(unmatched.error, /input.txt:1:/);
+  const lexer = 'class Lexer < Flexr::Lexer\n rule(/ab/, emit: :AB)\nend';
+  const unmatched = await runtime.run({ source: lexer, input: 'a!', mode: 'runtime' });
+  assert.match(unmatched.error, /FLEXR-E000/);
+  assert.match(unmatched.error, /unexpected input "!"/);
+  assert.match(unmatched.error, /input\.txt:1:2/);
+  assert.match(unmatched.error, /help: complete the matched prefix with "b"/);
+  const incomplete = await runtime.run({ source: lexer, input: 'a', mode: 'generated' });
+  assert.match(incomplete.error, /unexpected end of input/);
+  assert.match(incomplete.error, /input\.txt:1:2/);
+  assert.match(incomplete.error, /help: append "b"/);
 });
 
 test('each run starts a fresh Ruby VM', async () => {

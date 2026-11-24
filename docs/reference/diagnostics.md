@@ -106,7 +106,12 @@ For direct rendering, pass the matching source text and optional file path to
 `(source)`. JSON output keeps `location` as a pair of byte offsets with an
 exclusive end; source excerpts are not added to JSON.
 
-Runtime input diagnostics (`FLEXR-E003`, `FLEXR-E012`, `FLEXR-E013`,
+An unmatched-input diagnostic with DFA continuation data (`FLEXR-E000`)
+marks the unexpected input or the EOF insertion point. See
+[DFA continuations](errors.md#dfa-continuations) for the repair byte offset
+and shortest suffix.
+
+Other runtime input diagnostics (`FLEXR-E003`, `FLEXR-E012`, `FLEXR-E013`,
 and `FLEXR-E021` through `FLEXR-E027`)
 use `[byte_pos, byte_pos]` to mark their reported position in the original
 input. Guard notes identify the affected rule by its pattern when available,
@@ -131,6 +136,7 @@ without a readable caller file still report the regeneration guidance.
 
 | Code | Meaning | First fix to try |
 |---|---|---|
+| `FLEXR-E000` | Input could not be scanned | Use the continuation hint when available |
 | `FLEXR-E001` | Regexp syntax is malformed | Correct the regexp syntax |
 | `FLEXR-E003` | A state name is undefined | Declare the state before entering it |
 | `FLEXR-E005` | A rule can match an empty string | Make it consuming or opt into `allow_empty_match` |

@@ -50,6 +50,42 @@ The default `error_mode: :raise` raises the lexical error. `:token` queues
 instance-specific control. Any other result raises
 `InvalidRecoveryActionError` instead of silently applying the default policy.
 
+### DFA continuations
+
+When scanning fails on a byte or reaches EOF partway through a token,
+`LexError#continuation` describes how the caller can complete the matched
+prefix. The lexer computes it only on failure, when it raises or passes
+the error to an `on_error` callback.
+
+- `byte_pos` is the absolute byte offset after the matched prefix.
+- `expected_bytes` contains inclusive byte ranges. Each byte can begin a
+  suffix that lets the lexer accept a token.
+- `suffix` is a shortest accepting suffix in bytes, if one exists. An empty
+  string means the matched prefix accepts when the active input ends there.
+- `eof` is true when the offset is at the end of the active input.
+
+At EOF, append the suffix. At a mismatch, the suffix completes the prefix
+as if the input ended after the suffix. Apply a proposed edit to your own
+copy of the input and recheck it if you intend to keep later bytes.
+A suffix may start in the middle of a UTF-8 character. Concatenate it to a
+byte slice of the prefix before decoding the result.
+
+The `FLEXR-E000` diagnostic marks the unexpected character or the EOF
+insertion point and shows the suffix when available. An LSP server can map
+`diagnostic.location` to its negotiated position encoding and use
+`diagnostic.help` as the correction hint. Use a text edit only when the
+edit range and replacement can be represented in the editor's encoding.
+The Ruby LSP add-on analyzes lexer specifications. An input language server
+can get these diagnostics by running its own lexer.
+
+`LexError#byte_pos` and `#text` still identify the byte used by recovery.
+`continuation` can be `nil` when the search reaches its work limit or the
+error comes from a context without a DFA, such as a `firstmatch` scan.
+The search checks UTF-8 token boundaries and declared matching conditions.
+The resulting input is still subject to runtime limits and rule actions.
+For a token assembled by `more`, use an EOF action to handle the case where
+the last matched piece consumes the input and no new scan starts.
+
 ## Import failures
 
 `flexr import` reports untranslated actions as `FLEXR-TODO`, returns status 1,

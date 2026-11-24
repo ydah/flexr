@@ -172,9 +172,18 @@ module Flexr
   end
 
   class LexError < Error
-    def initialize: (String, ?filename: String?, ?byte_pos: Integer?, ?line: Integer?, ?text: String?, ?diagnostic: Diagnostic?) -> void
+    class Continuation < ::Data
+      def self.new: (byte_pos: Integer, expected_bytes: Array[Range[Integer]], suffix: String?, eof: bool) -> instance
+      attr_reader byte_pos: Integer
+      attr_reader expected_bytes: Array[Range[Integer]]
+      attr_reader suffix: String?
+      attr_reader eof: bool
+    end
+
+    def initialize: (String, ?filename: String?, ?byte_pos: Integer?, ?line: Integer?, ?text: String?, ?diagnostic: Diagnostic?, ?continuation: Continuation?) -> void
     attr_reader line: Integer?
     attr_reader text: String?
+    attr_reader continuation: Continuation?
   end
 
   class CompileError < Error
