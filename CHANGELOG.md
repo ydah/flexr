@@ -7,6 +7,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Check token-language overlap, pattern inclusion, and equivalent rule selection
+  in RSpec and Minitest, with shortest counterexamples for violations.
 - Use `flexr diff` to find the shortest input that changes rule selection in
   a lexical state, including comparisons between longest-match and
   `firstmatch` lexers.

@@ -3,6 +3,7 @@
 require_relative "token_diff/right_context"
 require_relative "token_diff/utf8"
 require_relative "token_diff/firstmatch"
+require_relative "token_diff/inclusion"
 
 module Flexr
   module Automaton
@@ -12,6 +13,7 @@ module Flexr
       Match = Data.define(:rule_index, :effect, :length)
       Result = Data.define(:status, :input, :offset, :left, :right, :reason)
 
+      BYTE_ORDER = ((32..126).to_a + (0..31).to_a + (127..255).to_a).freeze
       Candidate = Data.define(:rule_index, :effect, :end_pos)
       Scan = Data.define(:state, :pending, :winner) do
         def settled? = state.nil? && pending.empty?
@@ -37,6 +39,17 @@ module Flexr
         Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: "search limit reached")
       rescue UnsupportedFirstmatch => e
         Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: e.message)
+      end
+
+      def overlap(side, tokens:, encoding:, limit: 100_000)
+        raise ArgumentError, "overlap requires two distinct token kinds" unless tokens.size == 2 && tokens.uniq.size == 2
+
+        result = OverlapSearch.new(side, tokens, encoding, limit).compare
+        return result unless result.status == :equal && side.dfa.rule_ids.any? { |id| side.effects[id].nil? }
+
+        result.with(status: :inconclusive, reason: "a rule in this state has an opaque action")
+      rescue SearchLimit
+        Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: "search limit reached")
       end
 
       class Search
@@ -75,8 +88,7 @@ module Flexr
           @scan_left = trails.any?(&:starts) || trailing_labels.any?(&:bol_only) || firstmatch.any?(&:left_sensitive?)
           @left_sensitive = bodies.any?(&:starts) || @body_bol || @scan_left
           labels = body_labels + trailing_labels
-          prefix_dfas = @sides.grep(FirstmatchSide).flat_map { |side| side.rules.filter_map(&:trailing_dfa) }.uniq
-          @right = RightContext.new(labels, @utf8_rows, track_edge: firstmatch.any?(&:track_edge?), prefix_dfas: prefix_dfas)
+          @right = RightContext.new(labels, @utf8_rows, track_edge: firstmatch.any?(&:track_edge?), prefix_dfas: prefix_dfas(trails))
           build_keywords
 
           bytes = alphabet(dfas)
@@ -120,6 +132,10 @@ module Flexr
           Result.new(status: status, input: nil, offset: nil, left: nil, right: nil, reason: reason)
         end
 
+        def prefix_dfas(_trails)
+          @sides.grep(FirstmatchSide).flat_map { |side| side.rules.filter_map(&:trailing_dfa) }.uniq
+        end
+
         def build_keywords
           @keyword_rows = [{}]
           @keyword_spellings = {}
@@ -144,9 +160,8 @@ module Flexr
         end
 
         def alphabet(dfas)
-          order = (32..126).to_a + (0..31).to_a + (127..255).to_a
           byte_classes = dfas.map(&:ec) + @graphs.map(&:ec) + @ordered.compact.flat_map(&:byte_classes)
-          order.map { |byte| [byte, @right.byte_key(byte)] }.uniq do |byte, key|
+          BYTE_ORDER.map { |byte| [byte, @right.byte_key(byte)] }.uniq do |byte, key|
             [*byte_classes.map { |row| row.fetch(byte) }, key,
              @left_sensitive && byte == 0x0a, (byte if @keyword_bytes[byte])]
           end
@@ -356,7 +371,53 @@ module Flexr
         end
       end
 
-      private_constant :Candidate, :Scan, :Position, :Path, :Search, :SearchLimit, :UnsupportedFirstmatch, :Firstmatch
+      class OverlapSearch < Search
+        def initialize(side, tokens, encoding, limit)
+          super([side, side], encoding, limit)
+          @side = side
+          @tokens = tokens
+        end
+
+        private
+
+        def prefix_dfas(trails) = trails
+
+        def resolve(path, eof:)
+          pos = path.position
+          state = pos.scans.first.state
+          return pos.scans unless state && pos.utf8.zero?
+          return pos.scans if path.length == path.offset && (eof || !@side.allow_empty_match)
+
+          candidates = {}
+          @side.dfa.accepts.fetch(state).each do |label|
+            next unless eligible?(label, pos.bol, pos.right)
+
+            candidate = candidate_at(path, @side, 0, label.rule_index)
+            effect = candidate.effect
+            next unless effect&.action == :emit && @tokens.include?(effect.token)
+            next if candidates.key?(effect.token) || !accepts_trailing?(label.rule_index, pos)
+
+            candidates[effect.token] = candidate
+          end
+          return pos.scans unless @tokens.all? { |token| candidates.key?(token) }
+
+          @tokens.map { |token| Scan.new(state: nil, pending: {}, winner: candidates.fetch(token)) }
+        end
+
+        def accepts_trailing?(index, pos)
+          rule = @side.rules.fetch(index)
+          return true unless rule.trailing
+
+          dfa = rule.trailing_dfa
+          bol = !pos.left || pos.left.first != LeftContext::OTHER
+          @right.accepts_prefix?(dfa, start_state(dfa, pos.left), bol, pos.right)
+        end
+
+        def different?(candidates) = candidates.all?
+      end
+
+      private_constant :BYTE_ORDER, :Candidate, :Scan, :Position, :Path, :Search, :OverlapSearch,
+                       :SearchLimit, :UnsupportedFirstmatch, :Firstmatch
     end
   end
 end
