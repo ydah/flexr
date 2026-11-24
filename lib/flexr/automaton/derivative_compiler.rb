@@ -8,13 +8,21 @@ module Flexr
     class DerivativeCompiler
       attr_reader :residuals
 
-      def compile(patterns, retain_residuals: false, minimize: true, &state_limit)
+      def compile(patterns, retain_residuals: false, minimize: true, lazy: false, &state_limit)
         @residuals = nil
         terms = DerivativeTerms.new
         start = patterns.each_with_index.to_h { |(body, _), index| [index, terms.from_ast(body)] }.freeze
         conditions = patterns.map(&:last)
         operation = terms.operations.join(" and ") unless terms.operations.empty?
         ec, count = terms.byte_classes.build
+        # shortcut: left-context states compile eagerly until lazy DFAs track the source position.
+        if lazy && !terms.left_sensitive
+          require_relative "lazy_derivative_dfa"
+          return LazyDerivativeDFA.new(start, conditions, terms, ec, count) do |size|
+            state_limit.call(size, operation)
+          end
+        end
+
         representatives = ec.each_index.uniq { |byte| ec.fetch(byte) }
         left_context = terms.compile_left_context(ec, representatives, &state_limit)
         if terms.left_sensitive
@@ -38,7 +46,7 @@ module Flexr
           accepts << terms.accepting_conditions(vector, conditions, ec: ec, representatives: representatives,
                                                left: left, &state_limit)
           transitions << representatives.each_with_index.map do |byte, class_id|
-            successor = advance(vector, terms, byte, class_id, left)
+            successor = terms.advance(vector, byte, class_id, left)
             next if successor.empty?
 
             successor = [successor, terms.next_left(left, byte)] if left
@@ -64,14 +72,6 @@ module Flexr
         end
       end
 
-      private
-
-      def advance(vector, terms, byte, class_id, left)
-        vector.each_with_object({}) do |(pattern, term), residuals|
-          residual = terms.derivative(term, byte, class_id, left)
-          residuals[pattern] = residual unless residual == DerivativeTerms::FAIL
-        end.freeze
-      end
     end
   end
 end

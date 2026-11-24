@@ -129,7 +129,10 @@ module Flexr
           ' unless defined?(Flexr::Runtime::DelegatedTokens)'
         install = "#{guard}\n#{indent}#{install}"
       end
-      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct)}"
+      scanner = Codegen::Table.new(compiled).source(
+        indent: indent, direct: effective_backend(parsed) == :direct, packed: table_format == :packed
+      )
+      install = "#{install}#{scanner}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
       parsed.rules.each do |rule|
@@ -270,7 +273,9 @@ module Flexr
       machines = compiled.machines.map do |name, machine|
         direct = Codegen::Direct.new(compiled).generate(state: name) if backend == :direct
         data = dfa_data(machine.dfa, compression: compression, direct: direct)
-        "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)} }"
+        flags = { backup_memo_states: machine.backup_memo_states, backup_recovery_states: machine.backup_recovery_states }
+        fields = flags.compact.map { |field, states| ", #{field}: #{ruby_literal(states)}" }.join
+        "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)}#{fields} }"
       end
       # W016 is derived from wall-clock compilation time and must not make
       # generated source (or its golden digest) vary between runs.
@@ -297,12 +302,12 @@ module Flexr
       }
       data[:starts] = dfa.starts if dfa.starts
       data[:left_context] = dfa.left_context.to_h if dfa.left_context
-      pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
+      pack_tables = %i[rows full].include?(compression) || table_format == :packed
       if direct
         data[:direct] = direct
       elsif pack_tables
         packed = Codegen::TablePacker.pack(dfa.transitions, compression: compression)
-        data[:packed] = if @options.fetch(:table_format, :literal).to_sym == :packed
+        data[:packed] = if table_format == :packed
           Codegen::TablePacker.encode(packed)
         else
           packed
@@ -330,6 +335,10 @@ module Flexr
       @options.fetch(:table_compression, parsed.config[:options]&.fetch(:table_compression, :rows) || :rows).to_sym
     end
 
+    def table_format
+      @options.fetch(:table_format, :literal).to_sym
+    end
+
     def embedded_runtime(parsed, compiled)
       sources = RUNTIME_SOURCES.dup
       sources << "automaton/end_context.rb" if regexp_end_context?(compiled) || compiled.rules.any?(&:contextual_patterns)
@@ -337,6 +346,8 @@ module Flexr
       sources << "runtime/lookbehind.rb" if regexp_lookbehind?(compiled)
       sources << "automaton/lookahead.rb" if regexp_lookahead?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "runtime/contextual_regexp.rb" if compiled.rules.any?(&:contextual_patterns)
+      sources.insert(sources.index("runtime/checkpoint.rb"), "runtime/backup_memo.rb") if
+        compiled.machines.values.any? { |machine| machine.backup_memo_states || machine.backup_recovery_states }
       sources << "runtime/input_stack.rb" if parsed.uses_input_stack || parsed.config.dig(:options, :input_stack)
       sources << "runtime/indentation.rb" if parsed.config.dig(:options, :indentation)
       sources << "runtime/delimiters.rb" if parsed.uses_dynamic_delimiters || parsed.config.dig(:options, :dynamic_delimiters)

@@ -34,7 +34,7 @@ module Flexr
       @lexer = lexer
       @steps = []
       @config = lexer.class.__flexr_config
-      @compiled = lexer.class.__flexr_compiled
+      @compiled = lexer.class.compile!
       @rules = lexer.class.__flexr_rules
       @derivatives = compile_residuals if residuals
       @lexer.singleton_class.prepend(Actions)
