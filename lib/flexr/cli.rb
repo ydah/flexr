@@ -691,9 +691,7 @@ module Flexr
       klass.encoding(config.fetch(:encoding, Encoding::UTF_8))
       Array(config[:declared_tokens]).each { |token| klass.emits(token) }
       config_options = config.fetch(:options, {}).merge(overrides.slice(:experimental, :allow_empty_match))
-      if (tables = config_options[:keyword_tables])
-        klass.__flexr_config.options[:keyword_tables] = tables
-      end
+      klass.__flexr_config.options.merge!(config_options.slice(:keyword_tables, :shortest_states))
       klass.indentation(**config_options[:indentation]) if config_options[:indentation]
       config_options.slice(*Configuration::BOOLEAN_OPTIONS).each do |name, value|
         klass.option(name) if value

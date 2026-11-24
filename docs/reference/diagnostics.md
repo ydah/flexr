@@ -72,8 +72,9 @@ matched byte count, which can be shorter than the example input. For example,
 `"ab"` can select an earlier `/a/` rule with a one-byte match.
 
 For states using `followed_by:`, the candidate includes the shortest trailing
-input and is checked using the active rules. Longest-match backends compare
-the combined body and lookahead length; `firstmatch` keeps rule-order priority.
+input and is checked using the active rules. Longest-match states compare
+the combined body and lookahead length. Shortest-match states choose the
+shortest body with eligible trailing context. `firstmatch` uses rule order.
 The note separates consumed bytes from lookahead bytes. For example, two rules
 with body `/a/` and trailing context `/b+/` produce this note with backend `table`:
 
@@ -329,8 +330,10 @@ matches are allowed. No actions run during the check. If the shortest candidate
 does not confirm a tie, no alternative candidate is searched.
 
 For states using `followed_by:`, the candidate combines the shortest body with
-the shortest trailing input. The check compares the total length, so rules can
-overlap even when they consume different numbers of bytes. For example,
+the shortest trailing input. In longest-match states, the check compares the
+total length, so rules can overlap even when they consume different numbers
+of bytes. In shortest-match states, the check compares body lengths after
+verifying both rules' trailers. For example, in a longest-match state,
 `rule(/a/, followed_by: /bc/, emit: :FIRST)` followed by
 `rule(/ab/, followed_by: /c/, emit: :SECOND)` produces:
 

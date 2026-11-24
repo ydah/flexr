@@ -192,7 +192,8 @@ module Flexr
         nil
       end
 
-      def trailing_example(dfa, rules, target, input, trailing_dfas, encoding:, unicode:, firstmatch:, same_length: false)
+      def trailing_example(dfa, rules, target, input, trailing_dfas, encoding:, unicode:, firstmatch:, same_length: false,
+                           shortest: false, allow_empty_match: false)
         lengths = if firstmatch
           rules.filter_map do |rule|
             next if rule.index > target.index
@@ -205,6 +206,8 @@ module Flexr
         end
         matches = {}
         lengths.each do |index, length|
+          next if shortest && ((!allow_empty_match && length.zero?) || matches.key?(index))
+
           trailing = trailing_dfas[index]
           lookahead = trailing ? dfa_match_lengths(trailing, input, offset: length, encoding: encoding).map(&:last).max : 0
           next unless lookahead
@@ -217,8 +220,15 @@ module Flexr
         return unless matches.key?(target.index)
 
         priorities = rules.to_h { |rule| [rule.index, rule.priority] }
-        winner, (length, total) = matches.max_by { |index, (_, size)| firstmatch ? -index : [size, priorities.fetch(index), -index] }
-        return if same_length && total != matches.fetch(target.index).last
+        winner, (length, total) = matches.max_by do |index, (body, size)|
+          next -index if firstmatch
+
+          [shortest ? -body : size, priorities.fetch(index), -index]
+        end
+        if same_length
+          target_length = matches.fetch(target.index)
+          return if shortest ? length != target_length.first : total != target_length.last
+        end
 
         [winner, length, total - length]
       rescue EncodingError

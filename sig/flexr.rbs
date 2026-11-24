@@ -64,7 +64,7 @@ module Flexr
     def pattern: (*pattern_operand) -> Pattern
                | (regexp: String) -> Pattern
     def upto: (pattern_operand) -> Pattern
-    def state: (*(Symbol | String), ?inclusive: bool) { () [self: singleton(Lexer)] -> untyped } -> void
+    def state: (*(Symbol | String), ?inclusive: bool, ?match: (:longest | :shortest)) { () [self: singleton(Lexer)] -> untyped } -> void
     def all_states: () { () [self: singleton(Lexer)] -> untyped } -> void
     def on_eof: () { () [self: Lexer] -> untyped } -> void
     def emits: (*untyped) -> void

@@ -45,19 +45,36 @@ module Flexr
       @lexer.tokens
     end
 
+    def select_shortest(match, expected)
+      @shortest_choice = describe_candidate(match.rule, match.end_pos - match.start_pos, match.total_end_pos - match.end_pos)
+      @shortest_expected = expected
+    end
+
     def record(rule)
       start = @lexer.instance_variable_get(:@match_start)
       ending = @lexer.instance_variable_get(:@match_end)
       state = @lexer.state
-      candidates = candidates_at(start)
+      shortest = @config.options[:shortest_states]&.include?(state)
+      observed = @shortest_choice
+      expected = @shortest_expected
+      @shortest_choice = nil
+      @shortest_expected = nil
+      candidates = if shortest && observed && !buffered_shortest_trace?
+        [observed]
+      else
+        candidates_at(start, shortest, expected)
+      end
       selected = candidates.find { |candidate| candidate[:rule] == rule.index }
-      ties = selected ? candidates.select { |candidate| candidate[:total_length] == selected[:total_length] } : []
+      length_key = shortest ? :length : :total_length
+      ties = selected ? candidates.select { |candidate| candidate[length_key] == selected[length_key] } : []
       reason = if @config.backend == :firstmatch
         "first_match"
-      elsif candidates.length == 1
+      elsif candidates.length == 1 && !shortest
         "only_match"
       elsif ties.length > 1
         ties.count { |candidate| candidate.fetch(:priority, 0) == rule.priority } > 1 ? "rule_order" : "priority"
+      elsif shortest
+        "shortest"
       else
         "longest"
       end
@@ -139,18 +156,30 @@ module Flexr
       entries
     end
 
-    def candidates_at(start)
-      @config.backend == :firstmatch ? firstmatch_candidates(start) : dfa_candidates(start)
+    def candidates_at(start, shortest, expected)
+      @config.backend == :firstmatch ? firstmatch_candidates(start) : dfa_candidates(start, shortest, expected)
     end
 
-    def dfa_candidates(start)
+    def buffered_shortest_trace?
+      buffer = @lexer.buffer
+      source = buffer.stable_source
+      buffer.eof_loaded? && source.instance_of?(String) && source.singleton_methods.empty?
+    end
+
+    def dfa_candidates(start, shortest, expected)
       dfa = @compiled.machines.fetch(@lexer.state).dfa
       best = {}
-      walk(dfa, start) do |acceptance, ending|
+      interpreter = Runtime::Interpreter.new(@lexer) if expected
+      scalar_rows = Runtime::ShortestMatch::UTF8_ROWS if shortest && @config.encoding == Encoding::UTF_8
+      walk(dfa, start, scalar_rows: scalar_rows) do |acceptance, ending|
         rule = @rules.fetch(acceptance.rule_index)
-        candidate = candidate_for(rule, start, ending)
-        next unless candidate
         previous = best[rule.index]
+        next if shortest && (previous || (start == ending && !@config.options[:allow_empty_match]))
+        next if interpreter && !interpreter.__send__(:expected_rule?, rule, expected, @lexer.buffer, start, ending)
+
+        candidate = candidate_for(rule, start, ending, scalar_rows: scalar_rows)
+        next unless candidate
+
         best[rule.index] = candidate if !previous || candidate[:total_length] >= previous[:total_length]
       end
       best.values.sort_by { |candidate| candidate[:rule] }
@@ -192,30 +221,37 @@ module Flexr
       end
     end
 
-    def candidate_for(rule, start, ending)
+    def candidate_for(rule, start, ending, scalar_rows: nil)
       trailing = if rule.trailing
         dfa = rule.trailing_dfa || (@trailing_dfas ||= {})[rule.index] ||= Flexr.compile_pattern(
           rule.trailing, encoding: @config.encoding, options: { unicode: @config.options[:unicode] == true }
         )
         longest = nil
-        walk(dfa, ending, scan_start: start) { |_acceptance, cursor| longest = cursor - ending }
+        walk(dfa, ending, scan_start: start, scalar_rows: scalar_rows) do |_acceptance, cursor|
+          longest = cursor - ending
+        end
         longest
       else
         0
       end
       return if trailing.nil?
 
-      candidate = { rule: rule.index, patterns: rule.patterns.map(&:inspect), length: ending - start,
-                    trailing_length: trailing, total_length: ending - start + trailing }
+      describe_candidate(rule, ending - start, trailing)
+    end
+
+    def describe_candidate(rule, length, trailing)
+      candidate = { rule: rule.index, patterns: rule.patterns.map(&:inspect), length: length,
+                    trailing_length: trailing, total_length: length + trailing }
       candidate[:priority] = rule.priority unless rule.priority.zero?
       candidate
     end
 
-    def walk(dfa, start, scan_start: start)
+    def walk(dfa, start, scan_start: start, scalar_rows: nil)
       state = @lexer.__flexr_dfa_start(dfa, start, scan_start)
       cursor = start
+      scalar = 0
       loop do
-        if @lexer.utf8_boundary?(cursor)
+        if scalar.zero? && @lexer.utf8_boundary?(cursor)
           dfa.accepts[state].each do |acceptance|
             next if acceptance.bol_only && !@lexer.__flexr_beginning_of_line_at?(start, scan_start)
 
@@ -223,7 +259,10 @@ module Flexr
           end
         end
         break unless @lexer.buffer.ensure_available?(cursor + 1)
-        break unless (state = dfa.transition(state, @lexer.buffer.getbyte(cursor)))
+        byte = @lexer.buffer.getbyte(cursor)
+        break unless (state = dfa.transition(state, byte))
+        scalar = scalar_rows[scalar][byte] if scalar_rows
+        break unless scalar
 
         cursor += 1
       end

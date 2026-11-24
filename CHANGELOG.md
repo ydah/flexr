@@ -7,6 +7,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Opt in to shortest matching per state with `state(:raw, match: :shortest)`.
+  Flexr selects the shortest eligible body and leaves trailing context available
+  for the next token.
 - Get the valid continuation bytes and shortest completion for a DFA lexical
   error through `LexError#continuation`. Diagnostics mark the mismatch or EOF.
 - Collect DFA transition coverage from lexer tests. Uncovered transitions

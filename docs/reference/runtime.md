@@ -179,9 +179,10 @@ Keyword classification and dynamic actions belong to token emission.
 Recognition reads the compiled tables without running actions, updating
 state, or constructing a lexer instance.
 
-Longest match includes trailing context when ranking rules, and `finish`
-excludes the lookahead. Line anchors use the original string. UTF-8
-recognition respects full scalar boundaries. Binary recognition operates on
+Recognition follows the state's match policy. Longest match ranks the body
+and trailing context together. Shortest match ranks eligible bodies by length.
+The returned `finish` is the exclusive body end. Line anchors use the original
+string. UTF-8 recognition respects full scalar boundaries. Binary recognition operates on
 bytes. A no-match result or an offset at EOF returns `nil`. A non-EOF
 zero-width match requires `allow_empty_match` and can return the incoming
 offset, so the caller controls progress.

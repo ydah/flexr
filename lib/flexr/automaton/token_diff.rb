@@ -8,7 +8,11 @@ require_relative "token_diff/inclusion"
 module Flexr
   module Automaton
     module TokenDiff
-      Side = Data.define(:dfa, :rules, :effects, :keyword_effects, :allow_empty_match)
+      Side = Data.define(:dfa, :rules, :effects, :keyword_effects, :allow_empty_match, :shortest) do
+        def initialize(shortest: false, **)
+          super
+        end
+      end
       FirstmatchSide = Data.define(:rules, :effects, :keyword_effects)
       Match = Data.define(:rule_index, :effect, :length)
       Result = Data.define(:status, :input, :offset, :left, :right, :reason)
@@ -50,6 +54,14 @@ module Flexr
         result.with(status: :inconclusive, reason: "a rule in this state has an opaque action")
       rescue SearchLimit
         Result.new(status: :inconclusive, input: nil, offset: nil, left: nil, right: nil, reason: "search limit reached")
+      end
+
+      def reachable_rules(side, encoding:, limit: 100_000)
+        search = ReachabilitySearch.new(side, encoding, limit)
+        result = search.compare
+        result.status == :inconclusive ? side.dfa.rule_ids : search.reachable.keys
+      rescue SearchLimit
+        side.dfa.rule_ids
       end
 
       class Search
@@ -133,7 +145,15 @@ module Flexr
         end
 
         def prefix_dfas(_trails)
-          @sides.grep(FirstmatchSide).flat_map { |side| side.rules.filter_map(&:trailing_dfa) }.uniq
+          @sides.flat_map do |side|
+            if side.is_a?(FirstmatchSide)
+              side.rules.filter_map(&:trailing_dfa)
+            elsif side.shortest
+              side.dfa.rule_ids.filter_map { |id| side.rules.fetch(id).trailing_dfa }
+            else
+              []
+            end
+          end.uniq
         end
 
         def build_keywords
@@ -263,6 +283,7 @@ module Flexr
           pos = path.position
           scan = pos.scans.fetch(index)
           return scan unless scan.state || !scan.pending.empty?
+          return resolve_shortest(path, side, index, scan) if side.shortest
 
           candidates = []
           pending = scan.pending.dup
@@ -289,6 +310,27 @@ module Flexr
             [side.rules.fetch(candidate.rule_index).priority, -candidate.rule_index, candidate.end_pos]
           end
           Scan.new(state: scan.state, pending: pending, winner: best || scan.winner)
+        end
+
+        def resolve_shortest(path, side, index, scan)
+          return scan if path.length == path.offset && !side.allow_empty_match
+
+          pos = path.position
+          label = side.dfa.accepts.fetch(scan.state).find do |acceptance|
+            eligible?(acceptance, pos.bol, pos.right) &&
+              trailing_prefix?(side.rules.fetch(acceptance.rule_index), pos)
+          end
+          return scan unless label
+
+          Scan.new(state: nil, pending: {}, winner: candidate_at(path, side, index, label.rule_index))
+        end
+
+        def trailing_prefix?(rule, pos)
+          return true unless rule.trailing
+
+          dfa = rule.trailing_dfa
+          bol = !pos.left || pos.left.first != LeftContext::OTHER
+          @right.accepts_prefix?(dfa, start_state(dfa, pos.left), bol, pos.right)
         end
 
         def eligible?(label, bol, right)
@@ -371,6 +413,24 @@ module Flexr
         end
       end
 
+      class ReachabilitySearch < Search
+        attr_reader :reachable
+
+        def initialize(side, encoding, limit)
+          super([side], encoding, limit)
+          @reachable = {}
+          @rule_count = side.dfa.rule_ids.length
+        end
+
+        private
+
+        def different?(candidates)
+          winner = candidates.first
+          @reachable[winner.rule_index] = true if winner
+          @reachable.length == @rule_count
+        end
+      end
+
       class OverlapSearch < Search
         def initialize(side, tokens, encoding, limit)
           super([side, side], encoding, limit)
@@ -395,7 +455,7 @@ module Flexr
             candidate = candidate_at(path, @side, 0, label.rule_index)
             effect = candidate.effect
             next unless effect&.action == :emit && @tokens.include?(effect.token)
-            next if candidates.key?(effect.token) || !accepts_trailing?(label.rule_index, pos)
+            next if candidates.key?(effect.token) || !trailing_prefix?(@side.rules.fetch(label.rule_index), pos)
 
             candidates[effect.token] = candidate
           end
@@ -404,19 +464,10 @@ module Flexr
           @tokens.map { |token| Scan.new(state: nil, pending: {}, winner: candidates.fetch(token)) }
         end
 
-        def accepts_trailing?(index, pos)
-          rule = @side.rules.fetch(index)
-          return true unless rule.trailing
-
-          dfa = rule.trailing_dfa
-          bol = !pos.left || pos.left.first != LeftContext::OTHER
-          @right.accepts_prefix?(dfa, start_state(dfa, pos.left), bol, pos.right)
-        end
-
         def different?(candidates) = candidates.all?
       end
 
-      private_constant :BYTE_ORDER, :Candidate, :Scan, :Position, :Path, :Search, :OverlapSearch,
+      private_constant :BYTE_ORDER, :Candidate, :Scan, :Position, :Path, :Search, :ReachabilitySearch, :OverlapSearch,
                        :SearchLimit, :UnsupportedFirstmatch, :Firstmatch
     end
   end

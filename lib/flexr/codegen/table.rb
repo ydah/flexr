@@ -25,7 +25,7 @@ module Flexr
         ].join("\n")
       end
 
-      def source(indent: "  ", direct: false)
+      def source(indent: "  ", direct: false, shortest_states: nil)
         if compiled.machines.values.any? { |machine| machine.dfa.starts || machine.dfa.lookahead? }
           return <<~RUBY.lines.map { |line| indent + line }.join
             def scan_one
@@ -48,6 +48,12 @@ module Flexr
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
         fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
         lines << "#{indent}def scan_one"
+        if shortest_states&.any?
+          lines << "#{indent}  case @state"
+          lines << "#{indent}  when #{shortest_states.map(&:inspect).join(', ')}"
+          lines << "#{indent}    return (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan"
+          lines << "#{indent}  end"
+        end
         lines << "#{indent}  if @__flexr_generated_scan_state != @state"
         lines << "#{indent}    machine = self.class.__flexr_compiled.machines.fetch(@state)"
         lines << "#{indent}    @__flexr_generated_scan_state = @state"

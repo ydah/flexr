@@ -58,6 +58,23 @@ RSpec.describe "trailing context overlap diagnostics" do
     expect(lexer.new("ab").tokens).to eq([[:WORD, "ab"]])
   end
 
+  it "verifies overlap and unreachable examples by shortest eligible body length" do
+    lexer = lexer_class do
+      state(:initial, inclusive: true, match: :shortest) do
+        rule("a", followed_by: /b+/, emit: :CONTEXT)
+        rule("a", priority: 1, emit: :PLAIN)
+        rule("ab", emit: :WORD)
+      end
+    end
+    diagnostics = lexer.compile!.diagnostics
+    overlap = diagnostics.find { |item| item.code == "FLEXR-I001" }
+    expect(overlap.message).to include("same body length")
+    expect(overlap.note).to include('"ab" selects rule "a"', "matched 1 byte, looked ahead 0 bytes")
+    unreachable = diagnostics.find { |item| item.code == "FLEXR-W001" && item.message.include?('"ab"') }
+    expect(unreachable.note).to include('"ab" selects rule "a"', "shortest body match")
+    expect(lexer.new("ab").next_token).to eq([:PLAIN, "a"])
+  end
+
   it "checks trailing matches before naming the winner" do
     lexer = lexer_class do
       rule(/a/, followed_by: /c/, emit: :WRONG)

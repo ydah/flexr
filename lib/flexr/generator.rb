@@ -61,6 +61,12 @@ module Flexr
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
+      shortest_states = parsed.config.dig(:options, :shortest_states)
+      if shortest_states
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support shortest-match states")' \
+          ' unless defined?(Flexr::Runtime::ShortestMatch)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if parsed.config.dig(:options, :indentation)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime lacks indentation support") unless respond_to?(:indentation)'
         install = "#{guard}\n#{indent}#{install}"
@@ -129,7 +135,9 @@ module Flexr
           ' unless defined?(Flexr::Runtime::DelegatedTokens)'
         install = "#{guard}\n#{indent}#{install}"
       end
-      install = "#{install}#{Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct)}"
+      scanner = Codegen::Table.new(compiled).source(indent: indent, direct: effective_backend(parsed) == :direct,
+                                                   shortest_states: shortest_states)
+      install = "#{install}#{scanner}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
       edits = parsed.dsl_edits.dup
       parsed.rules.each do |rule|
@@ -184,7 +192,7 @@ module Flexr
         "token_kind: #{ruby_literal(@options.fetch(:token_kind, parsed.config[:token_kind]))}, " \
         "encoding: #{encoding_expression(parsed.config[:encoding])}, " \
         "declared_tokens: #{ruby_literal(parsed.config[:declared_tokens])}, " \
-        "options: #{ruby_literal(effective_options(parsed))}, " \
+        "options: #{generated_options_expression(parsed)}, " \
         "eof_rules: #{eof_rules_expression(parsed.config[:eof_rules] || {})}, " \
         "states: #{ruby_literal(parsed.states.keys.reject { |name| name == :initial })}, " \
         "inclusive_states: #{ruby_literal(parsed.states.transform_values { |value| value[:inclusive] })}, " \
@@ -326,6 +334,15 @@ module Flexr
       options
     end
 
+    def generated_options_expression(parsed)
+      options = effective_options(parsed)
+      shortest = options.delete(:shortest_states)
+      literal = ruby_literal(options)
+      return literal unless shortest
+
+      "#{literal}.merge(shortest_states: #{ruby_literal(shortest)}.freeze)"
+    end
+
     def table_compression(parsed)
       @options.fetch(:table_compression, parsed.config[:options]&.fetch(:table_compression, :rows) || :rows).to_sym
     end
@@ -353,6 +370,7 @@ module Flexr
       sources.push("automaton/tagged_dfa.rb", "runtime/tagged_captures.rb", "generated/tagged_capture_programs.rb") if
         compiled.rules.any? { |rule| rule.respond_to?(:tagged_capture_programs) && rule.tagged_capture_programs }
       sources << "runtime/tagged_trailing.rb" if effective_backend(parsed) != :firstmatch && compiled.rules.any?(&:trailing)
+      sources.push("dsl/shortest_states.rb", "runtime/shortest_match.rb") if parsed.config.dig(:options, :shortest_states)
       sources << "runtime/delegation.rb" if uses_delegation?(parsed)
       sources << "rules.rb" if parsed.uses_rule_sets
       sources.map do |relative|
@@ -563,6 +581,9 @@ module Flexr
       parsed = klass.__flexr_spec
       if (indentation = parsed.options[:indentation])
         (passthrough.config[:options] ||= {})[:indentation] = indentation
+      end
+      if (shortest = parsed.options[:shortest_states])
+        (passthrough.config[:options] ||= {})[:shortest_states] = shortest
       end
       if (tables = parsed.options[:keyword_tables])
         (passthrough.config[:options] ||= {})[:keyword_tables] = tables

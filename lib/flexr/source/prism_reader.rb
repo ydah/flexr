@@ -60,7 +60,7 @@ module Flexr
         @lexer_offset = klass.location.start_offset
         collect_constants(prism.value)
         collect_rule_namespaces(prism.value)
-        collect_body(klass.body, [:initial])
+        collect_body(klass.body, [])
         require_spans = flexr_require_spans(prism.value)
         first_dsl_offset = @spans.map(&:first).min || class_body_offset(klass)
         @config[:eof_rules] = @eof_rules
@@ -207,9 +207,9 @@ module Flexr
         record_deletion(node) unless %i[rule use state all_states on_eof].include?(name)
         case name
         when :rule
-          collect_rule(node, states)
+          collect_rule(node, states.empty? ? [:initial] : states)
         when :use
-          collect_use(node, states)
+          collect_use(node, states.empty? ? [:initial] : states)
         when :state
           collect_state(node, states)
         when :all_states
@@ -220,7 +220,7 @@ module Flexr
             action_source.start_with?("do") ? "proc #{action_source}" : "proc#{action_source}"
           end
           if action
-            state = states.last.to_sym
+            state = states.last || :initial
             @eof_rules[state] = "proc { instance_exec(&self.class.__flexr_generated_eof_actions.fetch(#{state.inspect})) }"
             record_eof_edit(node, state, action)
           else
@@ -398,20 +398,42 @@ module Flexr
 
         args = positional(node)
         names = args.map { |argument| static(argument, scope: @lexer_scope).to_sym }
-        names = parent_states if node.name.to_sym == :all_states
         raise ArgumentError, "state requires a name" if names.empty?
 
-        validate_keywords!(node, %i[inclusive])
+        validate_keywords!(node, %i[inclusive match])
         inclusive = keyword(node, :inclusive) ? static(keyword(node, :inclusive), scope: @lexer_scope) : false
+        location = [node.location.start_offset, node.location.end_offset]
+        if (match_node = keyword(node, :match))
+          collect_state_match(match_node, names) unless @allow_dynamic
+          if names.include?(:initial) && !@initial_match_declared
+            @states[:initial][:location] = location
+            @initial_match_declared = true
+          end
+        end
         names.each do |name|
           existing = @states[name]
           raise ArgumentError, "state #{name.inspect} already declared with inclusive: #{existing[:inclusive]}" if
             existing && existing[:inclusive] != inclusive
-          @states[name] ||= { inclusive: inclusive, location: [node.location.start_offset, node.location.end_offset] }
+          @states[name] ||= { inclusive: inclusive, location: location }
         end
         record_state_wrapper(node, block)
-        active_states = parent_states == [:initial] ? names : (parent_states + names).uniq
-        collect_body(block.body, active_states)
+        collect_body(block.body, (parent_states + names).uniq)
+      end
+
+      def collect_state_match(node, names)
+        match = static(node)
+        DSL::ShortestStates.validate!(match)
+        shortest = Array(@config.dig(:options, :shortest_states))
+        names.each do |name|
+          next if name == :initial && !@initial_match_declared
+          next unless @states.key?(name)
+
+          DSL::ShortestStates.agree!(name, match, shortest)
+        end
+        (@config[:options] ||= {})[:shortest_states] = (shortest | names).freeze if match == :shortest
+      rescue ArgumentError => e
+        diagnostic = Diagnostics.error("FLEXR-E018", e.message)
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
 
       def collect_all_states(node, parent_states)

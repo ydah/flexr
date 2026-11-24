@@ -49,6 +49,23 @@ RSpec.describe "flexr diff" do
     expect(states.first[:right]).to be_nil
   end
 
+  it "compares shortest and longest states using the same trailing eligibility" do
+    longest = <<~SPEC
+      state(:raw) do
+        rule("a", followed_by: "b", emit: :PREFIX)
+        rule("ab", priority: 1, emit: :WORD)
+      end
+    SPEC
+    shortest = longest.sub("state(:raw)", "state(:raw, match: :shortest)")
+    status, states = compare_json(longest, shortest)
+
+    expect(status).to eq(1)
+    expect(states.first).to eq(state: "initial", status: "equal")
+    expect(states.last).to include(state: "raw", status: "different", input: "ab", offset: 0)
+    expect(states.last[:left]).to include(length: 2, effect: hash_including(token: "WORD"))
+    expect(states.last[:right]).to include(length: 1, effect: hash_including(token: "PREFIX"))
+  end
+
   it "recognizes a keyword table as equivalent to a literal rule with the same effect" do
     left = <<~SPEC
       rule("if", emit: :IF)

@@ -125,8 +125,9 @@ rule(/a(?=bc)b/, emit: :PREFIX)
 
 On `abc`, the last rule consumes `ab` and leaves `c` for the next token.
 Longest-match ranking counts the bytes matched by the regexp body.
-Rules using `followed_by:` keep their ranking by the combined body and
-trailing match lengths. The `firstmatch` backend preserves Ruby's choice of
+In longest-match states, `followed_by:` adds its length to the ranking. In a
+shortest-match state, the trailer determines eligibility and the body
+determines rank. The `firstmatch` backend preserves Ruby's choice of
 alternatives. Flexr's vendored case folding applies to these expressions.
 For example, Ruby 4.0.9 can match `SS` with `/(?i:ß)(?=a)/u` on `SSa`.
 Flexr's case folding for this expression matches the single-character
