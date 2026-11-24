@@ -91,8 +91,8 @@ RSpec.describe Flexr do
     expect(lexer_class.new("!b").tokens).to eq([[:CHAR, "!"], [:X, "b"]])
   end
 
-  it "diagnoses anchors nested inside regexp alternation" do
-    [/^a|b/, /a|b$/].each do |pattern|
+  it "diagnoses beginning-of-line anchors nested inside regexp alternation" do
+    [/^a|b/, /a|^b/].each do |pattern|
       expect { Flexr.compile_pattern(pattern) }
         .to raise_error(Flexr::CompileError) { |error| expect(error.diagnostic.code).to eq("FLEXR-E009") }
     end

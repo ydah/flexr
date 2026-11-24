@@ -89,6 +89,11 @@ module Flexr
           ' unless defined?(Flexr::Runtime::ContextualRegexp)'
         install = "#{guard}\n#{indent}#{install}"
       end
+      if compiled.rules.any? { |rule| rule.contextual_patterns&.any? { |pattern| pattern&.invalid_eof } }
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp source-end assertions")'
+        guard += ' unless defined?(Flexr::Runtime::ContextualRegexp) && Flexr::Runtime::ContextualRegexp.method_defined?(:invalid_eof)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if regexp_lookahead?(compiled)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp lookahead")' \
           ' unless defined?(Flexr::Automaton::Lookahead)'
@@ -433,7 +438,9 @@ module Flexr
       when Automaton::DFA
         "::Flexr::Generated.load_dfa(#{ruby_literal(dfa_data(value, compression: :rows))})"
       when Runtime::ContextualRegexp
-        "::Flexr::Runtime::ContextualRegexp.new(**#{ruby_literal(value.to_h)})"
+        definition = value.to_h
+        definition.delete(:invalid_eof) unless value.invalid_eof
+        "::Flexr::Runtime::ContextualRegexp.new(**#{ruby_literal(definition)})"
       when Pattern
         "::Flexr::Pattern.__flexr_restore(#{value.operation.inspect}, #{ruby_literal(value.operands)}, #{ruby_literal(value.name)})"
       else

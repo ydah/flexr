@@ -167,6 +167,28 @@ RSpec.describe "runtime and generated parity" do
       ]
       expect(outcomes_for(source, "LookaheadCaptureParityLexer", %w[abc abd], streaming: true).values).to all(eq(expected))
     end
+
+    it "keeps source and line end assertions across chunks in #{backend} mode" do
+      source = <<~'RUBY'.sub("BACKEND", backend.to_s)
+        require "flexr"
+        class RightAnchorParityLexer < Flexr::Lexer
+          backend :BACKEND
+          rule(/(?<strict>a\z)|(?<soft>a\Z)|(?<body>a)/) do
+            emit :A, [captures[:strict], captures[:soft], captures[:body]]
+          end
+          rule(/b$\nc/, emit: :MULTILINE)
+          rule(/./m, emit: :OTHER)
+        end
+      RUBY
+      inputs = %W[a a\n a\nx b\nc]
+      expected = [
+        [["A", ["a", nil, nil]]],
+        [["A", [nil, "a", nil]], %W[OTHER \n]],
+        [["A", [nil, nil, "a"]], %W[OTHER \n], %w[OTHER x]],
+        [%W[MULTILINE b\nc]]
+      ]
+      expect(outcomes_for(source, "RightAnchorParityLexer", inputs, streaming: true).values).to all(eq(expected))
+    end
   end
 
   it "uses the following LF when replaying captures from a CR token" do
@@ -280,7 +302,7 @@ RSpec.describe "runtime and generated parity" do
     expect(trace.steps.first.fetch(:reason)).to eq("rule_order")
   end
 
-  it "rejects an artifact that requires unavailable priority or channel support" do
+  it "rejects an artifact that requires unavailable runtime capabilities" do
     Dir.mktmpdir do |directory|
       source = File.join(directory, "lexer.flexr.rb")
       generated = File.join(directory, "lexer.generated.rb")
@@ -288,6 +310,7 @@ RSpec.describe "runtime and generated parity" do
         require "flexr"
         class ABI2PriorityLexer < Flexr::Lexer
           rule("if", channel: :comment, emit: :IF, priority: 10)
+          rule(/(?<name>a\\z)/) { emit :END, captures[:name] }
         end
       RUBY
       Flexr::Generator.new(source, output: generated).generate
@@ -298,6 +321,8 @@ RSpec.describe "runtime and generated parity" do
           Flexr::IR::Rule.send(:remove_method, :loses_priority_tie?)
         when "token channels"
           Flexr::Runtime.send(:remove_const, :Channels)
+        when "regexp source-end assertions"
+          Flexr::Runtime::ContextualRegexp.send(:undef_method, :invalid_eof)
         end
         begin
           load ARGV.fetch(0)
@@ -306,7 +331,7 @@ RSpec.describe "runtime and generated parity" do
           puts error.diagnostic.note
         end
       RUBY
-      ["explicit rule priority", "token channels"].each do |capability|
+      ["explicit rule priority", "token channels", "regexp source-end assertions"].each do |capability|
         output, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", script, generated, capability)
         expect(status).to be_success, stderr
         expect(output).to include("FLEXR-E020", "runtime does not support #{capability}")

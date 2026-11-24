@@ -191,7 +191,7 @@ module Flexr
       end
 
       def absence(node)
-        return AST::Fail.new(loc: node.loc) if AST.nullable?(node.child) && !AST.lookahead?(node.child)
+        return AST::Fail.new(loc: node.loc) if AST.nullable?(node.child) && !AST.right_context?(node.child)
 
         child = normalize_node(node.child)
         AST::Difference.new(left: universe, right: sequence([universe, child, universe]), loc: node.loc)

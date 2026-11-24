@@ -56,6 +56,25 @@ module Flexr
         end
       end
 
+      def self.anchors(node)
+        case node
+        when Anchor then [node]
+        when Seq, Alt then node.children.flat_map { |child| anchors(child) }
+        when Star, Repeat, Absence, Lookahead, NamedCapture then anchors(node.child)
+        else []
+        end
+      end
+
+      def self.right_context?(node)
+        case node
+        when Lookahead then true
+        when Anchor then %i[eof final_eol line_end].include?(node.kind)
+        when Seq, Alt then node.children.any? { |child| right_context?(child) }
+        when Star, Repeat, Absence, NamedCapture then right_context?(node.child)
+        else false
+        end
+      end
+
       def self.lookahead?(node)
         case node
         when Lookahead then true

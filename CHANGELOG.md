@@ -14,6 +14,7 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 - Use `\R` to match line breaks, including atomic CRLF pairs.
 
 - Support positive and negative regexp lookahead in streaming lexers, including named captures.
+- Support `\z`, `\Z`, and internal `$` in regexp rules so lexers can distinguish source end from line end.
 
 - Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes.
   Set it to `nil` to disable the cache.

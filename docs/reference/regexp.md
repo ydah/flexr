@@ -11,7 +11,8 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Unicode `\p{...}` / `\P{...}` | Supported | Uses the vendored UCD snapshot |
 | `*`, `+`, `?` | Supported | Greedy forms only |
 | `{n}`, `{n,m}`, `{n,}` | Supported | Explicit bounds may not exceed 1000 |
-| `^` / `$` | Restricted | Only at outermost pattern boundaries; otherwise `FLEXR-E009` |
+| `^` | Restricted | Allowed at the start of the outermost rule pattern; otherwise `FLEXR-E009` |
+| `$`, `\z`, `\Z` | Supported | See [end anchors](#end-anchors) |
 | `/i`, `/m`, `/x`, `/n` | Supported | Inline forms are supported where Ruby permits them |
 | `\d`, `\w`, `\s` | Supported | Unicode-aware with `option :unicode` in UTF-8 |
 | `\h`, `\H` | Supported | Hexadecimal digits and their complement |
@@ -21,7 +22,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | Positive and negative lookbehind | Unsupported | Track preceding input with rules or states |
 | Backreferences | Unsupported | Enumerate finite repeated strings, or use states and action checks |
 | `\b`, `\B` | Unsupported | Use the literal-boundary examples in `FLEXR-E014` where applicable; token edges need rules or state checks |
-| `\A`, `\z`, `\Z` | Unsupported | The `^` / `$` examples in `FLEXR-E014` apply only to input without line feeds |
+| `\A` | Unsupported | The `^` example in `FLEXR-E014` applies to input without line feeds |
 | `\G` | Unsupported | At the start of a rule, omit it: rules already match at the current lexer position |
 | `\K` | Unsupported | Use the prefix/suffix state example in `FLEXR-E014` where applicable to preserve token text and location |
 | Subexpression calls `\g<...>` | Unsupported | Inline non-recursive expressions; recursive calls need a parser or state stack |
@@ -67,6 +68,24 @@ matches U+0085, U+2028, and U+2029. CRLF is atomic. For example, `/\R\n/`
 accepts CRLF followed by an additional LF. A CR followed by LF belongs to
 the pair even when the LF falls beyond the end of a candidate token.
 See [Ruby's line break syntax](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Shorthand+Character+Classes).
+
+## End anchors
+
+| Anchor | Positions where it matches |
+|---|---|
+| `$` | Before any LF or at the end of the active input source |
+| `\z` | At the end of the active input source |
+| `\Z` | Immediately before a final LF or at the end of the active input source |
+
+End anchors consume zero bytes. For example, `/a$\nb/` consumes `a\nb`
+when the line ends after `a`. On `a\nb`, `/a\Z/` fails because the
+LF is followed by `b`. On `a\r\n`, `/a\r\Z/` matches through the CR.
+
+A streamed lexer checks the following bytes before deciding whether it has
+reached a line or source end. An included input has its own source end.
+The end of a loaded chunk or a candidate token has no effect on the
+assertion. Malformed UTF-8 still occupies bytes in the active source.
+See [Ruby regexp anchors](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Anchors).
 
 ## Lookahead
 
@@ -122,7 +141,8 @@ Likewise, flexr parses `X` as an ordinary alternation in `(?~a|b)`.
 Use `table`, `direct`, or `auto` for rule patterns that use absence.
 All backends support non-nullable absence expressions in `followed_by:`
 because trailing context is evaluated by a DFA. Extended `(?~|...)`
-forms report `FLEXR-E014`. Anchors inside `X` report `FLEXR-E009`.
+forms report `FLEXR-E014`. Use end anchors in `X` to constrain its
+right context. A beginning-of-line anchor in `X` reports `FLEXR-E009`.
 
 See the [absence implementation record](../implementations/20261122_dfa_absence_groups.md) for the compilation strategy.
 

@@ -68,9 +68,7 @@ RSpec.describe "regexp engine contracts" do
     /foo\b:/ => [/foo:/, "surrounding literals already establish the boundary"],
     /foo\Bbar/ => [/foobar/, "surrounding literals already establish the non-boundary"],
     /\Ga/ => [/a/, "at the start of a rule"],
-    /\Aa/ => [/^a/, "input without line feeds"],
-    /a\z/ => [/a$/, "input without line feeds"],
-    /a\Z/ => [/a$/, "input without line feeds"]
+    /\Aa/ => [/^a/, "input without line feeds"]
   }.each do |original, (rewritten, condition)|
     it "shows a scoped boundary rewrite for #{original.inspect}" do
       expect { Flexr.parse_pattern(original) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
@@ -82,7 +80,7 @@ RSpec.describe "regexp engine contracts" do
 
     it "preserves token text and actions within the scope of the #{original.inspect} rewrite" do
       inputs = ["", "a", "aa", "ba", "ab", "foo:", "foobar", "xfoo:foobar", "éa"]
-      inputs += ["a\na", "foo:\nfoobar"] unless %w[\\A \\z \\Z].any? { |anchor| original.source.include?(anchor) }
+      inputs += ["a\na", "foo:\nfoobar"] unless original.source.include?("\\A")
       reference = Regexp.new("\\G(?:#{original.source})")
       %i[table direct auto firstmatch].each do |backend|
         lexer = Class.new(Flexr::Lexer) do
@@ -117,10 +115,8 @@ RSpec.describe "regexp engine contracts" do
         expect(error.diagnostic.help).to include("token edges need separate rules or state checks")
       end
     end
-    [/\Aa/, /a\z/, /a\Z/].each do |pattern|
-      expect { Flexr.parse_pattern(pattern) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-        expect(error.diagnostic.help).to include("line boundaries differ from string boundaries")
-      end
+    expect { Flexr.parse_pattern(/\Aa/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
+      expect(error.diagnostic.help).to include("line boundaries differ from string boundaries")
     end
     expect { Flexr.parse_pattern(/a\Gb/) }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
       expect(error.diagnostic.help).to include('interior \G needs a separate rewrite')
