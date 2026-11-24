@@ -67,14 +67,18 @@ module Flexr
         @winner = @plans[acceptance.rule_index]&.[](acceptance.pattern_index)&.remember(position)
       end
 
+      def snapshot_at(acceptance, position)
+        cursor = @plans[acceptance.rule_index]&.[](acceptance.pattern_index)
+        cursor&.remember(position)&.snapshot
+      end
+
       def finish(match, buffer)
         return match unless match&.capture.is_a?(::Regexp)
         return match if buffer.capture_source_exposed
 
         if (program = @whole[match.rule.index]&.[](match.capture))
           match.capture = CapturedMatch.new(program.whole_capture, program.encoding, match, buffer)
-        elsif @winner
-          snapshot = @winner.snapshot
+        elsif (snapshot = block_given? ? yield : @winner&.snapshot)
           match.capture = CapturedMatch.new(snapshot, snapshot.program.encoding, match, buffer)
         end
         match

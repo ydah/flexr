@@ -352,6 +352,7 @@ module Flexr
       sources << "runtime/captures.rb" if compiled.rules.any?(&:capture_patterns)
       sources.push("automaton/tagged_dfa.rb", "runtime/tagged_captures.rb", "generated/tagged_capture_programs.rb") if
         compiled.rules.any? { |rule| rule.respond_to?(:tagged_capture_programs) && rule.tagged_capture_programs }
+      sources << "runtime/tagged_trailing.rb" if effective_backend(parsed) != :firstmatch && compiled.rules.any?(&:trailing)
       sources << "runtime/delegation.rb" if uses_delegation?(parsed)
       sources << "rules.rb" if parsed.uses_rule_sets
       sources.map do |relative|

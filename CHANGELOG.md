@@ -29,6 +29,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Changed
 
+- Track `followed_by:` boundaries during longest-match scans of fully buffered
+  input. Overlapping body matches can share trailing-context work.
 - Record named capture positions during longest-match scans for supported
   patterns. Patterns that exceed tagged DFA limits use regexp replay and
   report an informational diagnostic.
