@@ -8,6 +8,7 @@ The main commands are:
 | Command | Purpose |
 | --- | --- |
 | `flexr check SPEC` | Parse and diagnose a specification |
+| `flexr diff LEFT RIGHT` | Find the shortest change to first rule selection in each lexical state |
 | `flexr generate SPEC -o OUTPUT` | Write generated Ruby |
 | `flexr trace SPEC INPUT` | Show automaton state, acceptance, and transitions |
 | `flexr new NAME --parser PARSER` | Create a calculator project for Racc or Lrama |

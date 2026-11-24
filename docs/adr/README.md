@@ -108,3 +108,4 @@ MUST rules are required. For a SHOULD rule, explain any exception in the pull re
 | [Keep regexp lookahead zero-width during rule selection](20261123_zero_width_regexp_lookahead.md) | Assertions inspect the active input source without adding to the regexp body's match length. |
 | [Evaluate end anchors against the active input source](20261123_end_anchors_use_active_input.md) | Source-end and line-end assertions use the active source across streamed chunks and included inputs. |
 | [Keep regexp left context within the active input source](20261124_scope_regexp_left_context.md) | Assertions can inspect preceding bytes of the same source, and each included source has its own start and history. |
+| [Compare selected rule effects and body lengths when diffing lexer specifications](20261124_compare_selected_lexer_rules.md) | Each lexical state reports its shortest difference or whether equivalence could be proved. |
