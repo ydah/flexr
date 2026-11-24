@@ -15,11 +15,12 @@ module Flexr
 
     RUNTIME_SOURCES = %w[
       version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
-      unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/utf8.rb automaton/accel.rb
+      unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/accel.rb
       runtime/record.rb runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
-      runtime/interpreter.rb runtime/recognizer.rb runtime/error_continuation.rb runtime/core.rb
-      runtime/checkpoint.rb dsl.rb lexer.rb generated.rb
+      runtime/interpreter.rb runtime/recognizer.rb runtime/core.rb runtime/checkpoint.rb dsl.rb lexer.rb generated.rb
     ].freeze
+
+    DFA_ERROR_RUNTIME_SOURCES = %w[automaton/utf8.rb runtime/error_continuation.rb].freeze
 
     MATCHER_RUNTIME_SOURCES = %w[
       regexp/ast.rb regexp/parser.rb regexp/unsupported.rb
@@ -318,7 +319,11 @@ module Flexr
       sources << "runtime/input_stack.rb" if parsed.uses_input_stack || parsed.config.dig(:options, :input_stack)
       sources << "runtime/indentation.rb" if parsed.config.dig(:options, :indentation)
       sources << "runtime/delimiters.rb" if parsed.uses_dynamic_delimiters || parsed.config.dig(:options, :dynamic_delimiters)
-      sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb") if effective_backend(parsed) == :firstmatch
+      if effective_backend(parsed) == :firstmatch
+        sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb")
+      else
+        sources.concat(DFA_ERROR_RUNTIME_SOURCES)
+      end
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }

@@ -118,7 +118,7 @@ RSpec.describe "generated artifact safety" do
   { "LF" => "\n", "CRLF" => "\r\n" }.each do |format, newline|
     it "embeds only the runtime core from #{format} sources for a compiled standalone lexer" do
       allow(File).to receive(:binread).and_call_original
-      Flexr::Generator::RUNTIME_SOURCES.each do |relative|
+      (Flexr::Generator::RUNTIME_SOURCES + Flexr::Generator::DFA_ERROR_RUNTIME_SOURCES).each do |relative|
         runtime_path = File.expand_path("../lib/flexr/#{relative}", __dir__)
         contents = File.binread(runtime_path).gsub(/\r\n?/, "\n").gsub("\n", newline)
         allow(File).to receive(:binread).with(runtime_path).and_return(contents)
@@ -130,7 +130,8 @@ RSpec.describe "generated artifact safety" do
         File.binwrite(path, lexer_source.sub("rule(/a/)", "rule(/a+/)"))
         generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
-        expect(generated.bytesize).to be < 100_000
+        # Allow 16 KiB for DFA error reporting in addition to the core runtime budget.
+        expect(generated.bytesize).to be < 100_000 + (16 * 1024)
         expect(generated).not_to include("\r\n", "module Keywords", "module Firstmatch", "def push_input(", "module Indentation", "module Captures", "module DelegatedTokens", "def scan_until(")
         expect(generated).not_to include(
           "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis",
@@ -139,6 +140,12 @@ RSpec.describe "generated artifact safety" do
         script = <<~RUBY
           load ARGV.fetch(0)
           abort "wrong tokens" unless GeneratorSafetyLexer.new("a" * 100).tokens == [[:A, "a" * 100]]
+          begin
+            GeneratorSafetyLexer.new("b").next_token
+            abort "expected an input error"
+          rescue Flexr::LexError => error
+            abort "missing completion" unless error.continuation&.suffix == "a"
+          end
         RUBY
         _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, output)
         expect(status).to be_success, stderr
@@ -164,7 +171,7 @@ RSpec.describe "generated artifact safety" do
       generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
       expect(generated).to include("class Parser", "module Data", "module Firstmatch", "class ReferenceDFA")
-      expect(generated).not_to include("class Compiler", "class NFABuilder", "class BackendCostModel")
+      expect(generated).not_to include("class Compiler", "class NFABuilder", "class BackendCostModel", "class ErrorContinuation")
       script = <<~'RUBY'
         require "stringio"
         load ARGV.fetch(0)
@@ -174,6 +181,12 @@ RSpec.describe "generated artifact safety" do
           GeneratorSafetyFirstmatchLexer.new(StringIO.new("ab"), chunk_size: 1).tokens ==
             [[:ALTERNATIVE, "a"], [:WORD, "b"]]
         abort "reference matcher unavailable" unless Flexr::Automaton::ReferenceDFA.new(/\p{L}/).accept?("日")
+        begin
+          GeneratorSafetyFirstmatchLexer.new("!").next_token
+          abort "expected an input error"
+        rescue Flexr::LexError => error
+          abort "unexpected DFA continuation" if error.continuation
+        end
       RUBY
       _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-e", script, output)
       expect(status).to be_success, stderr
