@@ -51,8 +51,7 @@ The lexer reads capture values lazily during the action. It retains regexp
 replay for unsupported patterns, programs that exceed compiler limits, and
 matched bodies changed before capture access. It also uses replay when a
 cancellation callback can edit the input or a stream exposes its mutable
-buffer. The boundary selected by `followed_by:` still comes from the
-existing trailing-context matcher.
+buffer.
 
 Generated rules store compact runs of equivalent byte classes for tagged
 patterns. Standalone artifacts with those programs include the cursor and
@@ -71,3 +70,19 @@ order after warmup.
 The second fixture spends more time dispatching byte steps and saving
 acceptances. A separate trace counted 1,900 tagged cursor steps over 300
 tokens. Regexp replay made 300 matches on the same input.
+
+## Trailing context
+
+Each accepted body can start a `followed_by:` DFA at its end. The scanner
+stores that byte offset as a tag and advances the active trailer states
+alongside the body DFA. When paths from the same rule and starting line
+condition reach the same trailer state, their future matches are equivalent.
+Keep the later body offset and its capture registers so the scanner can
+return the longest body when the total match lengths tie.
+
+The scanner only consumes the selected body. Trailing bytes contribute to
+rule selection and stay in the input for the next token. Flexr uses the
+per-body matcher for inputs with custom byte access, while the input can
+grow, or when a step limit or cancellation callback is active. It also uses
+that matcher if the remaining bytes could exceed the token or lookahead
+limit.

@@ -218,7 +218,7 @@ RSpec.describe "generated artifact safety" do
     end
   end
 
-  it "scans generated trailing context without a compiler, including chunked Unicode input" do
+  it "scans generated trailing context without a compiler for buffered and chunked input" do
     source = <<~'RUBY'
       require "flexr"
       class GeneratedTrailingLexer < Flexr::Lexer
@@ -226,6 +226,7 @@ RSpec.describe "generated artifact safety" do
         rule(/a/, followed_by: /b+$/i, emit: :A)
         rule(/x/, followed_by: /\w+/, emit: :X)
         rule(/é/, followed_by: "日", emit: :E)
+        rule(/p+/, followed_by: /p+/, emit: :P)
         rule(/./, emit: :CHAR)
       end
     RUBY
@@ -260,6 +261,16 @@ RSpec.describe "generated artifact safety" do
                 bytes == expected.map { |kind, text| [kind, text.b] }
             end
           end
+
+          input = "p" * 256
+          scanner = GeneratedTrailingLexer.new(input)
+          transitions = 0
+          trace = TracePoint.new(:call) do |event|
+            transitions += 1 if event.method_id == :transition && event.self.is_a?(Flexr::Automaton::DFA)
+          end
+          token = trace.enable { scanner.next_token }
+          abort "wrong buffered body: #{token.inspect}" unless token == [:P, input[0...-1]]
+          abort "repeated trailing transitions: #{transitions}" if transitions > input.bytesize * 6
         RUBY
         command = [RbConfig.ruby]
         command.push("-I", File.expand_path("../lib", __dir__)) unless standalone
