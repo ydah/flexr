@@ -64,6 +64,7 @@ module Flexr
         when Regexp::AST::NamedCapture then build(node.child, following)
         when Regexp::AST::Lookahead then assertion(node, following)
         when Regexp::AST::Lookbehind, Regexp::AST::WordBoundary then predicate(node, following)
+        when Regexp::AST::Grapheme then append(:span, node.dfa, following)
         when Regexp::AST::Difference, Regexp::AST::Intersection then append(:span, language(node), following)
         when Regexp::AST::Star then repeated(node.child, 0, nil, following)
         when Regexp::AST::Repeat then repeated(node.child, node.minimum, node.maximum, following)

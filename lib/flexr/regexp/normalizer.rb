@@ -28,6 +28,10 @@ module Flexr
         case node
         when AST::Empty, AST::Fail, AST::ByteRange, AST::CodepointRange, AST::Anchor, AST::NotNextLineFeed
           normalize_leaf(node)
+        when AST::Grapheme
+          require_relative "../unicode/grapheme"
+
+          node.dup.tap { |grapheme| grapheme.dfa = Unicode::Grapheme.dfa(binary: node.binary) }
         when AST::WordBoundary
           node.dup.tap { |boundary| boundary.word = boundary_word(node.binary) }
         when AST::CharClass

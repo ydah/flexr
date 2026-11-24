@@ -8,7 +8,6 @@ RSpec.describe "regexp escape rewrites" do
       'a\Kb' => ['rule(/a/, followed_by: /b/) { begin_state :suffix }',
                   'state(:suffix) { rule(/b/) { begin_state :initial; emit :B } }', "in :initial", "unused state name"],
       '(a|b)\g<1>' => ['rule(/[ab]{2}/)', "non-recursive", "recursive calls need a parser or state stack"],
-      '\X' => ['rule(/\r\n|[\x00-\x7f]/)', "standalone", "ASCII-only", "Unicode graphemes need separate segmentation"],
       '\cA' => ['rule(/\x01/)', "control-A", "other control characters need their own hexadecimal code"],
       '\C-A' => ['rule(/\x01/)', "control-A", "other control characters need their own hexadecimal code"],
       '\M-a' => ['rule(/\xE1/n)', "binary input", "other meta characters need their own byte value"]
@@ -42,21 +41,6 @@ RSpec.describe "regexp escape rewrites" do
   end
 
   %i[table direct auto firstmatch].each do |backend|
-    it "preserves standalone ASCII graphemes and CRLF with #{backend}" do
-      lexer = Class.new(Flexr::Lexer) do
-        backend backend
-        option :experimental if backend == :firstmatch
-        rule(/\r\n|[\x00-\x7f]/) { emit :GRAPHEME }
-      end
-      input = "#{(0..127).to_a.pack('C*')}\r\n\rx\n"
-      expected = input.scan(/\X/).map { |text| [:GRAPHEME, text.bytes] }
-      [input, StringIO.new(input)].each do |source|
-        actual = lexer.new(source, chunk_size: 1).tokens.map { |type, text| [type, text.bytes] }
-        expect(actual).to eq(expected)
-      end
-      expect(expected).to include([:GRAPHEME, [13, 10]])
-    end
-
     it "preserves the match-reset suffix and its location with #{backend}" do
       lexer = Class.new(Flexr::Lexer) do
         backend backend

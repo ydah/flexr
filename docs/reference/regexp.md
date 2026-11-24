@@ -25,7 +25,7 @@ byte-oriented automaton. All matches start at the current lexer position.
 | `\G` | Unsupported | At the start of a rule, omit it: rules already match at the current lexer position |
 | `\K` | Unsupported | Use the prefix/suffix state example in `FLEXR-E014` where applicable to preserve token text and location |
 | Subexpression calls `\g<...>` | Unsupported | Inline non-recursive expressions; recursive calls need a parser or state stack |
-| `\X` | Unsupported | Use the ASCII-only standalone token example in `FLEXR-E014` where applicable; Unicode graphemes need separate segmentation |
+| `\X` | Supported | See [grapheme clusters](#grapheme-clusters) |
 | Lazy or possessive quantifiers | Unsupported | For unescaped single-line quoted text, use `/"[^"\n]*"/`; other patterns need a separate rewrite |
 | Atomic groups | Unsupported | Use the delimited-text example in `FLEXR-E014` where applicable; removing atomic groups can change matches |
 | Named groups `(?<name>...)` and `(?'name'...)` | Supported | Read values from `captures` in rule actions |
@@ -67,6 +67,18 @@ matches U+0085, U+2028, and U+2029. CRLF is atomic. For example, `/\R\n/`
 accepts CRLF followed by an additional LF. A CR followed by LF belongs to
 the pair even when the LF falls beyond the end of a candidate token.
 See [Ruby's line break syntax](https://docs.ruby-lang.org/en/4.0/Regexp.html#class-Regexp-label-Shorthand+Character+Classes).
+
+## Grapheme clusters
+
+`\X` matches one extended grapheme cluster starting at its current position.
+The boundary rules use the vendored Unicode 15.1 data across all backends.
+For example, `/\X/` consumes a base letter and its combining accents together,
+and `/.\X/` can consume the base letter first and match the remaining accent
+as a cluster starting at the next position. A later part of the pattern
+cannot take characters back from the cluster.
+
+In binary input, `\X` consumes CRLF together and every other byte individually.
+[Unicode Standard Annex #29, revision 43](https://www.unicode.org/reports/tr29/tr29-43.html#Grapheme_Cluster_Boundary_Rules)
 
 ## Start anchors
 

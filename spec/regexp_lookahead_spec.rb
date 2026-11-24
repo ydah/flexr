@@ -82,6 +82,19 @@ RSpec.describe "regexp lookahead" do
     expect(lexer.new("a\n", max_lookahead_size: 1).next_token).to eq([:A, "a"])
   end
 
+  it "charges the suffix that establishes a grapheme boundary across backends" do
+    %i[table direct firstmatch].each do |backend_name|
+      lexer = Class.new(Flexr::Lexer) do
+        backend backend_name
+        rule(/\X/, emit: :GRAPHEME)
+      end
+
+      expect { lexer.new(StringIO.new("a🇯🇵"), chunk_size: 1, max_lookahead_size: 1).next_token }
+        .to raise_error(Flexr::Runtime::LookaheadTooLargeError)
+      expect(lexer.new(StringIO.new("a🇯🇵"), chunk_size: 1, max_lookahead_size: 4).next_token).to eq([:GRAPHEME, "a"])
+    end
+  end
+
   it "charges nested assertions against the full trailing-context limit" do
     lexer = Class.new(Flexr::Lexer) do
       rule(/a/, followed_by: /b(?=cd)/, emit: :A)

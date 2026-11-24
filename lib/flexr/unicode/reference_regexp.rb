@@ -4,24 +4,44 @@ module Flexr
   module Unicode
     module ReferenceRegexp
       CACHE = {} # rubocop:disable Style/MutableConstant
-      class BoundaryGroups
+      class Subexpressions
         def initialize(names)
-          @prefix = +"FlexrWordBoundary"
-          @prefix << "_" while names.any? { |name| name.start_with?(@prefix) }
+          @names = names
           @groups = {}
         end
 
-        def call(node)
-          key = [node.binary, node.negative]
-          name, = @groups[key] ||= ["#{@prefix}#{@groups.length}", ReferenceRegexp.boundary_source(node)]
-          "\\g<#{name}>"
+        def boundary(node)
+          call("FlexrWordBoundary", [node.binary, node.negative]) { ReferenceRegexp.boundary_source(node) }
+        end
+
+        def grapheme(binary:)
+          return '(?:\r\n|\r(?!\n)|[^\r])' if binary
+
+          require_relative "data/grapheme_automaton"
+          data = Data::GraphemeAutomaton
+          body = data::REFERENCE_SOURCE.gsub(/@(\d+)@/) do
+            index = ::Regexp.last_match(1).to_i
+            call("FlexrGrapheme", index) { ReferenceRegexp.codepoint_class(data::CLASSES.fetch(index)) }
+          end
+          "(?>#{body})"
         end
 
         def definitions
           @groups.values.map { |name, body| "(?<#{name}>#{body}){0}" }.join
         end
+
+        private
+
+        def call(prefix, key)
+          name, = @groups[[prefix, key]] ||= begin
+            group_prefix = +prefix
+            group_prefix << "_" while @names.any? { |user_name| user_name.start_with?(group_prefix) }
+            ["#{group_prefix}#{@groups.length}", yield]
+          end
+          "\\g<#{name}>"
+        end
       end
-      private_constant :BoundaryGroups
+      private_constant :Subexpressions
 
       module_function
 
@@ -50,9 +70,9 @@ module Flexr
             anchor.kind = :never if %i[eof final_eol].include?(anchor.kind)
           end
         end
-        groups = BoundaryGroups.new(pattern.names) if Regexp::AST.lookbehind?(ast)
+        groups = Subexpressions.new(pattern.names)
         source = source_for(ast, binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker, groups: groups)
-        source = "#{groups.definitions}#{source}" if groups
+        source = "#{groups.definitions}#{source}"
         if anchored
           ending = following_lf ? '(?=\n\z)' : '\z'
           source = "\\A(?:#{source})#{ending}"
@@ -64,8 +84,8 @@ module Flexr
 
       def source_for(node, binary: false, invalid_left: false, invalid_tail_marker: false, inside_lookbehind: false, groups: nil)
         if invalid_tail_marker && (node.is_a?(Regexp::AST::ByteRange) || node.is_a?(Regexp::AST::CodepointRange) ||
-                                  node.is_a?(Regexp::AST::CharClass))
-          return "(?!(?m:.\\z))#{source_for(node, binary: binary)}"
+                                  node.is_a?(Regexp::AST::CharClass) || node.is_a?(Regexp::AST::Grapheme))
+          return "(?!(?m:.\\z))#{source_for(node, binary: binary, groups: groups)}"
         end
 
         options = { binary: binary, invalid_left: invalid_left, invalid_tail_marker: invalid_tail_marker,
@@ -73,7 +93,9 @@ module Flexr
         case node
         when Regexp::AST::WordBoundary
           # Onigmo rejects inline lookahead in lookbehind but permits a zero-width subexpression call.
-          inside_lookbehind ? groups.call(node) : boundary_source(node)
+          inside_lookbehind ? groups.boundary(node) : boundary_source(node)
+        when Regexp::AST::Grapheme
+          groups.grapheme(binary: node.binary)
         when Regexp::AST::Empty then ""
         when Regexp::AST::Anchor then anchor_source(node.kind)
         when Regexp::AST::Fail then "(?!)"

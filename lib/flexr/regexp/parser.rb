@@ -129,6 +129,9 @@ module Flexr
           when "R"
             advance
             return parse_linebreak(starting)
+          when "X"
+            advance
+            return AST::Grapheme.new(binary: @encoding == Encoding::BINARY, loc: span(starting))
           when "A"
             advance
             return AST::Anchor.new(kind: :source_start, loc: span(starting))
@@ -442,9 +445,6 @@ module Flexr
         when "g"
           raise unsupported("\\g",
                             'for this non-recursive call, rewrite rule(/(a|b)\g<1>/) as rule(/[ab]{2}/); keep the action; recursive calls need a parser or state stack')
-        when "X"
-          raise unsupported("\\X",
-                            'for a standalone grapheme token with ASCII-only input, rewrite rule(/\X/) as rule(/\r\n|[\x00-\x7f]/); keep the action; Unicode graphemes need separate segmentation')
         when "c", "C"
           raise unsupported("\\#{char}",
                             'for control-A, rewrite rule(/\cA/) or rule(/\C-A/) as rule(/\x01/); keep the action; other control characters need their own hexadecimal code')

@@ -447,6 +447,10 @@ end
 
 task "unicode:verify" do
   require_relative "tools/gen_unicode_automata"
+  require_relative "lib/flexr/unicode/data/grapheme_automaton"
+
+  abort "vendored grapheme automaton is stale (run ruby tools/gen_grapheme_automaton.rb UCD_DIRECTORY)" unless
+    Flexr::Unicode::Data::GraphemeAutomaton::UNICODE_VERSION == Flexr::Unicode::VERSION
 
   abort "vendored UTF-8 automata are stale (run ruby tools/gen_unicode_automata.rb)" unless
     FlexrVerification.normalized_source(File.binread(Flexr::Unicode::PropertyAutomata::PATH)) == UnicodeAutomataGenerator.generate

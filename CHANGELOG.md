@@ -7,6 +7,8 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Added
 
+- Use `\X` to match one extended grapheme cluster with the vendored Unicode data,
+  including across streamed chunks.
 - Use `\R` to match line breaks, including atomic CRLF pairs.
 - Support positive and negative regexp lookahead in streaming lexers, including named captures.
 - Support `\z`, `\Z`, and internal `$` in regexp rules so lexers can distinguish source end from line end.
