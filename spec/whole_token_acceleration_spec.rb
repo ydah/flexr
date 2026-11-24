@@ -80,7 +80,7 @@ RSpec.describe "whole-token acceleration" do
   it "preserves limits, cancellation, streaming and mutable input" do
     lexer = lexer_class
     ["abx12;?".dup, "abx12;?", StringIO.new("abx12;?")].each do |input|
-      expect(lexer.new(input, chunk_size: 1).tokens).to eq(lexer_class(:none).new("abx12;?").tokens)
+      expect(lexer.new(input, chunk_size: 1, freeze_input: false).tokens).to eq(lexer_class(:none).new("abx12;?").tokens)
     end
     expect { lexer.new("ab", max_token_size: 1).tokens }.to raise_error(Flexr::Runtime::TokenTooLargeError)
     expect { lexer.new("ab", max_steps: 1).tokens }.to raise_error(Flexr::Runtime::StepLimitError)

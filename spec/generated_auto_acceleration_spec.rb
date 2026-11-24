@@ -57,11 +57,11 @@ RSpec.describe "generated automatic region acceleration" do
     expect(lexer.instance_variable_get(:@__flexr_generated_scan_layout)).to equal(initial_layout)
   end
 
-  it "keeps the auto region path available with streaming or runtime limits" do
+  it "keeps the auto region path for streaming, borrowed strings, and runtime limits" do
     generated = generated_lexer(:auto)
     cases = [
       [StringIO.new(input), { chunk_size: 3, retain_input: false }],
-      [input.dup, {}],
+      [input.dup, { freeze_input: false }],
       [input, { max_steps: 1000 }],
       [input, { max_token_size: 32 }]
     ]
@@ -72,6 +72,13 @@ RSpec.describe "generated automatic region acceleration" do
       expect(lexer).to receive(:__flexr_generated_acceleration_region).at_least(:once).and_call_original
       expect(lexer.tokens).to eq(tokens)
     end
+  end
+
+  it "uses the frozen DFA path for a snapshot of mutable input" do
+    lexer = generated_lexer(:auto).new(input.dup)
+
+    expect(lexer).not_to receive(:__flexr_generated_acceleration_region)
+    expect(lexer.tokens).to eq(tokens)
   end
 
   it "uses native scanning for explicitly accelerated frozen strings" do
