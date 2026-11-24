@@ -63,9 +63,8 @@ module Flexr
 
       def add_state(vector)
         state = @transitions.length
-        accepts = vector.filter_map { |pattern, term| @conditions.fetch(pattern) if @terms.nullable?(term) }
         @vectors << vector
-        @accepts << accepts.uniq.freeze
+        @accepts << @terms.accepting_conditions(vector, @conditions)
         @transitions << []
         @ids[vector] = state
       end
