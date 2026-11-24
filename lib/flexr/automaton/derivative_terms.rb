@@ -70,7 +70,8 @@ module Flexr
       end
 
       def context_dependent_end?
-        @nullable.any? { |mask| !mask.zero? && EndContext.condition(mask).is_a?(Integer) }
+        @graphs.any?(&:context_dependent_end?) ||
+          @nullable.any? { |mask| !mask.zero? && EndContext.condition(mask).is_a?(Integer) }
       end
 
       def derivative(id, byte, class_id)
