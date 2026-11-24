@@ -45,6 +45,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Fixed
 
+- Preserve ordered `firstmatch` alternatives and greedy repeated groups across
+  input chunks when Flexr can compile an ordered matcher. Rerun `flexr generate`
+  to update existing lexers.
 - Reject overlong encodings, surrogate encodings, and out-of-range code points when a DFA tests a broad Unicode range.
 
 ## [2.2.0](https://github.com/ydah/flexr/compare/v2.1.0...v2.2.0)

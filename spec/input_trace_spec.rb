@@ -48,6 +48,19 @@ RSpec.describe "input tracing" do
     expect(streamed.steps).to eq(trace.steps)
   end
 
+  it "traces complete firstmatch candidates within the runtime step limit" do
+    lexer = Class.new(Flexr::Lexer) do
+      backend :firstmatch
+      rule(/a+/, emit: :FIRST)
+      rule(/(?:aa)+/, emit: :SECOND)
+    end
+
+    input = "a" * 50
+    trace = Flexr::Trace.new(lexer.new(input, max_steps: 5))
+    expect(trace.run).to eq([[:FIRST, input]])
+    expect(trace.steps.first[:candidates].map { |candidate| candidate[:length] }).to eq([50, 50])
+  end
+
   it "counts trailing context without consuming it and excludes false anchor matches" do
     lexer = Class.new(Flexr::Lexer) do
       rule(/^x$/, emit: :LINE)

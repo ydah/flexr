@@ -7,6 +7,8 @@ module Flexr
   module Automaton
     class Compiler
       DEFAULT_CONSTRUCTION = :derivative
+      FIRSTMATCH_INSTRUCTION_LIMIT = 100_000
+      private_constant :FIRSTMATCH_INSTRUCTION_LIMIT
 
       def initialize(spec, construction: DEFAULT_CONSTRUCTION, retain_residuals: false)
         raise ArgumentError, "unknown DFA construction: #{construction.inspect}" unless %i[subset derivative].include?(construction)
@@ -503,6 +505,8 @@ module Flexr
             if contextual && (@spec.backend == :firstmatch || !regexp.names.empty?)
               contexts = rule.contextual_patterns ||= []
               contexts[index] = prepare_contextual_regexp(rule, regexp, ast)
+            elsif @spec.backend == :firstmatch
+              prepare_firstmatch_regexp(rule, index, regexp, ast)
             end
             prepare_capture_pattern(rule, index, regexp) unless regexp.names.empty?
             next if @spec.options[:allow_empty_match] || contextual
@@ -516,14 +520,48 @@ module Flexr
         end
       end
 
-      def prepare_contextual_regexp(rule, regexp, ast)
+      def prepare_firstmatch_regexp(rule, index, regexp, ast)
+        reference = Regexp::Matcher.reference?(regexp, encoding: @spec.encoding, unicode: @spec.options[:unicode] == true)
+        if reference
+          return if @spec.encoding == Encoding::BINARY
+        else
+          return unless regexp.encoding == Encoding::US_ASCII || regexp.encoding == @spec.encoding
+          # Ruby's ignorecase can match multiple characters for one codepoint.
+          return if regexp.casefold? || regexp.source.match?(/\(\?[mx]*i/)
+          return if simple_byte_repeat?(ast)
+        end
+
+        plan = catch(:firstmatch_instruction_limit) do
+          prepare_contextual_regexp(rule, regexp, ast, replay: reference ? :vendored : :ruby)
+        end
+        (rule.contextual_patterns ||= [])[index] = plan if plan
+      end
+
+      def simple_byte_repeat?(ast)
+        return false unless ast.is_a?(Regexp::AST::Repeat) && ast.maximum.nil? && ast.minimum == 1
+
+        range = ast.child
+        maximum = @spec.encoding == Encoding::BINARY ? 0xff : 0x7f
+        case range
+        when Regexp::AST::ByteRange, Regexp::AST::CodepointRange then range.hi <= maximum
+        when Regexp::AST::CharClass
+          !range.negated && range.ranges.all? { |lo, hi| lo.is_a?(Integer) && hi <= maximum }
+        else false
+        end
+      end
+
+      def prepare_contextual_regexp(rule, regexp, ast, replay: nil)
         @active_rules = [rule]
-        _, _, terminal_line_end = strip_anchors(ast)
         encoding = regexp.encoding == Encoding::BINARY ? Encoding::BINARY : @spec.encoding
-        unless regexp.names.empty?
+        if replay != :ruby && !regexp.names.empty?
           ast = Regexp::Parser.new(regexp.source, encoding: encoding, options: regexp.options,
                                    unicode: @spec.options[:unicode] == true, preserve_captures: true).parse
+          return if replay && Regexp::AST.contextual?(ast)
         end
+        stripped, _, terminal_line_end = strip_anchors(ast)
+        # The reference matcher selects an alternative before the lexer tests the terminal anchor.
+        ast = stripped if replay == :vendored
+        terminal_line_end = false if replay == :vendored
         body = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, prebuilt_properties: false).normalize
         options = { encoding: encoding, unicode: @spec.options[:unicode] == true }
         anchors = Regexp::AST.anchors(ast)
@@ -531,13 +569,19 @@ module Flexr
         left_context = behind || anchors.any? { |anchor| Regexp::AST.left_anchor?(anchor) }
         start = left_context ? '\G' : '\A'
         ending = terminal_line_end ? "$" : ""
-        reference = contextual_reference(regexp, options, start, ending)
-        if terminal_line_end || anchors.any? { |anchor| %i[line_start line_end eof final_eol].include?(anchor.kind) }
+        reference = replay == :ruby ? regexp : contextual_reference(regexp, options, start, ending)
+        if !replay && (terminal_line_end || anchors.any? { |anchor| %i[line_start line_end eof final_eol].include?(anchor.kind) })
           invalid_ending = !behind && terminal_line_end ? '(?=\n)' : ending
           invalid_options = options.merge(invalid_eof: true, invalid_tail_marker: behind)
           invalid_eof = contextual_reference(regexp, invalid_options, start, invalid_ending)
         end
-        compiler = ContextualRegexpCompiler.new { |state| enforce_state_limit!(state, "regexp context") }
+        compiler = ContextualRegexpCompiler.new do |state|
+          if replay
+            throw :firstmatch_instruction_limit if state >= FIRSTMATCH_INSTRUCTION_LIMIT
+          else
+            enforce_state_limit!(state, "regexp context")
+          end
+        end
         if behind
           # Keep one complete UTF-8 scalar beyond the farthest assertion.
           history_bytes = compiler.lookbehind_width(body) + 4
@@ -551,7 +595,7 @@ module Flexr
         capture_names = names if !names.empty? && reference.names.length > names.length
         compiler.compile(body, reference, invalid_eof: invalid_eof, left_context: left_context,
                          history_bytes: history_bytes, invalid_left: invalid_left, invalid_both: invalid_both,
-                         capture_names: capture_names)
+                         capture_names: capture_names, replay: replay)
       end
 
       def contextual_reference(regexp, options, start, ending)

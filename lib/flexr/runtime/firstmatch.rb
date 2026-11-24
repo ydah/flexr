@@ -21,12 +21,12 @@ module Flexr
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
             context = rule.contextual_patterns&.[](pattern_index)
-            match = if context
+            match = if context && (!context.replay || !buffer.eof_loaded?)
               context.match(@lexer, rule, position)
             else
               streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp), limit: :token, rule: rule)
             end
-            next unless match && (context || match.begin(0).zero?)
+            next unless match && ((context && !context.replay) || match.begin(0).zero?)
             next if expected && !expected_rule?(rule, expected, buffer, position, position + match[0].bytesize)
 
             [match, condition]

@@ -92,6 +92,11 @@ module Flexr
           ' unless defined?(Flexr::Runtime::ContextualRegexp)'
         install = "#{guard}\n#{indent}#{install}"
       end
+      if compiled.rules.any? { |rule| rule.contextual_patterns&.any? { |pattern| pattern&.replay } }
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support ordered streaming regexp selection")'
+        guard += ' unless defined?(Flexr::Runtime::ContextualRegexp) && Flexr::Runtime::ContextualRegexp.method_defined?(:replay)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if compiled.rules.any? { |rule| rule.contextual_patterns&.any? { |pattern| pattern&.invalid_eof } }
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp source-end assertions")'
         guard += ' unless defined?(Flexr::Runtime::ContextualRegexp) && Flexr::Runtime::ContextualRegexp.method_defined?(:invalid_eof)'
@@ -343,7 +348,9 @@ module Flexr
 
     def regexp_left_context?(compiled)
       compiled.machines.values.any? { |machine| machine.dfa.starts } ||
-        compiled.rules.any? { |rule| rule.trailing_dfa&.starts || rule.contextual_patterns&.any?(&:left_context) }
+        compiled.rules.any? do |rule|
+          rule.trailing_dfa&.starts || rule.contextual_patterns&.any? { |pattern| pattern&.left_context }
+        end
     end
 
     def regexp_lookbehind?(compiled)
@@ -480,6 +487,7 @@ module Flexr
         definition = value.to_h
         definition.delete(:invalid_eof) unless value.invalid_eof
         definition.delete(:left_context) unless value.left_context
+        definition.delete(:replay) unless value.replay
         %i[history_bytes invalid_left invalid_both capture_names].each { |key| definition.delete(key) unless definition[key] }
         "::Flexr::Runtime::ContextualRegexp.new(**#{ruby_literal(definition)})"
       when Pattern
