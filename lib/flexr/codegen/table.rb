@@ -25,11 +25,12 @@ module Flexr
         ].join("\n")
       end
 
-      def source(indent: "  ", direct: false, shortest_states: nil)
+      def source(indent: "  ", direct: false, shortest_states: nil, parser_contexts: false)
         if compiled.machines.values.any? { |machine| machine.dfa.starts || machine.dfa.lookahead? }
+          expectation = "(@__flexr_parser_context&.expected)" if parser_contexts
           return <<~RUBY.lines.map { |line| indent + line }.join
             def scan_one
-              (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan
+              (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan#{expectation}
             end
           RUBY
         end
@@ -47,11 +48,13 @@ module Flexr
         contextual_end = compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? }
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
         fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
+        expectation = "(parser_context&.expected)" if parser_contexts
         lines << "#{indent}def scan_one"
+        lines << "#{indent}  parser_context = @__flexr_parser_context" if parser_contexts
         if shortest_states&.any?
           lines << "#{indent}  case @state"
           lines << "#{indent}  when #{shortest_states.map(&:inspect).join(', ')}"
-          lines << "#{indent}    return (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan"
+          lines << "#{indent}    return (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan#{expectation}"
           lines << "#{indent}  end"
         end
         lines << "#{indent}  if @__flexr_generated_scan_state != @state"
@@ -63,6 +66,15 @@ module Flexr
         lines << "#{indent}    @__flexr_generated_scan_simple = __flexr_generated_simple_fast_path?(@__flexr_generated_scan_dfa)"
         lines << "#{indent}  end"
         lines << "#{indent}  dfa = @__flexr_generated_scan_dfa"
+        if parser_contexts
+          lines << "#{indent}  if parser_context"
+          lines << "#{indent}    accepts = parser_context.accepts[@state]"
+          lines << "#{indent}    if accepts && #{scan_cache} && @__flexr_generated_scan_simple && __flexr_parser_fast_input?"
+          lines << "#{indent}      return __flexr_generated_scan_simple(dfa, byte_pos, accepts)"
+          lines << "#{indent}    end"
+          lines << "#{indent}    return (@interpreter ||= Flexr::Runtime::Interpreter.new(self)).scan(parser_context.expected)"
+          lines << "#{indent}  end"
+        end
         lines << "#{indent}  return Flexr::Runtime::Interpreter.new(self).scan unless #{scan_cache}"
         lines << "#{indent}  position = byte_pos"
         lines << "#{indent}  return nil unless valid_utf8_at?(position)"
@@ -124,7 +136,8 @@ module Flexr
         lines << "#{indent}  end"
         lines << "#{indent}  #{scan_result}"
         lines << "#{indent}end"
-        lines << "#{indent}def __flexr_generated_scan_simple(dfa, position)"
+        parser_parameter = ", parser_accepts = nil" if parser_contexts
+        lines << "#{indent}def __flexr_generated_scan_simple(dfa, position#{parser_parameter})"
         if tagged
           lines << "#{indent}  tags = __flexr_tagged_captures(dfa) if respond_to?(:__flexr_tagged_captures, true)"
           lines << "#{indent}  running_tags = tags if tags&.tracking?" if track_tags
@@ -140,6 +153,7 @@ module Flexr
           lines << "#{indent}  accepts = dfa.accepts"
           lines << "#{indent}  rules = self.class.__flexr_rules"
         end
+        lines << "#{indent}  accepts = parser_accepts if parser_accepts" if parser_contexts
         lines << "#{indent}  source = buffer.stable_source"
         lines << "#{indent}  guarded_steps = scan_steps_guarded?"
         lines << "#{indent}  check_token_limit = token_limit_required?"

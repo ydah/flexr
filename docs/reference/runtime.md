@@ -50,7 +50,7 @@ must be positive.
 
 | Method | Result |
 |---|---|
-| `next_token(expect: nil)` | One default-channel token, or `nil` at EOF |
+| `next_token(expect: nil, parser_state: nil)` | One default-channel token, or `nil` at EOF |
 | `tokens(channels: :default)` | Array containing the remaining default-channel tokens |
 | `tokens(channels: :all)` | Array containing the remaining tokens from every channel in input order |
 | `each_token` | Enumerator without a block; otherwise yields tokens and returns `self` |
@@ -97,6 +97,12 @@ can use ordinary rule selection for the first content token of the line.
 That token stays queued while the lexer returns the layout tokens. A later
 expectation applies when the lexer scans new input.
 See [Ruby slash and JavaScript template examples](../how-to/parser-driven-lexing.md).
+
+A lexer generated with [Lrama parser contexts](../how-to/integrate-with-lrama.md#use-parser-state-contexts)
+also accepts `next_token(parser_state: state_id)`. Use the parser's current LR
+state number. Each call uses the precomputed terminal set for that state with
+the same rule eligibility as `expect:`. Supply one of the two keywords in a
+call. An unknown state number raises `ArgumentError`.
 
 ## Indentation tokens
 

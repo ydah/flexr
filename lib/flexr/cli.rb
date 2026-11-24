@@ -143,6 +143,9 @@ module Flexr
         when "--grammar"
           raise ArgumentError, "--grammar is only valid for check" unless command == :check
           options.grammar = required_argument!(args, argument)
+        when "--lrama-grammar"
+          raise ArgumentError, "--lrama-grammar is only valid for generation" unless command == :generate
+          options.set(:lrama_grammar, required_argument!(args, argument))
         when "--verify"
           raise ArgumentError, "--verify is only valid for the skeleton command" unless command == :skeleton
           command_args[:verify] = true
@@ -778,6 +781,7 @@ module Flexr
               --warn-as-error
               --color WHEN            auto | always | never
               --format FMT            human | json | lrama (tokens only)
+              --lrama-grammar PATH    Precompute parser-state contexts for generation
               --grammar PATH          compare emits with grammar %token declarations (check only)
               --input STRING          trace input (executes SPEC actions)
               --input-file PATH       trace or benchmark input
