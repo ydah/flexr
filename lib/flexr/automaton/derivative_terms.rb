@@ -92,8 +92,7 @@ module Flexr
       end
 
       def context_dependent_end?
-        @explicit_lookahead || @graphs.any?(&:context_dependent_end?) ||
-          @nullable.any? { |mask| !mask.zero? && EndContext.condition(mask).is_a?(Integer) }
+        @context_dependent_end || @explicit_lookahead || @graphs.any?(&:context_dependent_end?)
       end
 
       def derivative(id, byte, class_id)
@@ -161,6 +160,7 @@ module Flexr
 
       def end_conditions
         @end_conditions ||= begin
+          @context_dependent_end = true
           @byte_classes.add_range(0x0a, 0x0a)
           lf = prefix(intern(:byte, [0x0a, 0x0a], FAIL))
           eol = union([EMPTY, lf])
