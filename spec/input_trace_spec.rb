@@ -75,6 +75,67 @@ RSpec.describe "input tracing" do
     expect(trace.steps.last[:candidates].map { |candidate| candidate[:rule] }).to eq([3])
   end
 
+  it "explains shortest body ties without counting the trailing bytes toward rank" do
+    lexer = Class.new(Flexr::Lexer) do
+      state(:initial, inclusive: true, match: :shortest) do
+        rule("a", followed_by: /b+/, emit: :CONTEXT)
+        rule("a", priority: 1, emit: :PLAIN)
+        rule(/ab+/, emit: :WORD)
+      end
+    end
+    scanner = lexer.new("abbb")
+    trace = Flexr::Trace.new(scanner)
+
+    expect(scanner.next_token).to eq([:PLAIN, "a"])
+    expect(trace.steps.first[:reason]).to eq("priority")
+    expect(trace.steps.first[:candidates].map { |candidate| candidate.values_at(:length, :total_length) })
+      .to eq([[1, 4], [1, 1], [2, 2]])
+
+    scanner = lexer.new("abbb")
+    trace = Flexr::Trace.new(scanner)
+    expect(scanner.next_token(expect: %i[CONTEXT WORD])).to eq([:CONTEXT, "a"])
+    expect(trace.steps.first[:reason]).to eq("shortest")
+    expect(trace.steps.first[:candidates].map { |candidate| candidate[:rule] }).to eq([0, 2])
+  end
+
+  it "traces the selected shortest body without advancing a live reader" do
+    lexer = Class.new(Flexr::Lexer) do
+      encoding Encoding::BINARY
+      state(:initial, inclusive: true, match: :shortest) do
+        rule(/a+/, emit: :WORD)
+      end
+    end
+    reader = Object.new
+    reader.define_singleton_method(:read) do |_length|
+      raise IOError, "read past the shortest match" if @read
+
+      @read = true
+      "a".b
+    end
+    scanner = lexer.new(reader, chunk_size: 1)
+    trace = Flexr::Trace.new(scanner)
+
+    expect(scanner.next_token).to eq([:WORD, "a"])
+    expect(trace.steps.first).to include(reason: "shortest", byte_end: 1)
+    expect(trace.steps.first[:candidates].map { |candidate| candidate.values_at(:length, :total_length) }).to eq([[1, 1]])
+  end
+
+  it "traces a structural newline added to parser expectations in a shortest state" do
+    lexer = Class.new(Flexr::Lexer) do
+      indentation newline: :NL, indent: :IN, dedent: :OUT
+      state(:initial, inclusive: true, match: :shortest) do
+        rule(/\n/, emit: :NL)
+        rule(/a+/, emit: :WORD)
+      end
+    end
+    scanner = lexer.new("\na")
+    trace = Flexr::Trace.new(scanner)
+
+    expect(scanner.next_token(expect: [:WORD])).to eq([:WORD, "a"])
+    expect(trace.steps.first[:token]).to eq([:NL, "\n"].inspect)
+    expect(trace.steps.first[:candidates].map { |candidate| candidate[:rule] }).to eq([0])
+  end
+
   it "excludes partial UTF-8 lookahead matches from both tokens and trace candidates" do
     lexer = Class.new(Flexr::Lexer) do
       rule("x", followed_by: /y(?~ab)\xC3/n, emit: :BYTE)

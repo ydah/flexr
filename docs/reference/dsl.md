@@ -137,18 +137,38 @@ Static generation requires a symbol literal or a statically resolvable
 symbol constant for the channel name. With `--eval`, a Ruby expression can
 compute that symbol.
 
-`priority:` accepts an integer and defaults to zero. On longest-match
-backends, the highest priority wins among rules with the same total match
-length, including any trailing context. Source order breaks ties between
+`priority:` accepts an integer and defaults to zero. In longest-match states,
+the highest priority wins among rules with the same total match length,
+including trailing context. In shortest-match states, priority applies to
+ties in body length. Source order breaks ties between
 equal priorities. For example, a later `rule("if", emit: :IF, priority: 10)`
 can win over an identifier rule on `if`, while the identifier rule still
 wins on `ifx`.
 
-## `state(*names, inclusive: false, &block)`
+## `state(*names, inclusive: false, match: :longest, &block)`
 
 Creates one or more named states and registers rules in the block for those
 states. The block is required. Named states are exclusive by default. An
 inclusive state also sees rules registered for `:initial`.
+
+Use `match: :shortest` with the `table`, `direct`, or `auto` backend to select
+the shortest eligible rule body in a state. The active state's policy also
+applies to rules inherited by an inclusive state. To opt in the initial state,
+declare `state(:initial, inclusive: true, match: :shortest)`.
+
+```ruby
+state(:raw, match: :shortest) do
+  rule("a", followed_by: "bcd", emit: :PREFIX)
+  rule("ab", emit: :WORD)
+end
+```
+
+On `abcd`, this state emits `[:PREFIX, "a"]`. The trailer makes the rule
+eligible and stays available for the next token. The scanner compares body
+lengths at valid character boundaries after applying anchors and `expect:`.
+In UTF-8 input, both the body and trailer must consist of complete scalars.
+At the same body length, higher priority wins, then declaration order.
+An omitted `match:` on a repeated declaration uses the state's policy.
 
 Nested state blocks register their rules for every enclosing state, matching
 Ruby runtime evaluation. Repeating a state declaration with a different

@@ -20,11 +20,9 @@ An early exit from the DFA can select the shortest eligible prefix when the
 body length is the ranking length. Trailing context makes that distinction
 observable. On `abcd`, `"a"` followed by `"bcd"` ends its body at byte 1 and its
 context at byte 4. The competing `"ab"` ends at byte 2. The current recognizer
-chooses `"a"` because its full match is longer. A shortest policy must specify
-whether this example compares 1 to 2 or 4 to 2. Before exposing an option,
-agree on scope and on that ordering, then check UTF-8 and anchor eligibility,
-parser expectations, and priority ties across runtime, generated, and
-standalone scanners. Trace and diagnostic witnesses would need the same policy.
+chooses `"a"` because its full match is longer. The
+[per-state shortest policy](adr/20261124_select_shortest_eligible_body_by_state.md#decision)
+compares the body lengths 1 and 2. The trailer still has to accept.
 
 ### REJECT
 

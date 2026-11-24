@@ -31,6 +31,9 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 
 `trace` without input describes the automaton. To execute a specification and
 inspect rule selection, pass `--input STRING` or `--input-file PATH`.
+In shortest-match states, an input trace compares eligible body lengths.
+With a live reader, it records the selected candidate without querying the
+reader for additional candidates.
 `dot` marks accepting states and accelerated regions for visual inspection.
 
 For longest-match backends, `explain`, structural `trace`, and `dot` show

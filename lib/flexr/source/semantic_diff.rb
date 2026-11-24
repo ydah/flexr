@@ -56,7 +56,8 @@ module Flexr
           else
             dfa = compiled.machines.fetch(name).dfa
             Automaton::TokenDiff::Side.new(dfa: dfa, rules: rules, effects: effects, keyword_effects: keyword_effects,
-                                          allow_empty_match: options[:allow_empty_match] == true)
+                                          allow_empty_match: options[:allow_empty_match] == true,
+                                          shortest: options[:shortest_states]&.include?(name) == true)
           end
         end
 

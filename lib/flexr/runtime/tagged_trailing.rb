@@ -15,6 +15,7 @@ module Flexr
       def scan(expected = nil)
         @has_tagged_trailing = @config.backend != :firstmatch && @rules.any?(&:trailing) if @has_tagged_trailing.nil?
         return super unless @has_tagged_trailing
+        return super if @config.options[:shortest_states]&.include?(@lexer.state)
 
         machine = @compiled.machines.fetch(@lexer.state)
         position = @lexer.byte_pos

@@ -49,6 +49,7 @@ module Flexr
         @state_limit = 100_000 unless @state_limit.is_a?(Integer) && @state_limit.positive?
         directory = Flexr.cache_dir unless @retain_residuals || lazy
         @dfa_cache = directory && DfaCache.new(directory, @spec, @state_limit, construction: @construction)
+        validate_match_policy
         validate_rules
         state_names = effective_states
         machines = state_names.to_h do |state_name|
@@ -57,7 +58,7 @@ module Flexr
           retain = ->(descriptions) { residuals = descriptions } if @retain_residuals
           dfa = compile_machine(rules, lazy: lazy, &retain)
           plans = Accel.whole_token_plans(dfa, rules) if
-            @spec.backend != :firstmatch && @spec.options[:accel] == :strscan
+            @spec.backend != :firstmatch && !shortest_state?(state_name) && @spec.options[:accel] == :strscan
           memo_states, recovery_states = Analysis.backup_memo_states(dfa) unless @spec.backend == :firstmatch
           [state_name, Machine.new(dfa: dfa, state_name: state_name, whole_tokens: plans,
                                    residuals: residuals, backup_memo_states: memo_states,
@@ -85,6 +86,22 @@ module Flexr
         names = [:initial]
         @spec.states.each_key { |name| names << name unless names.include?(name) }
         names
+      end
+
+      def shortest_state?(state)
+        @spec.options[:shortest_states]&.include?(state)
+      end
+
+      def validate_match_policy
+        state = @spec.options[:shortest_states]&.first
+        return unless @spec.backend == :firstmatch && state
+
+        diagnostic = Diagnostics.error(
+          "FLEXR-E018", "state #{state.inspect} cannot use match: :shortest with backend :firstmatch",
+          location: @spec.states.fetch(state).location,
+          help: "use backend :table, :direct, or :auto"
+        )
+        raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
       end
 
       def rules_for(state_name)
@@ -728,6 +745,7 @@ module Flexr
         contextual = {}
         present = compiled.machines.flat_map do |state_name, machine|
           dfa = machine.dfa
+          next shortest_winners(dfa, rules_for(state_name)) if shortest_state?(state_name)
           next dfa.accepts.filter_map { |acceptances| acceptances.first&.rule_index } unless dfa.context_dependent_end?
 
           # DFA acceptance order alone cannot establish shadowing with trailing or first-match rules.
@@ -857,13 +875,15 @@ module Flexr
       def overlap_diagnostics(compiled, rules_by_index)
         # shortcut: verify one shortest body and trailing candidate per rule; search alternatives if rejected examples need coverage.
         compiled.machines.flat_map do |state_name, machine|
+          shortest = shortest_state?(state_name)
           active_rules = rules_for(state_name)
           trailing_dfas = diagnostic_trailing_dfas(active_rules)
           next [] unless trailing_dfas
 
           has_trailing = !trailing_dfas.empty?
           candidates = Analysis.shadowing_examples(machine.dfa, machine.dfa.rule_ids,
-                                                    include_empty: has_trailing, include_unshadowed: has_trailing)
+                                                    include_empty: has_trailing || (shortest && @spec.options[:allow_empty_match]),
+                                                    include_unshadowed: has_trailing || shortest)
           candidates.filter_map do |index, (bytes, winner)|
             if (trailing = trailing_dfas[index])
               suffix = Analysis.shortest_input(trailing)
@@ -876,10 +896,11 @@ module Flexr
 
             rule = rules_by_index.fetch(index)
             length = input.bytesize
-            if has_trailing
+            if has_trailing || shortest
               result = Analysis.trailing_example(machine.dfa, active_rules, rule, input, trailing_dfas,
                                                   encoding: @spec.encoding, unicode: @spec.options[:unicode] == true,
-                                                  firstmatch: @spec.backend == :firstmatch, same_length: true)
+                                                  firstmatch: @spec.backend == :firstmatch, same_length: true,
+                                                  shortest: shortest, allow_empty_match: @spec.options[:allow_empty_match])
               next unless result && result.first != index
 
               winner, length, lookahead = result
@@ -896,14 +917,22 @@ module Flexr
             size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
             tie = priority_tie_reason(winner_rule, rule)
             reason = if has_trailing
-              selection = @spec.backend == :firstmatch ? "first match wins" : "same total length, #{tie}"
+              selection = if @spec.backend == :firstmatch
+                "first match wins"
+              else
+                "same #{shortest ? 'body' : 'total'} length, #{tie}"
+              end
               "#{selection}; matched #{size}, looked ahead #{lookahead} #{lookahead == 1 ? 'byte' : 'bytes'}"
             elsif @spec.backend == :firstmatch
               "first match wins, matched #{size}"
             else
               "#{size}, #{tie}"
             end
-            match_size = has_trailing ? "total length" : "length"
+            match_size = if shortest
+              "body length"
+            else
+              has_trailing ? "total length" : "length"
+            end
             help = if winner_rule.priority == rule.priority
               "reorder the rules if the later rule should take priority"
             else
@@ -939,9 +968,12 @@ module Flexr
         indices = rules.map(&:index)
         examples = {}
         compiled.machines.each do |state_name, machine|
+          shortest = shortest_state?(state_name)
           active_rules = rules_for(state_name)
           # shortcut: verify only the shortest candidate; search alternatives if rejected examples need coverage.
-          candidates = Analysis.shadowing_examples(machine.dfa, indices, include_empty: active_rules.any?(&:trailing))
+          candidates = Analysis.shadowing_examples(machine.dfa, indices,
+                                                    include_empty: active_rules.any?(&:trailing),
+                                                    include_unshadowed: shortest)
           next if candidates.empty?
 
           trailing_dfas = diagnostic_trailing_dfas(active_rules)
@@ -959,13 +991,15 @@ module Flexr
             next if examples[index] && examples[index][1] == index
 
             length = lookahead = nil
-            if !trailing_dfas.empty?
+            if !trailing_dfas.empty? || shortest
               result = Analysis.trailing_example(machine.dfa, active_rules, rules_by_index.fetch(index), input, trailing_dfas,
                                                   encoding: @spec.encoding, unicode: @spec.options[:unicode] == true,
-                                                  firstmatch: @spec.backend == :firstmatch)
+                                                  firstmatch: @spec.backend == :firstmatch, shortest: shortest,
+                                                  allow_empty_match: @spec.options[:allow_empty_match])
               next unless result
 
               winner, length, lookahead = result
+              lookahead = nil if trailing_dfas.empty?
             elsif @spec.backend == :firstmatch
               result = Analysis.firstmatch_example(active_rules, rules_by_index.fetch(index), input,
                                                     encoding: @spec.encoding, unicode: @spec.options[:unicode] == true)
@@ -984,6 +1018,8 @@ module Flexr
           state = state_name == :initial ? "" : " in state #{state_name.inspect}"
           reason = if @spec.backend == :firstmatch
             "first match wins, matched #{length} #{length == 1 ? 'byte' : 'bytes'}"
+          elsif shortest_state?(state_name)
+            "shortest body match, matched #{length} #{length == 1 ? 'byte' : 'bytes'}"
           elsif lookahead
             size = "#{length} #{length == 1 ? 'byte' : 'bytes'}"
             selection = if winner_rule.priority == rule.priority
@@ -1018,9 +1054,26 @@ module Flexr
         nil
       end
 
+      def shortest_winners(dfa, rules)
+        require_relative "token_diff"
+
+        trailers = diagnostic_trailing_dfas(rules)
+        return dfa.rule_ids unless trailers
+
+        effects = rules.to_h { |rule| [rule.index, rule.index] }
+        prepared = rules.to_h do |rule|
+          [rule.index, rule.trailing ? rule.dup.tap { |copy| copy.trailing_dfa = trailers.fetch(rule.index) } : rule]
+        end
+        side = TokenDiff::Side.new(dfa: dfa, rules: prepared, effects: effects, keyword_effects: {},
+                                   allow_empty_match: @spec.options[:allow_empty_match], shortest: true)
+        TokenDiff.reachable_rules(side, encoding: @spec.encoding, limit: @state_limit)
+      end
+
       def shadowed_rules(compiled)
         shadowers = Hash.new { |hash, key| hash[key] = [] }
-        compiled.machines.each_value do |machine|
+        compiled.machines.each do |state_name, machine|
+          next if shortest_state?(state_name)
+
           machine.dfa.accepts.each do |acceptances|
             acceptances = acceptances.select { |label| label.valid_end?(nil) } if machine.dfa.context_dependent_end?
             winner = acceptances.first&.rule_index
