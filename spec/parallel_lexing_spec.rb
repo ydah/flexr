@@ -4,6 +4,12 @@ require "open3"
 require "rbconfig"
 
 RSpec.describe "parallel lexing" do
+  parallel_ruby = RUBY_ENGINE == "ruby" && Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("4.0.6")
+
+  before(:example, :requires_ractors) do
+    skip "requires CRuby 4.0.6 or newer" unless parallel_ruby
+  end
+
   def count_coordinator_scans(&)
     count = 0
     trace = TracePoint.new(:call) do |event|
@@ -13,7 +19,7 @@ RSpec.describe "parallel lexing" do
     [tokens, count]
   end
 
-  it "returns the serial token stream from multiple real Ractors" do
+  it "returns the serial token stream from multiple real Ractors", :requires_ractors do
     lexer = Class.new(Flexr::Lexer) do
       rule(/[a-z]+/, emit: :WORD)
       rule("\n", emit: :NEWLINE)
@@ -29,7 +35,7 @@ RSpec.describe "parallel lexing" do
     expect(coordinator_scans).to be < expected.length
   end
 
-  it "relexes only the mismatched section of a structured UTF-8 token stream" do
+  it "relexes only the mismatched section of a structured UTF-8 token stream", :requires_ractors do
     lexer = Class.new(Flexr::Lexer) do
       token_kind :struct
       rule(/éééé/, emit: :QUAD)
@@ -54,6 +60,17 @@ RSpec.describe "parallel lexing" do
 
     expect(Ractor).not_to receive(:new)
     expect(lexer.parallel_tokens("word")).to eq([[:WORD, "word"]])
+  end
+
+  ["3.4.13", "4.0.5"].each do |version|
+    it "uses the serial path on CRuby #{version}" do
+      stub_const("RUBY_VERSION", version)
+      lexer = Class.new(Flexr::Lexer) { rule(/./, emit: :LETTER) }
+      input = "word" * 12
+
+      expect(Ractor).not_to receive(:new)
+      expect(lexer.parallel_tokens(input, workers: 3, min_bytes: 0)).to eq(lexer.new(input).tokens)
+    end
   end
 
   it "executes opaque actions once without starting Ractors" do
@@ -81,7 +98,7 @@ RSpec.describe "parallel lexing" do
                                                                         [:CHARACTER, "c"], [:END, ""]])
   end
 
-  it "raises the serial lexical error with absolute source coordinates" do
+  it "raises the serial lexical error with absolute source coordinates", :requires_ractors do
     lexer = Class.new(Flexr::Lexer) do
       rule(/[a-z]+/, emit: :WORD)
       rule("\n", skip: true)
@@ -97,7 +114,7 @@ RSpec.describe "parallel lexing" do
   end
 
   [[:table, false], [:direct, true]].each do |backend, standalone|
-    it "matches a full scan using real Ractors in generated #{backend} mode with standalone=#{standalone}" do
+    it "matches a full scan in generated #{backend} mode with standalone=#{standalone}" do
       source = <<~'RUBY'
         class ParallelParityLexer < Flexr::Lexer
           token_kind :struct
@@ -119,7 +136,8 @@ RSpec.describe "parallel lexing" do
         expected = ParallelParityLexer.new(input, filename: "lines.txt").tokens
         actual = ParallelParityLexer.parallel_tokens(input, workers: 3, min_bytes: 0, filename: "lines.txt")
         abort "parallel tokens differ" unless actual == expected
-        abort "fewer than two Ractors started" if started < 2
+        expected_workers = Integer(ARGV.fetch(1))
+        abort "expected #{expected_workers} Ractors, started #{started}" unless started == expected_workers
       RUBY
 
       Dir.mktmpdir("flexr-parallel-") do |directory|
@@ -129,7 +147,7 @@ RSpec.describe "parallel lexing" do
         Flexr::Generator.new(specification, output: artifact, options: {backend: backend, standalone: standalone}).generate
         command = [RbConfig.ruby, *(standalone ? ["--disable-gems"] : %w[-Ilib -rflexr])]
         environment = standalone ? {"RUBYOPT" => nil, "RUBYLIB" => nil} : {}
-        _output, error, status = Open3.capture3(environment, *command, "-e", runner, artifact)
+        _output, error, status = Open3.capture3(environment, *command, "-e", runner, artifact, parallel_ruby ? "3" : "0")
 
         expect(status).to be_success, error
       end

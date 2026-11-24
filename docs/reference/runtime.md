@@ -166,16 +166,17 @@ locations as `Lexer.new(input, filename:).tokens`. It accepts an in-memory
 String. The caller specifies a positive number of workers and a nonnegative
 minimum input size in bytes.
 
-Table and direct lexers with declarative `emit:` and `skip:` rules can use
-Ractors. Each worker sees the entire input and scans from a proposed start
-position. The coordinator checks the state and context at the join and
+On CRuby 4.0.6 and later, table and direct lexers with declarative `emit:` and
+`skip:` rules can use Ractors. Each worker sees the entire input and scans from
+a proposed start position. The coordinator checks the state and context at the join and
 relexes from the last confirmed boundary when a proposal fails. EOF has the
 same meaning for all workers. Runtime, generated, and standalone lexers
 support parallel scanning.
 
-Small inputs, a single worker, ordered `firstmatch` lexers, and opaque
-actions use ordinary serial scanning. Lexical errors are reported by a scan
-from a confirmed boundary.
+Earlier CRuby versions and other Ruby engines use ordinary serial scanning.
+Small inputs, a single worker, ordered `firstmatch` lexers, and opaque actions
+also use the serial path. Lexical errors are reported by a scan from a
+confirmed boundary.
 
 ## Parser token expectations
 

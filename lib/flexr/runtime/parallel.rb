@@ -34,7 +34,10 @@ module Flexr
       end
 
       def self.eligible?(lexer_class, input, filename)
-        return false unless defined?(Ractor) && input.instance_of?(String) && input.singleton_methods.empty?
+        return false unless defined?(Ractor) && RUBY_ENGINE == "ruby"
+        # CRuby 4.0.6 fixes crashes during parallel super dispatch (Ruby #22075 and #22084).
+        return false if (RUBY_VERSION.split(".").map(&:to_i) <=> [4, 0, 6]).negative?
+        return false unless input.instance_of?(String) && input.singleton_methods.empty?
         return false unless filename.nil? || (filename.instance_of?(String) && filename.singleton_methods.empty?)
         return false unless Boundary.standard_lexer?(lexer_class)
 
@@ -103,22 +106,18 @@ module Flexr
 
         until running.empty?
           worker, limit = running.shift
-          break if merge(worker_result(worker), limit)
+          break if merge(worker.value, limit)
         end
         @tokens
       ensure
         running.each do |job|
-          worker_result(job.first)
+          job.first.value
         rescue Ractor::RemoteError
           next
         end
       end
 
       private
-
-      def worker_result(worker)
-        worker.respond_to?(:value) ? worker.value : worker.take
-      end
 
       def merge(tapes, limit)
         positioned = false
