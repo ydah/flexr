@@ -54,6 +54,7 @@ are usable. The bound also excludes bytes read before the first acceptance.
 | `--accel MODE` | `auto`, `strscan`, `regexp`, `none` | Runtime optimization |
 | `--profile GLOB` | Paths to representative input files. Repeat to include multiple globs. | Static DFA generation |
 | `--standalone` | Flag | Generation |
+| `--target-ruby VERSION` | `3.0` or `2.5` | Static standalone generation |
 | `--eval` | Flag | Generation and check |
 | `--lrama-grammar PATH` | Lrama grammar file | Generation and static check |
 | `--table-compression VALUE` | `none`, `rows`, `full` | Generation |
@@ -91,6 +92,7 @@ Options:
       --accel MODE            auto | strscan | regexp | none
       --profile GLOB          Tune generated DFA scanning from corpus files (repeatable)
       --standalone
+      --target-ruby VERSION   Generate standalone Ruby for 3.0 or 2.5
       --eval
       --table-compression VALUE  none | rows | full
       --table-format VALUE       literal | packed
@@ -226,6 +228,21 @@ and lookahead with named captures.
 Exit status 0 means all compared states are equal. Exit status 1 means at
 least one state differs. Exit status 2 means the command encountered a
 compilation error or could not establish equality.
+
+## Generate for Ruby 2.5 or 3.0
+
+```sh
+flexr generate lexer.flexr.rb --standalone --target-ruby 2.5 -o lexer.rb
+```
+
+Run the generator on Ruby 3.4 or later. It embeds the compatible runtime and
+checks the artifact against the chosen Ruby grammar. The generated DFA lexer
+can load without the Flexr gem on the target Ruby.
+
+Write Ruby code in the specification that the target version accepts. The
+generator reports unsupported syntax, Unicode property escapes, incremental
+and parallel lexing, Ractor sharing, and `firstmatch` for these targets. Use
+the ordinary standalone mode for those features.
 
 ## New parser project
 

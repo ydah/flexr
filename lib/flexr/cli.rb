@@ -112,6 +112,10 @@ module Flexr
           options.set(:profile, Array(options.profile) << required_argument!(args, argument))
         when "--standalone"
           options.set(:standalone, true)
+        when "--target-ruby"
+          raise ArgumentError, "--target-ruby is only valid for generation" unless command == :generate
+
+          options.set(:target_ruby, required_argument!(args, argument))
         when "--eval"
           raise ArgumentError, "#{command} requires a statically readable spec" if %i[fix diff].include?(command)
           options.eval_mode = true
@@ -813,6 +817,7 @@ module Flexr
               --accel MODE            auto | strscan | regexp | none
               --profile GLOB          Tune generated DFA scanning from corpus files (repeatable)
               --standalone
+              --target-ruby VERSION   Generate standalone Ruby for 3.0 or 2.5
               --eval
               --table-compression VALUE  none | rows | full
               --table-format VALUE       literal | packed

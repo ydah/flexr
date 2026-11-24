@@ -1,0 +1,48 @@
+name: standalone-legacy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "site/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-legacy:
+    name: standalone / ruby ${{ matrix.ruby }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["2.5", "3.0"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+      - name: Generate standalone corpus fixtures
+        env:
+          TARGET_RUBY: ${{ matrix.ruby }}
+        run: bundle exec ruby tools/legacy_target_parity.rb prepare tmp/legacy-target "$TARGET_RUBY"
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler: none
+      - name: Check syntax, load, and compare tokens with RubyGems disabled
+        run: |
+          for lexer in tmp/legacy-target/*/lexer.rb; do
+            ruby --disable-gems -c "$lexer"
+            ruby --disable-gems tools/legacy_target_parity.rb verify "$(dirname "$lexer")"
+          done
