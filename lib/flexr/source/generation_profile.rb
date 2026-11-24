@@ -81,12 +81,11 @@ module Flexr
       end
 
       def read_corpus(path)
-        mode = File::RDONLY
-        mode |= File::NONBLOCK if defined?(File::NONBLOCK)
-        File.open(path, mode) do |file|
+        flags = File::NONBLOCK if File::ALT_SEPARATOR.nil? && defined?(File::NONBLOCK)
+        File.open(path, "rb", flags: flags || 0) do |file|
           raise ArgumentError, "profile input is not a regular file: #{path}" unless file.stat.file?
 
-          file.binmode.read
+          file.read
         end
       end
 

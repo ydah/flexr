@@ -19,7 +19,7 @@ RSpec.describe "profile-guided generation" do
       class ProfileFixtureLexer < Flexr::Lexer
         token_kind :struct
         rule(/[a-z]+/, emit: :WORD)
-        rule(/[ \n]+/, skip: true)
+        rule(/[ \r\n]+/, skip: true)
         rule("!", emit: :BANG)
         rule("é", emit: :ACCENT)
       end
@@ -156,6 +156,14 @@ RSpec.describe "profile-guided generation" do
     corpus = write_file("opaque.txt", "abc")
 
     expect(generate("--profile", corpus, lexer_spec: path)).to include("# profile:")
+  end
+
+  it "reads the corpus in binary mode on Windows" do
+    stub_const("File::ALT_SEPARATOR", "\\")
+    stub_const("File::NONBLOCK", File::WRONLY)
+    corpus = write_file("windows.txt", "a\r\n")
+
+    expect(metadata(generate("--profile", corpus), "profile")).to include("bytes" => 3, "tokens" => 2)
   end
 
   it "executes the profiled standalone artifact without the Flexr gem" do
