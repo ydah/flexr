@@ -189,6 +189,7 @@ module Flexr
           emits: Configuration.rule_emits!(definition[:emits]),
           priority: definition[:priority],
           capture_patterns: definition[:capture_patterns], contextual_patterns: definition[:contextual_patterns],
+          tagged_capture_programs: definition[:tagged_capture_programs],
           trailing_dfa: definition[:trailing_dfa] && Generated.load_dfa(definition[:trailing_dfa]),
           pattern_conditions: Array(definition[:pattern_conditions]).map do |condition|
             next unless condition

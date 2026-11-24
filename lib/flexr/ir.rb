@@ -5,6 +5,7 @@ module Flexr
     Rule = Struct.new(
       :index, :patterns, :trailing, :action, :states, :bol_only, :end_anchor, :location,
       :pattern_conditions, :trailing_dfa, :channel, :priority, :emits, :capture_patterns, :contextual_patterns,
+      :tagged_capture_programs,
       keyword_init: true
     ) do
       def skip?

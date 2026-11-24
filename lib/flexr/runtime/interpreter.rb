@@ -39,7 +39,9 @@ module Flexr
         state = @lexer.__flexr_dfa_start(machine.dfa, position)
         best = nil
         cursor = position
-        best = consider_acceptances(machine, state, cursor, position, buffer, best, expected) if @config.options[:allow_empty_match]
+        tracker = @lexer.__send__(:__flexr_tagged_captures, machine.dfa) if @lexer.respond_to?(:__flexr_tagged_captures, true)
+        tags = tracker if tracker&.tracking?
+        best = consider_acceptances(machine, state, cursor, position, buffer, best, expected, tags) if @config.options[:allow_empty_match]
         acceleration_regions = acceleration_regions_for(machine) if !expected && acceleration_enabled?
 
         while buffer.ensure_available?(cursor + 1)
@@ -51,8 +53,9 @@ module Flexr
               region, buffer, cursor, token_rule: token_rule, token_start: position
             )
             if accelerated_end && accelerated_end > cursor
+              tags&.advance_region(buffer, cursor, accelerated_end)
               cursor = accelerated_end
-              best = consider_acceptances(machine, state, cursor, position, buffer, best)
+              best = consider_acceptances(machine, state, cursor, position, buffer, best, nil, tags)
               next
             end
           end
@@ -62,12 +65,13 @@ module Flexr
           state = transition(machine.dfa, state, byte)
           break unless state
 
+          tags&.advance(byte, cursor)
           cursor += 1
           acceptance = machine.dfa.accepts[state].first
           ensure_token_size!(cursor, position, rule: acceptance&.rule_index)
-          best = consider_acceptances(machine, state, cursor, position, buffer, best, expected)
+          best = consider_acceptances(machine, state, cursor, position, buffer, best, expected, tags)
         end
-        best
+        tracker ? tracker.finish(best, buffer) : best
       end
 
       def scan_fast(machine, position)
@@ -197,7 +201,7 @@ module Flexr
         )
       end
 
-      def consider_acceptances(machine, state, cursor, position, buffer, best, expected = nil)
+      def consider_acceptances(machine, state, cursor, position, buffer, best, expected, tags)
         machine.dfa.accepts[state].each do |acceptance|
           candidate = @rules.fetch(acceptance.rule_index)
           next if acceptance.bol_only && !@lexer.beginning_of_line?
@@ -222,6 +226,7 @@ module Flexr
           best.end_pos = cursor
           best.total_end_pos = total_end
           best.capture = candidate.capture_patterns&.[](acceptance.pattern_index)
+          tags&.remember(acceptance, cursor)
         end
         best
       end

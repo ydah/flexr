@@ -160,21 +160,24 @@ module Flexr
 
     def generated_payload(parsed, compiled)
       definitions = parsed.rules.map do |rule|
+        compiled_rule = compiled.rules.fetch(rule.index)
         conditions = Array(rule.pattern_conditions).map do |condition|
           [condition.rule_index, condition.pattern_index, condition.bol_only, condition.end_anchor]
         end
         priority = ("priority: #{rule.priority}, " unless rule.priority.to_i.zero?)
         channel = "channel: #{ruby_literal(rule.channel)}, " if rule.channel
         emits = "emits: #{ruby_literal(rule.emits)}, " if rule.emits
-        capture_patterns = compiled.rules.fetch(rule.index).capture_patterns
+        capture_patterns = compiled_rule.capture_patterns
         captures = "capture_patterns: #{ruby_literal(capture_patterns)}, " if capture_patterns
-        contextual = compiled.rules.fetch(rule.index).contextual_patterns
+        tagged = tagged_capture_expression(compiled_rule.tagged_capture_programs) if
+          compiled_rule.respond_to?(:tagged_capture_programs)
+        contextual = compiled_rule.contextual_patterns
         context = "contextual_patterns: #{ruby_literal(contextual)}, " if contextual
         "{ index: #{rule.index}, patterns: #{ruby_literal(rule.patterns)}, pattern_conditions: #{ruby_literal(conditions)}, trailing: #{ruby_literal(rule.trailing)}, " \
-          "#{trailing_dfa_expression(rule, parsed, compiled.rules.fetch(rule.index).trailing_dfa)}" \
+          "#{trailing_dfa_expression(rule, parsed, compiled_rule.trailing_dfa)}" \
           "#{priority}" \
           "action: #{generated_rule_action(rule)}, states: #{rule.states.inspect}, " \
-          "#{channel}#{emits}#{captures}#{context}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
+          "#{channel}#{emits}#{captures}#{tagged}#{context}bol_only: #{ruby_literal(rule.bol_only)}, end_anchor: #{ruby_literal(rule.end_anchor)} }"
       end
       "{ artifact: #{ruby_literal(artifact_metadata)}, rules: [#{definitions.join(', ')}], " \
         "backend: #{ruby_literal(effective_backend(parsed))}, " \
@@ -187,6 +190,24 @@ module Flexr
         "inclusive_states: #{ruby_literal(parsed.states.transform_values { |value| value[:inclusive] })}, " \
         "compiled: #{compiled_expression(compiled, compression: table_compression(parsed),
                                          backend: effective_backend(parsed))} }"
+    end
+
+    def tagged_capture_expression(programs)
+      return unless programs
+
+      definitions = programs.map do |program|
+        next unless program
+        next {whole_capture: program.whole_capture, encoding: program.encoding.name} if program.whole_capture
+
+        rows = program.transitions.map do |row|
+          row.each_index.chunk { |index| row.fetch(index) }.filter_map do |step, classes|
+            [classes.first, classes.last, *step] if step
+          end
+        end
+        {byte_classes: program.byte_classes, rows: rows, acceptances: program.acceptances, groups: program.groups,
+         register_count: program.register_count, encoding: program.encoding.name}
+      end
+      "tagged_capture_program_data: #{ruby_literal(definitions)}, "
     end
 
     def artifact_metadata
@@ -329,6 +350,8 @@ module Flexr
         parsed.rules.any? { |rule| rule.trailing.is_a?(Pattern) || rule.patterns.any?(Pattern) }
       sources << "runtime/channels.rb" if parsed.uses_rule_sets || parsed.rules.any?(&:channel) || uses_delegation?(parsed)
       sources << "runtime/captures.rb" if compiled.rules.any?(&:capture_patterns)
+      sources.push("automaton/tagged_dfa.rb", "runtime/tagged_captures.rb", "generated/tagged_capture_programs.rb") if
+        compiled.rules.any? { |rule| rule.respond_to?(:tagged_capture_programs) && rule.tagged_capture_programs }
       sources << "runtime/delegation.rb" if uses_delegation?(parsed)
       sources << "rules.rb" if parsed.uses_rule_sets
       sources.map do |relative|

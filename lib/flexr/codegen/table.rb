@@ -37,6 +37,13 @@ module Flexr
         lines = []
         whole_tokens = compiled.machines.values.any?(&:whole_tokens)
         captures = compiled.rules.any?(&:capture_patterns)
+        tagged_programs = compiled.rules.filter_map do |rule|
+          rule.tagged_capture_programs if rule.respond_to?(:tagged_capture_programs)
+        end
+        tagged = !tagged_programs.empty?
+        track_tags = tagged_programs.any? { |programs| programs.any? { |program| program && !program.whole_capture } }
+        tag_argument = track_tags ? ", running_tags" : ""
+        scan_result = tagged ? "tags ? tags.finish(best, buffer) : best" : "best"
         contextual_end = compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? }
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
         fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
@@ -58,6 +65,10 @@ module Flexr
           lines << "#{indent}  return match if match"
         end
         lines << "#{indent}  return __flexr_generated_scan_simple(dfa, position) if @__flexr_generated_scan_simple"
+        if tagged
+          lines << "#{indent}  tags = __flexr_tagged_captures(dfa) if respond_to?(:__flexr_tagged_captures, true)"
+          lines << "#{indent}  running_tags = tags if tags&.tracking?" if track_tags
+        end
         lines << "#{indent}  cursor = position"
         lines << "#{indent}  current = dfa.start"
         lines << "#{indent}  direct = dfa.direct"
@@ -79,8 +90,9 @@ module Flexr
         lines << "#{indent}      token_rule = acceptance&.rule_index"
         lines << "#{indent}      accelerated_end = __flexr_generated_accelerate(region, cursor, token_rule, position) if region"
         lines << "#{indent}      if accelerated_end && accelerated_end > cursor"
+        lines << "#{indent}        running_tags&.advance_region(buffer, cursor, accelerated_end)" if track_tags
         lines << "#{indent}        cursor = accelerated_end"
-        lines << "#{indent}        best = __flexr_generated_acceptance(dfa, current, position, cursor, best)"
+        lines << "#{indent}        best = __flexr_generated_acceptance(dfa, current, position, cursor, best#{tag_argument})"
         lines << "#{indent}        next"
         lines << "#{indent}      end"
         lines << "#{indent}    end"
@@ -94,6 +106,7 @@ module Flexr
         lines << "#{indent}      dfa.transition(current, byte)"
         lines << "#{indent}    end"
         lines << "#{indent}    break unless current"
+        lines << "#{indent}    running_tags&.advance(byte, cursor)" if track_tags
         lines << "#{indent}    cursor += 1"
         lines << "#{indent}    resource_acceptance = dfa.accepts[current].first"
         lines << "#{indent}    resource_rule = resource_acceptance&.rule_index"
@@ -101,11 +114,15 @@ module Flexr
         lines << "#{indent}      size = cursor - token_start"
         lines << "#{indent}      defer_token_size_check!(size, rule: resource_rule) if size > token_limit"
         lines << "#{indent}    end"
-        lines << "#{indent}    best = __flexr_generated_acceptance(dfa, current, position, cursor, best)"
+        lines << "#{indent}    best = __flexr_generated_acceptance(dfa, current, position, cursor, best#{tag_argument})"
         lines << "#{indent}  end"
-        lines << "#{indent}  best"
+        lines << "#{indent}  #{scan_result}"
         lines << "#{indent}end"
         lines << "#{indent}def __flexr_generated_scan_simple(dfa, position)"
+        if tagged
+          lines << "#{indent}  tags = __flexr_tagged_captures(dfa) if respond_to?(:__flexr_tagged_captures, true)"
+          lines << "#{indent}  running_tags = tags if tags&.tracking?" if track_tags
+        end
         if direct
           lines << "#{indent}  current, direct_nxt, direct_classes, ec, accepts, rules = #{scan_cache}"
         else
@@ -131,6 +148,7 @@ module Flexr
           lines << "#{indent}      current = dfa.transition(current, byte)"
           lines << "#{indent}      break unless current"
         end
+        lines << "#{indent}      running_tags&.advance(byte, cursor)" if track_tags
         lines << "#{indent}      cursor += 1"
         lines << "#{indent}      acceptance = accepts[current].first"
         lines << "#{indent}      next unless acceptance"
@@ -141,8 +159,9 @@ module Flexr
         lines << "#{indent}      best.end_pos = cursor"
         lines << "#{indent}      best.total_end_pos = cursor"
         lines << "#{indent}      best.capture = rule.capture_patterns&.[](acceptance.pattern_index)" if captures
+        lines << "#{indent}      running_tags&.remember(acceptance, cursor)" if track_tags
         lines << "#{indent}    end"
-        lines << "#{indent}    return best"
+        lines << "#{indent}    return #{scan_result}"
         lines << "#{indent}  end"
         lines << "#{indent}  token_start = more_text_start || position"
         lines << "#{indent}  token_limit = max_token_size"
@@ -153,8 +172,9 @@ module Flexr
         lines << "#{indent}      acceptance = accepts[current].first"
         lines << "#{indent}      accelerated_end = __flexr_generated_accelerate(region, cursor, acceptance&.rule_index, position) if region"
         lines << "#{indent}      if accelerated_end && accelerated_end > cursor"
+        lines << "#{indent}        running_tags&.advance_region(buffer, cursor, accelerated_end)" if track_tags
         lines << "#{indent}        cursor = accelerated_end"
-        lines << "#{indent}        best = __flexr_generated_acceptance(dfa, current, position, cursor, best)"
+        lines << "#{indent}        best = __flexr_generated_acceptance(dfa, current, position, cursor, best#{tag_argument})"
         lines << "#{indent}        next"
         lines << "#{indent}      end"
         lines << "#{indent}    end"
@@ -168,6 +188,7 @@ module Flexr
         lines << "#{indent}      dfa.transition(current, byte)"
         lines << "#{indent}    end"
         lines << "#{indent}    break unless current"
+        lines << "#{indent}    running_tags&.advance(byte, cursor)" if track_tags
         lines << "#{indent}    cursor += 1"
         lines << "#{indent}    acceptance = accepts[current].first"
         lines << "#{indent}    if check_token_limit"
@@ -182,8 +203,9 @@ module Flexr
         lines << "#{indent}    best.end_pos = cursor"
         lines << "#{indent}    best.total_end_pos = cursor"
         lines << "#{indent}    best.capture = rule.capture_patterns&.[](acceptance.pattern_index)" if captures
+        lines << "#{indent}    running_tags&.remember(acceptance, cursor)" if track_tags
         lines << "#{indent}  end"
-        lines << "#{indent}  best"
+        lines << "#{indent}  #{scan_result}"
         lines << "#{indent}end"
         lines << "#{indent}def __flexr_generated_acceleration_region(dfa, state)"
         lines << "#{indent}  @__flexr_generated_accel_regions ||= {}"
@@ -272,7 +294,7 @@ module Flexr
         lines << "#{indent}    rule.pattern_conditions.all? { |condition| condition && !condition.bol_only && !condition.end_anchor }"
         lines << "#{indent}  end"
         lines << "#{indent}end"
-        lines << "#{indent}def __flexr_generated_acceptance(dfa, state, start_position, cursor, best)"
+        lines << "#{indent}def __flexr_generated_acceptance(dfa, state, start_position, cursor, best#{tag_argument})"
         lines << "#{indent}  dfa.accepts[state].each do |acceptance|"
         lines << "#{indent}    next if acceptance.bol_only && !beginning_of_line?"
         next_byte_check = if contextual_end
@@ -293,6 +315,7 @@ module Flexr
         lines << "#{indent}    best.end_pos = cursor"
         lines << "#{indent}    best.total_end_pos = cursor"
         lines << "#{indent}    best.capture = rule.capture_patterns&.[](acceptance.pattern_index)" if captures
+        lines << "#{indent}    running_tags&.remember(acceptance, cursor)" if track_tags
         lines << "#{indent}  end"
         lines << "#{indent}  best"
         lines << "#{indent}end"

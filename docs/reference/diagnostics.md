@@ -296,6 +296,10 @@ accepts the full spellings without anchors in the same states.
 `--warn none` hides this suggestion. `--warn-as-error` still permits checks
 with informational diagnostics.
 
+`flexr check --warn all` reports `FLEXR-I005` for named-capture patterns that
+exceed the tagged DFA's state, work, or register limit. Those patterns use
+regexp replay.
+
 `flexr check --target 2.0` includes `FLEXR-I002` with Ruby and artifact
 requirements. See the [v2 migration guide](../migration-v2.md) for the static
 check's limits and opt-in runtime deprecation warnings.

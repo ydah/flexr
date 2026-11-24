@@ -38,3 +38,36 @@ rejected complete bodies.
 ```sh
 bundle exec rspec spec/tagged_capture_programs_spec.rb
 ```
+
+## Lexer scans
+
+Runtime and generated scanners update tag registers as they consume the
+recognized bytes. The winning acceptance saves its tag state with its body
+end, so a speculative longer match cannot overwrite those captures. The
+existing longest-match and priority rules select that endpoint. A single
+group that encloses the entire pattern can use the selected body boundaries.
+
+The lexer reads capture values lazily during the action. It retains regexp
+replay for unsupported patterns, programs that exceed compiler limits, and
+matched bodies changed before capture access. It also uses replay when a
+cancellation callback can edit the input or a stream exposes its mutable
+buffer. The boundary selected by `followed_by:` still comes from the
+existing trailing-context matcher.
+
+Generated rules store compact runs of equivalent byte classes for tagged
+patterns. Standalone artifacts with those programs include the cursor and
+loader. The artifact field is optional so older artifacts can use replay.
+
+On Ruby 4.0.9 without JIT, we compared the same frozen 49,000-byte input
+and verified all 7,000 tokens on each timed scan. The table gives median
+milliseconds across 15 scans per side. The two versions ran in alternating
+order after warmup.
+
+| Captures read by the action | Runtime replay → tags | Generated replay → tags |
+| --- | ---: | ---: |
+| One group around a word | 87.33 → 89.90 | 28.58 → 30.74 |
+| Separate first letter and remaining letters | 94.25 → 118.62 | 32.68 → 54.78 |
+
+The second fixture spends more time dispatching byte steps and saving
+acceptances. A separate trace counted 1,900 tagged cursor steps over 300
+tokens. Regexp replay made 300 matches on the same input.

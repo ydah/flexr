@@ -185,6 +185,56 @@ RSpec.describe "named regexp captures" do
     expect(outcomes(source, "\xFF".b)).to all(eq([["BYTE", [255]]]))
   end
 
+  it "uses saved tag offsets in runtime, generated, and standalone with streamed input" do
+    source = <<~'RUBY'
+      require "flexr"
+      class NamedCaptureLexer < Flexr::Lexer
+        accel :strscan
+        rule(/(?<word>[\p{L}]+)(?<suffix>!)?/) do
+          raise "named captures were replayed" unless @capture_match.capture.respond_to?(:byteoffset)
+
+          emit :WORD, captures
+        end
+        rule(/ +/, skip: true)
+      end
+    RUBY
+
+    expected = [["WORD", {"word" => "日本é", "suffix" => "!"}], ["WORD", {"word" => "alpha", "suffix" => nil}]]
+    %i[table direct].each do |backend|
+      expect(outcomes(source, "日本é! alpha", backend: backend)).to all(eq(expected))
+    end
+  end
+
+  it "keeps the binary encoding of an ASCII-only /n capture in all scanner modes" do
+    source = <<~RUBY
+      require "flexr"
+      class NamedCaptureLexer < Flexr::Lexer
+        rule(/(?<letter>a)/n) do
+          raise "named captures were replayed" unless @capture_match.capture.respond_to?(:byteoffset)
+
+          emit :ENCODING, captures.fetch(:letter).encoding.name
+        end
+      end
+    RUBY
+
+    expect(outcomes(source, "a")).to all(eq([%w[ENCODING ASCII-8BIT]]))
+  end
+
+  it "uses the winning pattern's tag plan or replay descriptor within one rule" do
+    source = <<~RUBY
+      require "flexr"
+      class NamedCaptureLexer < Flexr::Lexer
+        rule([/(?<first>ab)/, /(?<second>a)(?=c)/]) do
+          emit :CAPTURE, [@capture_match.capture.respond_to?(:byteoffset), captures]
+        end
+        rule(/[!c]/, skip: true)
+      end
+    RUBY
+
+    expected = [["CAPTURE", [true, {"first" => "ab"}]], ["CAPTURE", [false, {"second" => "a"}]]]
+    expect(outcomes(source, "ab!ac", backend: :direct)).to all(eq(expected))
+  end
+
   it "captures the body of the absence example" do
     source = <<~RUBY
       require "flexr"
@@ -238,6 +288,34 @@ RSpec.describe "named regexp captures" do
       stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", runner, generated)
       expect(status).to be_success, stderr
       expect(stdout).to include("FLEXR-E020", "runtime does not support named regexp captures")
+    end
+  end
+
+  it "loads tagged standalone lexers alongside the installed runtime" do
+    Dir.mktmpdir("flexr-tagged-standalone-") do |directory|
+      lexers = %w[FirstTaggedLexer SecondTaggedLexer].map do |name|
+        path = File.join(directory, "#{name}.flexr.rb")
+        standalone = File.join(directory, "#{name}.standalone.rb")
+        File.binwrite(path, <<~RUBY)
+          require "flexr"
+          class #{name} < Flexr::Lexer
+            rule(/(?<head>a)(?<tail>b+)/) { emit :VALUE, captures }
+          end
+        RUBY
+        Flexr::Generator.new(path, output: standalone, options: { standalone: true }).generate
+        standalone
+      end
+      runner = <<~RUBY
+        require "flexr"
+        first, second = ARGV
+        load first
+        load second
+        payload = [FirstTaggedLexer, SecondTaggedLexer].map { |lexer| lexer.new("abb").tokens }
+        puts JSON.generate(payload)
+      RUBY
+      stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-Ilib", "-e", runner, *lexers)
+      expect(status).to be_success, stderr
+      expect(JSON.parse(stdout)).to eq(Array.new(2, [["VALUE", { "head" => "a", "tail" => "bb" }]]))
     end
   end
 
