@@ -90,6 +90,41 @@ When a rule delegates, its child contributes the default-channel token stream.
 Structured delegated tokens preserve the child's attached trivia.
 Checkpoints include queued child tokens. Seeking clears that queue.
 
+## Push input
+
+Use `Lexer.push(**options)` when the application receives chunks and controls
+when they arrive. Runtime, generated, and standalone lexers support this form.
+
+| Method | Result |
+|---|---|
+| `feed(bytes)` | Accepts a String and returns the tokens that became decidable. An empty chunk returns no tokens. |
+| `finish` | Signals EOF, returns the remaining tokens, and runs any EOF actions. A later call returns no tokens. |
+
+With a block, each method yields tokens and returns the push lexer. A lexer
+configured with `token_kind :yield` yields the type and value as two arguments.
+Without a block, the methods return arrays. A finished lexer rejects further
+calls to `feed` with `IOError`.
+
+Chunk boundaries can fall inside tokens, UTF-8 scalars, and trailing context.
+Flexr suspends an in-progress scan or rule action when it needs another byte.
+The same scanner resumes with the next chunk, so a rule action runs once.
+An ordinary lexer checkpoint captures state at a token boundary. The suspended
+scan also holds the in-progress DFA and action state.
+
+The options match `Lexer.new`, with `retain_input: false` as the default.
+Each feed snapshots the chunk's bytes in the lexer's configured encoding.
+With a finite DFA
+backup bound, an unconditional longest-match scan limits refills after its last
+acceptance to the remaining backup distance plus one byte to test for a failed
+transition. This bound applies to bytes beyond the accepted body. The live
+lexeme, input before the first acceptance, contextual lookahead, and unbounded
+backup use the ordinary token, lookahead, and buffer limits.
+
+Call `feed` and `finish` from the thread that created the push lexer.
+Token callbacks run in the calling fiber, including a fiber running under a
+scheduler. Rule actions run in the scanner's blocking fiber. A scan error or
+an interruption of a token callback closes the push lexer.
+
 ## Parser token expectations
 
 Pass an array of token Symbols as `expect:` to select rules for one token

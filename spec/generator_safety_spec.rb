@@ -130,12 +130,12 @@ RSpec.describe "generated artifact safety" do
         File.binwrite(path, lexer_source.sub("rule(/a/)", "rule(/a+/)"))
         generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
-        # Allow 16 KiB for DFA error reporting in addition to the core runtime budget.
-        expect(generated.bytesize).to be < 100_000 + (16 * 1024)
+        # Reserve 16 KiB for error reporting and 4 KiB for push support above the core budget.
+        expect(generated.bytesize).to be < 100_000 + (20 * 1024)
         expect(generated).not_to include("\r\n", "module Keywords", "module Firstmatch", "def push_input(", "module Indentation", "module Captures", "module DelegatedTokens", "def scan_until(")
         expect(generated).not_to include(
           "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis",
-          "class ReferenceDFA"
+          "class ReferenceDFA", "class BackupAnalysis"
         )
         script = <<~RUBY
           load ARGV.fetch(0)

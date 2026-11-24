@@ -110,6 +110,7 @@ module Flexr
         buffer = @lexer.buffer
         dfa = machine.dfa
         lazy = dfa.respond_to?(:backup_memo_states)
+        push = buffer.push_source
         state = @lexer.__flexr_dfa_start(dfa, position)
         memo_states = backup_memo_states_for(machine, lazy)
         best = nil
@@ -154,8 +155,27 @@ module Flexr
           end
           best = consider_acceptances(machine, state, cursor, position, buffer, best, expected, tags,
                                       check_boundary: !simple)
+          next unless push && cursor == buffer.bytesize
+          break if dfa.transitions.fetch(state).none?
+
+          limit_push_refill(push, machine, cursor, best.end_pos) if simple && best
         end
         tracker ? tracker.finish(best, buffer) : best
+      end
+
+      def limit_push_refill(push, machine, cursor, accepted)
+        bound = machine.push_backup_bytes
+        bound = push_backup_bytes(machine.dfa) if bound.nil?
+        push.limit_next_read(bound + 1 - (cursor - accepted)) if bound
+      end
+
+      def push_backup_bytes(dfa)
+        bounds = (@push_backup_bounds ||= {}.compare_by_identity)
+        bounds.fetch(dfa) do
+          require_relative "../automaton/backup" unless defined?(Automaton::BackupAnalysis)
+
+          bounds[dfa] = Automaton::BackupAnalysis.new(dfa).analyze(witness: false).maximum_bytes
+        end
       end
 
       def backup_memo_states_for(machine, lazy)
@@ -195,6 +215,7 @@ module Flexr
           size = cursor - position
           @lexer.ensure_lookahead_size!(size, rule: rule)
           longest = size if trailing_accept?(dfa, state, buffer, cursor, position, rule)
+          break if buffer.push_source && cursor == buffer.bytesize && dfa.transitions.fetch(state).none?
         end
         longest
       end

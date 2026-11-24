@@ -5,7 +5,7 @@ module Flexr
     class Buffer
       DEFAULT_CHUNK_SIZE = 64 * 1024
 
-      attr_reader :base_offset, :chunk_size, :max_buffer_size
+      attr_reader :base_offset, :chunk_size, :max_buffer_size, :push_source
 
       def initialize(input, chunk_size: DEFAULT_CHUNK_SIZE, max_buffer_size: 64 * 1024 * 1024,
                      retain_input: true, freeze_input: false, filename: nil)
@@ -20,6 +20,7 @@ module Flexr
         @window_start = 0
         @io = input.is_a?(String) ? nil : input
         raise ArgumentError, "input must be a String or IO" if @io && !@io.respond_to?(:read)
+        @push_source = input if input.is_a?(Push::Source)
 
         @source = input.is_a?(String) ? input : String.new(encoding: Encoding::BINARY)
         @eof = @io.nil?
