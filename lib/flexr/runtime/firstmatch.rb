@@ -21,7 +21,10 @@ module Flexr
 
             regexp = pattern.is_a?(::Regexp) ? pattern : ::Regexp.new(::Regexp.escape(pattern.to_s))
             context = rule.contextual_patterns&.[](pattern_index)
-            match = if context && (!context.replay || !buffer.eof_loaded?)
+            literal = pattern.is_a?(String)
+            match = if literal
+              match_literal(regexp, pattern, buffer, position)
+            elsif context && (!context.replay || !buffer.eof_loaded?)
               context.match(@lexer, rule, position)
             else
               streamed_match(regexp, buffer, position, reference: reference_pattern?(regexp), limit: :token, rule: rule)
@@ -29,13 +32,13 @@ module Flexr
             next unless match && ((context && !context.replay) || match.begin(0).zero?)
             next if expected && !expected_rule?(rule, expected, buffer, position, position + match[0].bytesize)
 
-            [match, condition]
+            [match, condition, literal]
           end
-          match, condition = matches.max_by { |candidate| candidate[0][0].bytesize }
+          match, condition, literal = matches.max_by { |candidate| candidate[0][0].bytesize }
           next unless match
 
           end_position = position + match[0].bytesize
-          next unless @lexer.utf8_boundary?(end_position)
+          next unless literal || @lexer.utf8_boundary?(end_position)
           next if condition.end_anchor && !condition.valid_end?(buffer.getbyte(end_position))
           trailing = trailing_length(rule, buffer, end_position)
           next if rule.trailing && trailing.nil?
@@ -46,6 +49,18 @@ module Flexr
           return result
         end
         nil
+      end
+
+      def match_literal(regexp, pattern, buffer, position)
+        matches = pattern.each_byte.with_index.all? do |byte, offset|
+          incoming = buffer.getbyte(position + offset)
+          @lexer.consume_step!
+          incoming == byte
+        end
+        return unless matches
+
+        subject = buffer.byteslice(position, pattern.bytesize).force_encoding(@config.encoding)
+        match_stream_pattern(regexp, subject, reference: false)
       end
 
       def streamed_match(pattern, buffer, position, limit:, rule:, reference: false)

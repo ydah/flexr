@@ -32,3 +32,21 @@ reproducibility, or a generator-free runtime matters.
 See the [runtime reference](../reference/runtime.md) for initialization options
 and the [action reference](../reference/actions.md) for methods available in a
 rule block.
+
+## Feed chunks from an application
+
+Build a push lexer when your application owns the input loop.
+
+```ruby
+lexer = Lexer.push
+lexer.feed("12") { |token| p token }
+lexer.feed(" 34") { |token| p token }
+lexer.finish { |token| p token }
+```
+
+The second call can emit `12` once it sees the space. The final call emits
+`34` at EOF. A socket reader can call `feed` for each chunk and `finish` when
+the peer closes the stream. Token callbacks run in the reader's fiber.
+
+See [the framing examples](../../examples/push_streams.rb) for split HTTP
+request lines and headers, Redis RESP line replies, and server-sent events.

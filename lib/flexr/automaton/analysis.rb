@@ -18,10 +18,10 @@ module Flexr
         end
       end
 
-      def backup(dfa)
+      def backup(dfa, witness: true)
         require_relative "backup"
 
-        BackupAnalysis.new(dfa).analyze
+        BackupAnalysis.new(dfa).analyze(witness: witness)
       end
 
       def backup_memo_states(dfa)

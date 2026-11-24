@@ -16,13 +16,14 @@ module Flexr
         @extensions = @edges.map { |destinations| destinations.reject { |state| @accepting[state] } }
       end
 
-      def analyze
+      def analyze(witness: true)
         roots = backup_roots
         return Result.new(0, nil, nil) if roots.empty?
 
         order = finishing_order(roots)
         cycles = cycle_states(order)
         return Result.new(maximum_length(order, roots), nil, nil) unless cycles.any?
+        return Result.new(nil, nil, nil) unless witness
 
         prefix, state = shortest_prefix(cycles)
         Result.new(nil, prefix.freeze, shortest_cycle(state).freeze)

@@ -16,7 +16,7 @@ module Flexr
     RUNTIME_SOURCES = %w[
       version.rb errors.rb diagnostics.rb action_resolver.rb configuration.rb ir.rb
       unicode/version.rb automaton/types.rb automaton/dfa.rb automaton/accel.rb
-      runtime/record.rb runtime/location.rb runtime/token.rb runtime/buffer.rb runtime/errors.rb
+      runtime/record.rb runtime/location.rb runtime/token.rb runtime/push.rb runtime/buffer.rb runtime/errors.rb
       runtime/interpreter.rb runtime/recognizer.rb runtime/core.rb runtime/checkpoint.rb dsl.rb lexer.rb generated.rb
     ].freeze
 
@@ -244,7 +244,7 @@ module Flexr
         "states: #{ruby_literal(parsed.states.keys.reject { |name| name == :initial })}, " \
         "inclusive_states: #{ruby_literal(parsed.states.transform_values { |value| value[:inclusive] })}, " \
         "compiled: #{compiled_expression(compiled, compression: table_compression(parsed),
-                                         backend: effective_backend(parsed))} }"
+                                         backend: effective_backend(parsed), standalone: standalone?(parsed))} }"
     end
 
     def tagged_capture_expression(programs)
@@ -321,11 +321,13 @@ module Flexr
       end
     end
 
-    def compiled_expression(compiled, compression: :none, backend: :table)
+    def compiled_expression(compiled, compression: :none, backend: :table, standalone: false)
       machines = compiled.machines.map do |name, machine|
         direct = Codegen::Direct.new(compiled).generate(state: name) if backend == :direct
         data = dfa_data(machine.dfa, compression: compression, direct: direct)
         flags = { backup_memo_states: machine.backup_memo_states, backup_recovery_states: machine.backup_recovery_states }
+        flags[:push_backup_bytes] = Automaton::Analysis.backup(machine.dfa, witness: false).maximum_bytes || false if
+          standalone && backend != :firstmatch
         fields = flags.compact.map { |field, states| ", #{field}: #{ruby_literal(states)}" }.join
         "#{ruby_literal(name)} => { state_name: #{ruby_literal(machine.state_name)}, dfa: #{ruby_literal(data)}#{fields} }"
       end

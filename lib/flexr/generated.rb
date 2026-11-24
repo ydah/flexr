@@ -65,7 +65,8 @@ module Flexr
           klass.__flexr_config.backend != :firstmatch && klass.__flexr_config.options[:accel] == :strscan
         Automaton::Machine.new(dfa: dfa, state_name: machine.fetch(:state_name).to_sym, whole_tokens: plans,
                               backup_memo_states: machine[:backup_memo_states]&.freeze,
-                              backup_recovery_states: machine[:backup_recovery_states]&.freeze)
+                              backup_recovery_states: machine[:backup_recovery_states]&.freeze,
+                              push_backup_bytes: machine[:push_backup_bytes])
       end
       compiled = Automaton::CompiledSpec.new(
         machines: machines,

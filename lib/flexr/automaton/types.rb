@@ -18,6 +18,6 @@ module Flexr
 
     CompiledSpec = Struct.new(:machines, :rules, :states, :stats, :diagnostics, keyword_init: true)
     Machine = Struct.new(:dfa, :state_name, :whole_tokens, :residuals, :backup_memo_states,
-                         :backup_recovery_states, keyword_init: true)
+                         :backup_recovery_states, :push_backup_bytes, keyword_init: true)
   end
 end
