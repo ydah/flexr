@@ -6,6 +6,7 @@ The executable is `flexr`, with usage:
 flexr [COMMAND] SPEC.rb [options]
 flexr diff LEFT.rb RIGHT.rb [options]
 flexr new NAME --parser lrama|racc
+flexr export SPEC.rb --to rouge [options]
 ```
 
 Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
@@ -28,6 +29,7 @@ Without a command, `flexr SPEC.rb` generates Ruby. `SPEC.rb` is normally a
 | `explain SPEC` | List parsed rules, patterns, and DFA backup bounds | Text on stdout |
 | `bench SPEC` | Run the benchmark harness | Benchmark output |
 | `import INPUT` | Translate flex, Rexical, or oedipus_lex input | Ruby on stdout or `--output` |
+| `export SPEC` | Translate a Flexr specification to a Rouge RegexLexer | Ruby on stdout or `--output` |
 | `new NAME --parser PARSER` | Create a Racc or Lrama calculator project | New project directory |
 
 `trace` without input describes the automaton. To execute a specification and
@@ -75,6 +77,8 @@ are usable. The bound also excludes bytes read before the first acceptance.
 | `--residuals` | Show remaining DFA expressions | Explain and trace |
 | `--verify` | Execute the generated cases in all three modes | Skeleton |
 | `--from oedipus_lex` | Select the oedipus_lex `.rex` dialect | Import |
+| `--to rouge` | Select the Rouge format | Export |
+| `--token-map PATH` | JSON mapping of token kinds and channels | Export |
 | `--parser PARSER` | `lrama` or `racc` | New project |
 
 The complete help output is kept as a checked snapshot:
@@ -83,6 +87,7 @@ The complete help output is kept as a checked snapshot:
 Usage: flexr [COMMAND] SPEC.rb [options]
        flexr diff LEFT.rb RIGHT.rb [options]
        flexr new NAME --parser lrama|racc
+       flexr export SPEC.rb --to rouge [options]
 
 Commands: generate, check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
 Options:
@@ -112,6 +117,8 @@ Options:
       --dry-run               print the fixed spec without writing (fix only)
       --accept-changes        apply changed or unverified fixes (fix only)
       --from oedipus_lex      read an oedipus_lex .rex file (import only)
+      --to rouge             write a Rouge RegexLexer (export only)
+      --token-map PATH       JSON mapping of token kinds and channels (export only)
 <!-- flexr-help:end -->
 
 ## Generate with a profile
@@ -251,6 +258,36 @@ The name must start with a letter or digit and may also contain hyphens and
 underscores. Choose a name that is available. Follow the generated README or
 the [calculator parser tutorial](../tutorial/build-a-calculator-parser.md)
 to install dependencies, build the parser, and run the tests.
+
+## Export a Rouge lexer
+
+```sh
+flexr export lexer.flexr.rb --to rouge --token-map tokens.json -o lexer_rouge.rb
+```
+
+The exported class subclasses `Rouge::RegexLexer` and appends `RougeLexer`
+to the Flexr class name. Load the file in an application with Rouge installed.
+The exporter writes Ruby to standard output when you omit `-o`.
+
+The optional JSON file maps Flexr token kinds and channels to Rouge token names.
+
+```json
+{
+  "tokens": { "IDENTIFIER": "Name.Variable" },
+  "channels": { "comment": "Comment.Single" }
+}
+```
+
+A channel entry takes precedence over a token entry. Use names available in
+the application's Rouge token registry. The exporter highlights matched source
+text and keeps skipped text as `Text`. It verifies rule
+selection and match lengths against the original specification. When Rouge's
+ordered rules would choose a different match, the diagnostic includes a witness
+input and the relevant rule location.
+
+The check covers the statically parsed rules and state actions. Constructs such
+as pattern algebra, lookbehind, arbitrary Ruby actions, and lexer method
+overrides produce diagnostics at their source locations.
 
 ## DFA residuals
 

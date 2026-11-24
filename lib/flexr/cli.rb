@@ -18,7 +18,7 @@ module Flexr
 
     def run(argv, out: $stdout, err: $stderr, input: $stdin)
       args = argv.dup
-      command = COMMANDS.include?(args.first) ? args.shift.to_sym : :generate
+      command = args.first == "export" || COMMANDS.include?(args.first) ? args.shift.to_sym : :generate
       if args.include?("--help") || args.include?("-h")
         return command == :new ? new_project_usage(out) : usage(out)
       end
@@ -117,7 +117,7 @@ module Flexr
 
           options.set(:target_ruby, required_argument!(args, argument))
         when "--eval"
-          raise ArgumentError, "#{command} requires a statically readable spec" if %i[fix diff].include?(command)
+          raise ArgumentError, "#{command} requires a statically readable spec" if %i[fix diff export].include?(command)
           options.eval_mode = true
         when "--dry-run"
           raise ArgumentError, "--dry-run is only valid for fix" unless command == :fix
@@ -145,6 +145,15 @@ module Flexr
         when "--from"
           raise ArgumentError, "--from is only valid for import" unless command == :import
           options.import_format = required_argument!(args, argument).to_sym
+        when "--to"
+          raise ArgumentError, "--to is only valid for export" unless command == :export
+
+          format = required_argument!(args, argument)
+          raise ArgumentError, "unsupported export format: #{format.inspect}" unless format == "rouge"
+        when "--token-map"
+          raise ArgumentError, "--token-map is only valid for export" unless command == :export
+
+          command_args[:token_map] = required_argument!(args, argument)
         when "--rule"
           rule_number = Integer(required_argument!(args, argument), 10)
           raise ArgumentError, "--rule must be non-negative" if rule_number.negative?
@@ -234,6 +243,8 @@ module Flexr
         print_skeleton(spec, options, out, verify: command_args[:verify])
       when :bench
         run_benchmark(spec, options, benchmark_args, out)
+      when :export
+        export_rouge(spec, options, output, command_args[:token_map], out)
       when :import
         result = Importer.import(spec, from: options.import_format)
         result.warnings.each { |warning| err.puts "warning: #{warning}" }
@@ -251,6 +262,26 @@ module Flexr
                       options: options.generator_options).generate
         EXIT_OK
       end
+    end
+
+    def export_rouge(spec, options, output, mapping_path, out)
+      require_relative "source/rouge_exporter"
+
+      ArtifactWriter.ensure_distinct!(spec, output) if output
+      ArtifactWriter.ensure_distinct!(mapping_path, output) if output && mapping_path
+      token_map = mapping_path ? JSON.parse(File.binread(mapping_path)) : {}
+      parsed = read_spec(spec)
+      backend = options.overrides.fetch(:backend, parsed.config.fetch(:backend))
+      compiled = compile(parsed, overrides: options.overrides, retain_firstmatch_order: backend == :firstmatch)
+      source = Source::RougeExporter.new(parsed, compiled: compiled, backend: backend, token_map: token_map, limit: options.max_dfa_states).generate
+      if output
+        ArtifactWriter.write!(output, source, source_path: spec)
+      else
+        out.write(source)
+      end
+      EXIT_OK
+    rescue JSON::ParserError => e
+      raise ArgumentError, "invalid Rouge token map: #{e.message}"
     end
 
     def print_diff(left_path, right_path, options, out, err)
@@ -808,6 +839,7 @@ module Flexr
         Usage: flexr [COMMAND] SPEC.rb [options]
                flexr diff LEFT.rb RIGHT.rb [options]
                flexr new NAME --parser lrama|racc
+               flexr export SPEC.rb --to rouge [options]
 
         Commands: generate, check, fix, diff, stats, tokens, dot, explain, trace, skeleton, bench, import, new
         Options:
@@ -837,6 +869,8 @@ module Flexr
               --dry-run               print the fixed spec without writing (fix only)
               --accept-changes        apply changed or unverified fixes (fix only)
               --from oedipus_lex      read an oedipus_lex .rex file (import only)
+              --to rouge             write a Rouge RegexLexer (export only)
+              --token-map PATH       JSON mapping of token kinds and channels (export only)
       USAGE
       status
     end
