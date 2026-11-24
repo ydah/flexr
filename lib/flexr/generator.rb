@@ -416,6 +416,7 @@ module Flexr
         sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb")
       else
         sources.concat(DFA_ERROR_RUNTIME_SOURCES)
+        sources.push("automaton/whole_token.rb", "runtime/whole_token.rb") if effective_options(parsed)[:accel] == :strscan
       end
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||

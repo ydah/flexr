@@ -14,6 +14,8 @@ module Flexr
         @__flexr_compile_mutex.synchronize do
           __flexr_runtime_compiled || begin
             compiled = Automaton::Compiler.new(__flexr_spec).compile(lazy: true)
+            return super unless Lookbehind.graphs(compiled).empty?
+
             include Keywords::Emission if config.options[:keyword_tables]
             freeze_specification!
             @__flexr_runtime_compiled = freeze_compiled!(compiled)

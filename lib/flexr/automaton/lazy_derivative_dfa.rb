@@ -28,6 +28,8 @@ module Flexr
       end
 
       def direct = nil
+      def starts = nil
+      def left_context = nil
 
       def context_dependent_end?
         @terms.context_dependent_end?

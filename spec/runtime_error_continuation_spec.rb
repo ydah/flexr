@@ -109,6 +109,26 @@ RSpec.describe "runtime lexical error continuations" do
     expect(scanner.byte_pos).to eq(1)
   end
 
+  it "retains the original failure details when a callback saves an error and changes state" do
+    lexer = Class.new(Flexr::Lexer) do
+      rule(/ab[cd]/, emit: :WORD)
+      state :recovery do
+        rule(/./, skip: true)
+      end
+    end
+    scanner = lexer.new("ab!")
+    saved = []
+    scanner.on_error = lambda do |error|
+      saved << error
+      scanner.begin_state(:recovery)
+      :skip
+    end
+
+    expect(scanner.tokens).to eq([])
+    expect(saved.fetch(0).diagnostic).to have_attributes(location: [2, 3])
+    expect(saved.fetch(0).continuation).to have_attributes(byte_pos: 2, suffix: "c")
+  end
+
   it "finds a continuation without another read after a mismatch" do
     lexer = Class.new(Flexr::Lexer) { rule("abc", emit: :WORD) }
     input = StringIO.new("ab!")

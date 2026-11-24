@@ -33,7 +33,7 @@ module Flexr
         @buffer.extend(History)
         compiled = self.class.__flexr_compiled
         bytes = Lookbehind.contextual_patterns(compiled).filter_map(&:history_bytes).max
-        live = input.is_a?(String) && !input.frozen?
+        live = input.is_a?(String) && !@buffer.source.frozen?
         @buffer.initialize_left_context(Lookbehind.graphs(compiled), bytes, live: live)
       end
 

@@ -792,6 +792,17 @@ The parser-state mode reuses filtered acceptance rows. The manual
 `expect:` mode normalizes the expectations and checks eligibility during
 each scan. Both modes produced the same replayed token sequence.
 
+Use the same Lrama checkout and Racc 1.8.1 to verify parser-state ambiguity.
+
+```sh
+ruby benchmark/lrama_parser_contexts.rb --check-ambiguity /tmp/lrama
+```
+
+The check rebuilds the Racc tables, compares them with the generated parser,
+and replays the grammar paths for all 232 states. The replay lexer produced
+no diagnostics. Giving `%type` and `%token` the same pattern produced a
+warning in state 46 with `"%token"` and the grammar path to the state.
+
 ## 2026-11-23: Construct runtime DFA transitions on demand
 
 The Unicode identifier fixture took 180.2 ms with eager derivatives and

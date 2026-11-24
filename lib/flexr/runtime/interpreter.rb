@@ -17,7 +17,6 @@ module Flexr
         @lexer = lexer
         klass = lexer.class
         @compiled = klass.__flexr_runtime_compiled
-        @lazy = !@compiled.equal?(klass.__flexr_compiled)
         @rules = klass.__flexr_rules
         @config = klass.__flexr_config
         @recover_backup = lexer.__flexr_recovers_unmatched?
@@ -42,6 +41,16 @@ module Flexr
       end
 
       def scan_fast(machine, position)
+        source = @scan_source
+        return scan_with_conditions(machine, position, nil, simple: true) unless
+          source && !@lexer.scan_steps_guarded? && !@lexer.token_limit_required?
+
+        scan_fixed_source(machine, position, source)
+      end
+
+      private
+
+      def scan_fixed_source(machine, position, source)
         dfa = machine.dfa
         accepts = dfa.accepts
         rules = @rules
@@ -50,11 +59,8 @@ module Flexr
         direct = dfa.direct
         direct_nxt = direct&.fetch(:nxt)
         direct_classes = direct&.fetch(:classes)
-        lazy = @lazy
-        memo_states = backup_memo_states_for(machine)
-        source = @scan_source
-        return scan_with_conditions(machine, position, nil, simple: true) unless
-          source && !@lexer.scan_steps_guarded? && !@lexer.token_limit_required?
+        lazy = dfa.respond_to?(:backup_memo_states)
+        memo_states = backup_memo_states_for(machine, lazy)
 
         state = dfa.start
         cursor = position
@@ -71,7 +77,7 @@ module Flexr
           unless target
             if lazy && target.nil?
               target = dfa.transition(state, byte)
-              memo_states = backup_memo_states_for(machine)
+              memo_states = backup_memo_states_for(machine, lazy)
             end
             break unless target
           end
@@ -100,24 +106,24 @@ module Flexr
         best
       end
 
-      private
-
       def scan_with_conditions(machine, position, expected, simple: false)
         buffer = @lexer.buffer
-        state = @lexer.__flexr_dfa_start(machine.dfa, position)
-        memo_states = backup_memo_states_for(machine)
+        dfa = machine.dfa
+        lazy = dfa.respond_to?(:backup_memo_states)
+        state = @lexer.__flexr_dfa_start(dfa, position)
+        memo_states = backup_memo_states_for(machine, lazy)
         best = nil
         cursor = position
-        tracker = @lexer.__send__(:__flexr_tagged_captures, machine.dfa) if @lexer.respond_to?(:__flexr_tagged_captures, true)
+        tracker = @lexer.__send__(:__flexr_tagged_captures, dfa) if @lexer.respond_to?(:__flexr_tagged_captures, true)
         tags = tracker if tracker&.tracking?
         best = consider_acceptances(machine, state, cursor, position, buffer, best, expected, tags) if @config.options[:allow_empty_match]
         acceleration_regions = acceleration_regions_for(machine) if
-          !simple && !expected && !@lazy && acceleration_enabled?
+          !simple && !expected && !lazy && acceleration_enabled?
 
         while buffer.ensure_available?(cursor + 1)
           if acceleration_regions && !memo_states&.[](state) && (region = acceleration_regions[state]) &&
               !@disabled_auto_acceleration&.key?(region)
-            acceptance = machine.dfa.accepts[state].first
+            acceptance = dfa.accepts[state].first
             token_rule = acceptance&.rule_index
             accelerated_end = accelerate(
               region, buffer, cursor, token_rule: token_rule, token_start: position
@@ -132,16 +138,16 @@ module Flexr
 
           byte = buffer.getbyte(cursor)
           @lexer.consume_step!
-          state = transition(machine.dfa, state, byte)
+          state = transition(dfa, state, byte)
           break unless state
-          memo_states = backup_memo_states_for(machine) if @lazy
+          memo_states = backup_memo_states_for(machine, lazy) if lazy
 
           tags&.advance(byte, cursor)
           cursor += 1
-          acceptance = machine.dfa.accepts[state].first
+          acceptance = dfa.accepts[state].first
           ensure_token_size!(cursor, position, rule: acceptance&.rule_index)
           if !acceptance && memo_states&.[](state)
-            result = @lexer.__flexr_backup_suffix(machine.dfa, memo_states, state, cursor, position)
+            result = @lexer.__flexr_backup_suffix(dfa, memo_states, state, cursor, position)
             break if result == false
 
             state, cursor = result if result
@@ -152,14 +158,11 @@ module Flexr
         tracker ? tracker.finish(best, buffer) : best
       end
 
-      def backup_memo_states_for(machine)
+      def backup_memo_states_for(machine, lazy)
         return if @lexer.scan_steps_guarded?
 
-        if @lazy
-          dfa = machine.dfa
-          return (@recover_backup && dfa.backup_recovery_states) || dfa.backup_memo_states
-        end
-        (@recover_backup && machine.backup_recovery_states) || machine.backup_memo_states
+        source = lazy ? machine.dfa : machine
+        (@recover_backup && source.backup_recovery_states) || source.backup_memo_states
       end
 
       def fast_path?(machine)

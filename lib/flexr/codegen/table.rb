@@ -55,7 +55,8 @@ module Flexr
         tag_argument = track_tags ? ", running_tags" : ""
         scan_result = tagged ? "tags ? tags.finish(best, buffer) : best" : "best"
         contextual_end = compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? }
-        fast_winners = small_table && !captures && !memoized_body && !track_tags
+        defer_match = !captures && !track_tags
+        fast_winners = small_table && defer_match && !memoized_body
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
         fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
         expectation = "(parser_context&.expected)" if parser_contexts
@@ -204,7 +205,17 @@ module Flexr
         lines << "#{indent}  best = nil"
         frozen_fast = "source && !guarded_steps && !check_token_limit && (@accel_mode == :auto || @accel_mode == :none)"
         lines << "#{indent}  if #{frozen_fast}"
-        lines << "#{indent}    winners = @__flexr_generated_scan_winners" if fast_winners
+        if fast_winners
+          lines << "#{indent}    winners = @__flexr_generated_scan_winners"
+          if parser_contexts
+            lines << "#{indent}    if parser_accepts"
+            lines << "#{indent}      winners = (@__flexr_generated_winners[parser_accepts] ||= parser_accepts.map do |entries|"
+            lines << "#{indent}        acceptance = entries.first"
+            lines << "#{indent}        rules.fetch(acceptance.rule_index) if acceptance"
+            lines << "#{indent}      end.freeze)"
+            lines << "#{indent}    end"
+          end
+        end
         lines << "#{indent}    while (byte = source.getbyte(cursor))"
         if direct
           lines << "#{indent}      current = direct_nxt[(current * direct_classes) + ec[byte]]"
@@ -222,12 +233,12 @@ module Flexr
         lines << "#{indent}      acceptance = #{winner_lookup}"
         lines.concat(backup_suffix("#{indent}      ", "acceptance", update: true)) if memoized_body
         lines << "#{indent}      next unless acceptance"
-        if fast_winners
+        if defer_match
           lines << "#{indent}      winner = acceptance"
           lines << "#{indent}      winner_end = cursor"
           lines << "#{indent}    end"
           lines << "#{indent}    return unless winner"
-          lines << "#{indent}    rule = winner"
+          lines << "#{indent}    rule = #{fast_winners ? 'winner' : 'rules.fetch(winner.rule_index)'}"
           lines << "#{indent}    best = (@__flexr_generated_match ||= Flexr::Runtime::Match.new)"
           lines << "#{indent}    best.rule = rule"
           lines << "#{indent}    best.start_pos = position"

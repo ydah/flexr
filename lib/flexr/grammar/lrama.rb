@@ -15,9 +15,35 @@ module Flexr
       module_function
 
       def read(path)
+        terminal_rows(read_states(path))
+      end
+
+      def read_with_paths(path)
+        states = read_states(path)
+        [terminal_rows(states), viable_prefixes(states)]
+      end
+
+      def read_states(path)
         load_lrama
-        source = File.read(path)
-        terminal_rows(build_states(source, path.to_s))
+        build_states(File.read(path), path.to_s)
+      end
+
+      def viable_prefixes(states)
+        root = states.states.fetch(0)
+        paths = Array.new(states.states.size)
+        paths[root.id] = [].freeze
+        queue = [root]
+        queue.each do |state|
+          edges = state.selected_term_transitions + state.nterm_transitions
+          edges.sort_by { |edge| edge.next_sym.number }.each do |edge|
+            target = edge.to_state
+            next if paths[target.id]
+
+            paths[target.id] = (paths.fetch(state.id) + [edge.next_sym.name]).freeze
+            queue << target
+          end
+        end
+        paths.freeze
       end
 
       def load_lrama
@@ -93,7 +119,8 @@ module Flexr
         code.chr(Encoding::BINARY).to_sym
       end
 
-      private_class_method :load_lrama, :build_states, :validate_conflicts, :terminal_rows, :token_kind
+      private_class_method :read_states, :viable_prefixes, :load_lrama, :build_states, :validate_conflicts,
+                           :terminal_rows, :token_kind
     end
   end
 end

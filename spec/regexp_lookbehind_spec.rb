@@ -150,7 +150,7 @@ RSpec.describe "regexp lookbehind" do
     end
 
     input = +"ab"
-    scan = lexer.new(input)
+    scan = lexer.new(input, freeze_input: false)
     expect(scan.next_token).to eq([:OTHER, "a"])
     input.setbyte(0, "x".ord)
     expect(scan.next_token).to eq([:OTHER, "b"])

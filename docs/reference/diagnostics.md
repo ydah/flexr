@@ -284,6 +284,8 @@ the diagnostics apply when the escape reaches the parser unchanged.
 | `FLEXR-W020` | Structured records become immutable in v2.0 | Review consumer mutations; use `record.with(...)` in v2 |
 | `FLEXR-W022` | A competing rule shadows a spelling in a keyword table | Remove the redundant spelling or change the competing rule |
 | `FLEXR-W023` | A lexical state has unbounded DFA backup | Inspect the example and eliminate the nonaccepting cycle where practical |
+| `FLEXR-W024` | Two Lrama terminals tie at the winning match length | Inspect the example input and parser path |
+| `FLEXR-W025` | The parser-state ambiguity check is incomplete | Inspect the reason in the diagnostic |
 
 `--warn all` includes `FLEXR-W023` for longest-match backends. Its note
 shows the shortest prefix that visits a nonaccepting cycle after an

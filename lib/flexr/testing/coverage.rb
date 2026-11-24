@@ -38,13 +38,14 @@ module Flexr
           super
         end
 
-        def scan_fast(machine, position)
-          super(@fast_machines[machine] ||= recording_fast_machine(machine), position)
-        end
-
         private
 
         def acceleration_enabled? = false
+        def backup_memo_states_for(*) = nil
+
+        def scan_fixed_source(machine, position, source)
+          super(@fast_machines[machine] ||= recording_fast_machine(machine), position, source)
+        end
 
         def recording_fast_machine(machine)
           dfa = machine.dfa

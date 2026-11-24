@@ -231,31 +231,6 @@ module Flexr
       @token_limit_required
     end
 
-    def __flexr_whole_token_match(plans, position)
-      return unless plans && defined?(::StringScanner) && !scan_steps_guarded? && !token_limit_required?
-
-      source = @buffer.stable_source
-      return unless source&.frozen?
-
-      byte = source.getbyte(position)
-      plan = plans[byte] if byte
-      return unless plan
-
-      scanner = @__flexr_whole_scanner ||= ::StringScanner.new(source)
-      scanner.pos = position
-      length = scanner.skip(plan.regexp)
-      return unless length
-
-      match = @__flexr_whole_match ||= Runtime::Match.new
-      match.rule = self.class.__flexr_rules.fetch(plan.rule_index)
-      match.start_pos = position
-      match.end_pos = position + length
-      match.total_end_pos = match.end_pos
-      match
-    rescue ArgumentError
-      nil
-    end
-
     def utf8_input?
       self.class.__flexr_config.encoding == Encoding::UTF_8
     end
@@ -311,11 +286,12 @@ module Flexr
     end
 
     def error!(message)
-      continuation = @__flexr_error_continuation
-      @__flexr_error_continuation = nil
-      diagnostic = unmatched_input_diagnostic(continuation) if continuation
+      details = @__flexr_error_details
+      @__flexr_error_details = nil
+      deferred = details if details.is_a?(Proc)
+      continuation, diagnostic = details unless deferred
       error = LexError.new(message, filename: @filename, byte_pos: @match_start, line: @text_line, text: text,
-                           continuation: continuation, diagnostic: diagnostic)
+                           continuation: continuation, diagnostic: diagnostic, &deferred)
       if @on_error
         action = @on_error.call(error)
         return @pending = nil if action == :skip
@@ -501,8 +477,7 @@ module Flexr
 
     def handle_unmatched_byte(expected = nil)
       bad = @buffer.byteslice(@position, 1)
-      continuation = ErrorContinuation.find(self, expected) if
-        (@on_error || @error_mode == :raise) && self.class.__flexr_config.backend != :firstmatch
+      details = unmatched_input_details(expected)
       @match_start = @position
       @match_end = @position + 1
       @text_start = @match_start
@@ -513,12 +488,12 @@ module Flexr
       @non_progress_signatures.clear
       advance_location!(@match_start, @match_end)
       @bol = bad.to_s.b == "\n"
-      previous_continuation = @__flexr_error_continuation
-      @__flexr_error_continuation = continuation
+      previous_details = @__flexr_error_details
+      @__flexr_error_details = details
       begin
         error!("unexpected byte #{bad.inspect}")
       ensure
-        @__flexr_error_continuation = previous_continuation
+        @__flexr_error_details = previous_details
       end
       token = @pending
       @pending = nil
@@ -526,7 +501,20 @@ module Flexr
       token
     end
 
-    def unmatched_input_diagnostic(continuation)
+    def unmatched_input_details(expected)
+      return unless (@on_error || @error_mode == :raise) && self.class.__flexr_config.backend != :firstmatch
+
+      search = ErrorContinuation.new(self, expected)
+      buffer = @buffer
+      build = lambda do
+        continuation = search.find
+        [continuation, continuation && unmatched_input_diagnostic(continuation, buffer)]
+      end
+      source = @__flexr_stable_scan_source
+      @on_error && source.instance_of?(String) && source.singleton_methods.empty? ? build : build.call
+    end
+
+    def unmatched_input_diagnostic(continuation, buffer)
       byte_pos = continuation.byte_pos
       first = last = byte_pos
       if continuation.eof
@@ -535,12 +523,12 @@ module Flexr
         last += 1
         if utf8_input?
           # Editor diagnostic ranges cannot split a UTF-8 character.
-          start_limit = [@buffer.base_offset, byte_pos - 3].max
-          first -= 1 while first > start_limit && (@buffer.getbyte(first) & 0xc0) == 0x80
-          end_limit = [@buffer.bytesize, first + 4].min
-          last += 1 while last < end_limit && (@buffer.getbyte(last) & 0xc0) == 0x80
+          start_limit = [buffer.base_offset, byte_pos - 3].max
+          first -= 1 while first > start_limit && (buffer.getbyte(first) & 0xc0) == 0x80
+          end_limit = [buffer.bytesize, first + 4].min
+          last += 1 while last < end_limit && (buffer.getbyte(last) & 0xc0) == 0x80
         end
-        unexpected = @buffer.byteslice(first...last)
+        unexpected = buffer.byteslice(first...last)
         if utf8_input?
           unexpected.force_encoding(Encoding::UTF_8)
           last = first unless unexpected.valid_encoding?
