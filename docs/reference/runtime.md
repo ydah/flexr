@@ -158,6 +158,25 @@ change the lexical state or stack. They must avoid side effects, custom
 instance state, reading beyond the match, and putting source coordinates into
 token values. The default is suitable for actions that need those capabilities.
 
+## Scan a String in parallel
+
+`Lexer.parallel_tokens(input, workers: 2, min_bytes: 1_048_576, filename: nil)`
+returns the default-channel tokens in source order, with the same values and
+locations as `Lexer.new(input, filename:).tokens`. It accepts an in-memory
+String. The caller specifies a positive number of workers and a nonnegative
+minimum input size in bytes.
+
+Table and direct lexers with declarative `emit:` and `skip:` rules can use
+Ractors. Each worker sees the entire input and scans from a proposed start
+position. The coordinator checks the state and context at the join and
+relexes from the last confirmed boundary when a proposal fails. EOF has the
+same meaning for all workers. Runtime, generated, and standalone lexers
+support parallel scanning.
+
+Small inputs, a single worker, ordered `firstmatch` lexers, and opaque
+actions use ordinary serial scanning. Lexical errors are reported by a scan
+from a confirmed boundary.
+
 ## Parser token expectations
 
 Pass an array of token Symbols as `expect:` to select rules for one token

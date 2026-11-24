@@ -119,12 +119,14 @@ RSpec.describe "generated artifact safety" do
     it "embeds only the runtime core from #{format} sources for a compiled standalone lexer" do
       allow(File).to receive(:binread).and_call_original
       incremental_bytes = 0
+      parallel_bytes = 0
       sources = Flexr::Generator::RUNTIME_SOURCES + Flexr::Generator::DFA_ERROR_RUNTIME_SOURCES +
-        Flexr::Generator::INCREMENTAL_RUNTIME_SOURCES
+        Flexr::Generator::INCREMENTAL_RUNTIME_SOURCES + Flexr::Generator::PARALLEL_RUNTIME_SOURCES
       sources.each do |relative|
         runtime_path = File.expand_path("../lib/flexr/#{relative}", __dir__)
         contents = File.binread(runtime_path).gsub(/\r\n?/, "\n")
         incremental_bytes += contents.bytesize if Flexr::Generator::INCREMENTAL_RUNTIME_SOURCES.include?(relative)
+        parallel_bytes += contents.bytesize if Flexr::Generator::PARALLEL_RUNTIME_SOURCES.include?(relative)
         allow(File).to receive(:binread).with(runtime_path).and_return(contents.gsub("\n", newline))
       end
 
@@ -135,8 +137,9 @@ RSpec.describe "generated artifact safety" do
         generated = Flexr::Generator.new(path, output: output, options: { standalone: true }).generate
 
         # Reserve 16 KiB for error reporting and 4 KiB for push support above the core budget.
-        expect(generated.bytesize - incremental_bytes).to be < 100_000 + (20 * 1024)
+        expect(generated.bytesize - incremental_bytes - parallel_bytes).to be < 100_000 + (20 * 1024)
         expect(incremental_bytes).to be < 14 * 1024
+        expect(parallel_bytes).to be < 12 * 1024
         expect(generated).not_to include("\r\n", "module Keywords", "module Firstmatch", "def push_input(", "module Indentation", "module Captures", "module DelegatedTokens", "def scan_until(")
         expect(generated).not_to include(
           "class Compiler", "class NFABuilder", "class Parser", "module Data", "class BackendCostModel", "module Analysis",

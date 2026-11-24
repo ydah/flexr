@@ -22,6 +22,7 @@ module Flexr
 
     DFA_ERROR_RUNTIME_SOURCES = %w[automaton/utf8.rb runtime/error_continuation.rb].freeze
     INCREMENTAL_RUNTIME_SOURCES = %w[runtime/boundary.rb runtime/relex_scanner.rb runtime/incremental.rb].freeze
+    PARALLEL_RUNTIME_SOURCES = %w[runtime/parallel_plan.rb runtime/parallel.rb].freeze
 
     MATCHER_RUNTIME_SOURCES = %w[
       regexp/ast.rb regexp/parser.rb regexp/unsupported.rb
@@ -404,7 +405,7 @@ module Flexr
     end
 
     def embedded_runtime(parsed, compiled, parser_contexts: false)
-      sources = RUNTIME_SOURCES + INCREMENTAL_RUNTIME_SOURCES
+      sources = RUNTIME_SOURCES + INCREMENTAL_RUNTIME_SOURCES + PARALLEL_RUNTIME_SOURCES
       sources << "automaton/end_context.rb" if regexp_end_context?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "automaton/left_context.rb" if regexp_left_context?(compiled)
       sources << "runtime/lookbehind.rb" if regexp_lookbehind?(compiled)

@@ -106,6 +106,7 @@ puts streamed
 
 # @type var document: Flexr::Runtime::Incremental
 document = PublicApiTypecheck::EmbeddedLexer.incremental("alpha", filename: "editor.txt")
+PublicApiTypecheck::EmbeddedLexer.parallel_tokens("alpha", workers: 1, filename: "editor.txt")
 revision = document.relex(Flexr::Runtime::Edit.new(start_byte: 0, end_byte: 5, replacement: "beta"))
 puts revision.input, revision.tokens
 
