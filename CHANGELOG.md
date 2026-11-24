@@ -32,6 +32,10 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Changed
 
+- `flexr fix` verifies rule selection before writing. It shows the shortest
+  counterexample when a fix changes the selected token and asks for approval
+  when a fix changes behavior or cannot be verified.
+
 - Build uncached runtime table and direct DFA transitions on demand.
   The default DFA state limit can be reached while scanning.
 - Take a frozen snapshot of mutable String inputs at `Lexer.new` and
