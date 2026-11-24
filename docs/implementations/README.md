@@ -15,3 +15,4 @@ These records keep the evidence behind implementation choices, performance measu
 - [Retain direct dispatch after the state cases experiment](20261122_retain_direct_dispatch.md)
 - [Static rule-set expansion](20261122_static_rule_set_expansion.md)
 - [Verify and prepare the flexr 2 runtime](20261122_v2_runtime_implementation.md)
+- [Tagged DFA programs for named captures](20261124_tagged_capture_programs.md)
