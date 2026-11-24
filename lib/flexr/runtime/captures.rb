@@ -3,6 +3,11 @@
 module Flexr
   module Runtime
     module Captures
+      def input
+        @buffer.capture_source_exposed = true if !@string_input && defined?(TaggedCaptures)
+        super
+      end
+
       def captures
         return EMPTY_CAPTURES unless @capture_match
 
@@ -10,6 +15,17 @@ module Flexr
       end
 
       private
+
+      def __flexr_tagged_captures(dfa)
+        # shortcut: replay if a cancellation callback may edit scanned bytes, use tags when edits can be detected.
+        return if @cancellation || !defined?(TaggedCaptures) || @buffer.capture_source_exposed
+
+        @__flexr_tagged_trackers ||= {}.compare_by_identity
+        tracker = @__flexr_tagged_trackers.fetch(dfa) do
+          @__flexr_tagged_trackers[dfa] = TaggedCaptures.for_dfa(dfa, self.class.__flexr_rules)
+        end
+        tracker&.reset
+      end
 
       def execute_with_captures(match)
         @capture_match = match
@@ -27,9 +43,14 @@ module Flexr
 
       def replay_capture_data
         match = @capture_match
-        return match.capture if match.capture.respond_to?(:byteoffset)
-
         regexp = match.capture
+        if defined?(TaggedCaptures::CapturedMatch) && regexp.is_a?(TaggedCaptures::CapturedMatch)
+          return regexp if regexp.valid_in?(@buffer)
+
+          regexp = regexp.fallback
+        end
+        return regexp if regexp.respond_to?(:byteoffset)
+
         if regexp.respond_to?(:instructions)
           data = regexp.match(self, match.rule, match.start_pos, ending: match.end_pos)
           return data || capture_replay_error(match)

@@ -231,11 +231,13 @@ end
 An optional group that did not participate has the value `nil`.
 Actions for other patterns and EOF receive an empty hash.
 
-Longest-match backends select the rule and its body before Ruby's regexp
-engine resolves the groups within that body. Ambiguous groups follow
-Ruby's capture rules. `firstmatch` uses the captures from its selected native
-match. If two patterns of the same rule accept the winning body, the first
-eligible pattern supplies the captures.
+Longest-match backends select the rule and its body and use Ruby's rules
+to resolve ambiguous groups within that body. For supported patterns,
+they record group positions during the scan. A pattern that exceeds a
+tagged automaton limit or needs unsupported context uses regexp replay.
+`firstmatch` uses the captures from its selected native match. If two
+patterns of the same rule accept the winning body, the first eligible
+pattern supplies the captures.
 
 The body excludes `followed_by:` and any prefix accumulated by `more`.
 Calling `less` changes the token text and position while captures still
@@ -244,4 +246,5 @@ affect matching and produce no entries in `captures`.
 
 Unnamed groups are treated as grouping syntax and produce `FLEXR-W013`.
 Backreferences and calls to capture groups still report `FLEXR-E014`.
-See the [capture replay implementation record](../implementations/20261122_replay_named_regexp_captures.md) for the extraction strategy.
+See [tagged DFA programs](../implementations/20261124_tagged_capture_programs.md)
+for the extraction strategy.

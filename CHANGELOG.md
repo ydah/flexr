@@ -38,6 +38,9 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
 
 ### Changed
 
+- Record named capture positions during longest-match scans for supported
+  patterns. Patterns that exceed tagged DFA limits use regexp replay and
+  report an informational diagnostic.
 - `flexr fix` verifies rule selection before writing. It shows the shortest
   counterexample when a fix changes the selected token and asks for approval
   when a fix changes behavior or cannot be verified.

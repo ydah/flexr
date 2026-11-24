@@ -49,6 +49,7 @@ module Flexr
         groups = regexp.names.to_h { |name| [name.freeze, []] }
         @group_count = 0
         number_groups(ast, groups)
+        whole_capture = groups.keys.first if ast.is_a?(AST::NamedCapture) && @group_count == 1
         tree = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: subject_encoding, options: regexp.options).normalize
         @accept = append(:accept)
         root = lower(tree, @accept)
@@ -62,7 +63,8 @@ module Flexr
           transitions << transitions_for(configs, ec, class_count)
         end
         TaggedDFA.new(byte_classes: ec, transitions: transitions.freeze, acceptances: acceptances.freeze,
-                      groups: groups.transform_values(&:freeze).freeze, register_count: @register_count, encoding: encoding)
+                      groups: groups.transform_values(&:freeze).freeze, register_count: @register_count, encoding: encoding,
+                      whole_capture: whole_capture)
       end
 
       private

@@ -478,6 +478,7 @@ module Flexr
 
       def validate_rules
         @spec.rules.each do |rule|
+          rule.tagged_capture_programs = nil if rule.respond_to?(:tagged_capture_programs=)
           raise CompileError, "rule #{rule.index} has no pattern" if rule.patterns.empty?
           if @spec.backend == :firstmatch && !rule.priority.zero?
             diagnostic = Diagnostics.error("FLEXR-E018", "explicit priority requires a longest-match backend",
@@ -511,12 +512,16 @@ module Flexr
             elsif known_order && firstmatch
               prepare_firstmatch_regexp(rule, index, regexp, ast)
             end
-            prepare_capture_pattern(rule, index, regexp) unless regexp.names.empty?
+            unless regexp.names.empty?
+              prepare_capture_pattern(rule, index, regexp)
+              prepare_tagged_capture_program(rule, index, regexp) unless firstmatch || contextual
+            end
             next if @spec.options[:allow_empty_match] || contextual
             next unless has_absence ? Regexp::AST.nullable?(ast) : regexp.match?("")
 
             reject_empty_match!(Diagnostics.rule_label(rule))
           end
+          rule.tagged_capture_programs&.freeze if rule.respond_to?(:tagged_capture_programs)
         rescue CompileError => e
           e.diagnostic.location ||= rule.location if e.diagnostic
           raise
@@ -639,6 +644,23 @@ module Flexr
         diagnostic = Diagnostics.error("FLEXR-E014", "cannot replay named captures with Ruby",
                                        note: e.message, help: "split the rule or use non-capturing groups")
         raise UnsupportedRegexpError.new(diagnostic.message, diagnostic: diagnostic)
+      end
+
+      def prepare_tagged_capture_program(rule, index, regexp)
+        return unless rule.respond_to?(:tagged_capture_programs=)
+
+        require_relative "tagged_compiler"
+
+        result = TaggedCompiler.compile(regexp, encoding: @spec.encoding, unicode: @spec.options[:unicode] == true)
+        if result.program
+          (rule.tagged_capture_programs ||= [])[index] = result.program
+        elsif %i[register_limit state_limit].include?(result.reason)
+          limit = result.reason == :register_limit ? "register" : "state or work"
+          @pattern_diagnostics << Diagnostics.info(
+            "FLEXR-I005", "named captures in #{regexp.inspect} use regexp replay", location: rule.location,
+            note: "tagged DFA #{limit} limit exceeded"
+          )
+        end
       end
 
       def validate_pattern_body(pattern, rule, index)
