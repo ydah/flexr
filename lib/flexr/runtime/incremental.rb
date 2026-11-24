@@ -73,23 +73,8 @@ module Flexr
 
       def reusable_rules?
         spec = @lexer_class.__flexr_spec
-        spec.eof_rules.empty? && !spec.options[:input_stack] && standard_runtime? &&
+        spec.eof_rules.empty? && !spec.options[:input_stack] && Boundary.standard_lexer?(@lexer_class) &&
           (@pure_actions || spec.rules.all? { |rule| rule.emit? || rule.skip? })
-      end
-
-      def standard_runtime?
-        return false unless @lexer_class.method(:new).owner == Class
-
-        generated = @lexer_class.__flexr_generated?
-        @lexer_class.ancestors.take_while { |ancestor| ancestor != Lexer }.all? do |ancestor|
-          next true if ancestor.name&.start_with?("Flexr::Runtime::") ||
-            (defined?(Keywords::Emission) && ancestor == Keywords::Emission)
-
-          methods = ancestor.instance_methods(false) + ancestor.private_instance_methods(false)
-          methods.all? do |name|
-            generated && ancestor == @lexer_class && (name == :scan_one || name.start_with?("__flexr_generated_"))
-          end
-        end
       end
 
       def scan(previous, edit)

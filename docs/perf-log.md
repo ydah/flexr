@@ -925,3 +925,18 @@ standalone token streams matched in all 30 conditions.
 
 The 1.0x gate passed in 28 conditions. GraphQL on ZJIT measured
 0.961x for frozen input and 0.976x for mutable input.
+
+## 2026-11-24: Scan a TOML token stream with four Ractors
+
+```sh
+bundle exec ruby -Ilib benchmark/parallel_lexing.rb 4
+```
+
+The benchmark uses the example TOML lexer on 1,385,780 bytes of generated
+TOML fields and comments. All three cuts were certified. The 96,000 tokens
+matched a serial scan on every run.
+
+On Ruby 4.0.9 on arm64-darwin25, seven alternating runs gave a median of
+443 ms for serial scanning and 232 ms for four Ractors. The ranges were
+430 to 465 ms and 184 to 286 ms. Parallel timings include planning,
+creating the workers, and collecting their tokens.

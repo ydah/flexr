@@ -83,6 +83,8 @@ module Flexr
     autoload :Edit, File.expand_path("runtime/incremental", __dir__)
     autoload :Incremental, File.expand_path("runtime/incremental", __dir__)
     autoload :RelexScanner, File.expand_path("runtime/relex_scanner", __dir__)
+    autoload :Parallel, File.expand_path("runtime/parallel", __dir__)
+    autoload :ParallelPlan, File.expand_path("runtime/parallel_plan", __dir__)
   end
 
   class << self

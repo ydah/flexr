@@ -94,6 +94,10 @@ module Flexr
           brackets = @__flexr_indent_brackets.map { |bracket| bracket.dup.freeze }.freeze
           [@__flexr_indent_levels.dup.freeze, brackets, @__flexr_indent_candidate, @__flexr_indent_counting].freeze
         end
+      end
+
+      module ObservedEOF
+        private
 
         def eof?
           @buffer.record_read(@position + 1)
@@ -101,12 +105,15 @@ module Flexr
         end
       end
 
-      private_constant :TrackingInterpreter, :ReadWindow, :Cursor
+      private_constant :TrackingInterpreter, :ReadWindow, :Cursor, :ObservedEOF
 
-      def initialize(lexer_class, input, filename:, error_mode:)
+      def initialize(lexer_class, input, filename:, error_mode:, track_reads: true)
         lexer_class.compile!
         @lexer = lexer_class.new(input, filename: filename, error_mode: error_mode)
         @lexer.extend(Cursor)
+        return unless track_reads
+
+        @lexer.extend(ObservedEOF)
         @lexer.__flexr_relex_track
       end
 
@@ -114,12 +121,20 @@ module Flexr
 
       def boundary = @lexer.__flexr_relex_boundary
 
+      def position = @lexer.byte_pos
+
       def read_end = @lexer.buffer.read_end
 
-      def restore(boundary, read_end:)
+      def restore(boundary, read_end: nil)
         @lexer.__flexr_relex_restore(boundary)
-        @lexer.buffer.read_end = read_end
+        @lexer.buffer.read_end = read_end if read_end
         self
+      end
+
+      def start_at(position, line:, column:)
+        bol = position.zero? || @lexer.buffer.getbyte(position - 1) == 0x0a
+        restore(boundary.with(position: position, line: line, column: column, bol: bol, left_context: nil))
+        boundary
       end
     end
   end
