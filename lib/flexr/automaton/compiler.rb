@@ -512,7 +512,13 @@ module Flexr
         pattern = if @spec.backend == :firstmatch
           regexp
         else
-          Unicode::ReferenceRegexp.compiled(regexp, encoding: encoding, unicode: @spec.options[:unicode] == true, anchored: true)
+          options = { encoding: encoding, unicode: @spec.options[:unicode] == true, anchored: true }
+          regular = Unicode::ReferenceRegexp.compiled(regexp, **options)
+          if Regexp::AST.next_byte_assertion?(parse_regexp(regexp))
+            [regular, Unicode::ReferenceRegexp.compiled(regexp, **options, following_lf: true)].freeze
+          else
+            regular
+          end
         end
         (rule.capture_patterns ||= [])[index] = pattern
       rescue RegexpError, EncodingError => e
@@ -543,7 +549,7 @@ module Flexr
         return unless rule.trailing.is_a?(::Regexp)
 
         ast = parse_regexp(rule.trailing)
-        return unless Regexp::AST.absence?(ast)
+        return unless Regexp::AST.absence?(ast) || Regexp::AST.next_byte_assertion?(ast)
 
         reject_empty_match!("trailing context for #{Diagnostics.rule_label(rule)}") if Regexp::AST.nullable?(ast)
         @active_rules = [rule]
@@ -574,8 +580,14 @@ module Flexr
 
       def diagnostics_for(compiled, elapsed)
         diagnostics = []
-        present = compiled.machines.values.flat_map do |machine|
-          machine.dfa.accepts.filter_map { |acceptances| acceptances.first&.rule_index }
+        present = compiled.machines.flat_map do |state_name, machine|
+          dfa = machine.dfa
+          next dfa.accepts.filter_map { |acceptances| acceptances.first&.rule_index } unless dfa.context_dependent_end?
+
+          # DFA acceptance order alone cannot establish shadowing with trailing or first-match rules.
+          next dfa.rule_ids if @spec.backend == :firstmatch || rules_for(state_name).any?(&:trailing)
+
+          Analysis.contextual_winners(dfa)
         end
         shadowers = shadowed_rules(compiled)
         rules_by_index = @spec.rules.to_h { |rule| [rule.index, rule] }
@@ -835,6 +847,7 @@ module Flexr
         shadowers = Hash.new { |hash, key| hash[key] = [] }
         compiled.machines.each_value do |machine|
           machine.dfa.accepts.each do |acceptances|
+            acceptances = acceptances.select { |label| label.valid_end?(nil) } if machine.dfa.context_dependent_end?
             winner = acceptances.first&.rule_index
             next unless winner
 

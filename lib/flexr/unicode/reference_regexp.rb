@@ -14,9 +14,9 @@ module Flexr
         nil
       end
 
-      def compiled(pattern, encoding:, options: nil, unicode: false, anchored: false)
+      def compiled(pattern, encoding:, options: nil, unicode: false, anchored: false, following_lf: false)
         effective_options = options.nil? ? pattern.options : options
-        key = [pattern.source, effective_options, encoding, unicode, anchored]
+        key = [pattern.source, effective_options, encoding, unicode, anchored, following_lf]
         return CACHE[key] if CACHE.key?(key)
 
         captures = !pattern.names.empty?
@@ -24,7 +24,10 @@ module Flexr
         parser = Regexp::Parser.new(pattern.source, options: effective_options, encoding: encoding, unicode: unicode,
                                    preserve_captures: captures)
         source = source_for(parser.parse, binary: binary)
-        source = "\\A(?:#{source})\\z" if anchored
+        if anchored
+          ending = following_lf ? '(?=\n\z)' : '\z'
+          source = "\\A(?:#{source})#{ending}"
+        end
         regexp_options = effective_options & ~::Regexp::IGNORECASE
         regexp_options |= ::Regexp::NOENCODING if binary
         CACHE[key] = ::Regexp.new(source, regexp_options).freeze
@@ -34,6 +37,7 @@ module Flexr
         case node
         when Regexp::AST::Empty, Regexp::AST::Anchor then ""
         when Regexp::AST::Fail then "(?!)"
+        when Regexp::AST::NotNextLineFeed then '(?!\n)'
         when Regexp::AST::ByteRange then byte_class([[node.lo, node.hi]])
         when Regexp::AST::CodepointRange then character_class([[node.lo, node.hi]], binary: binary)
         when Regexp::AST::CharClass

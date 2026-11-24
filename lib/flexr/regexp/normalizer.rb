@@ -26,7 +26,7 @@ module Flexr
 
       def normalize_node(node)
         case node
-        when AST::Empty, AST::Fail, AST::ByteRange, AST::CodepointRange, AST::Anchor
+        when AST::Empty, AST::Fail, AST::ByteRange, AST::CodepointRange, AST::Anchor, AST::NotNextLineFeed
           normalize_leaf(node)
         when AST::CharClass
           char_class(node)

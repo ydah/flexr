@@ -11,8 +11,11 @@ Notable changes to flexr, newest first. Release dates use Japan Standard Time
   and `dot`. Use `flexr check --warn all` to see a repeatable example for
   states where the number of bytes read after an acceptance is unbounded.
 
+- Use `\R` to match line breaks, including atomic CRLF pairs.
+
 - Set `Flexr.cache_dir` to reuse compiled DFA tables across Ruby processes.
   Set it to `nil` to disable the cache.
+
 - Use Ruby-style octal escapes in regexp rules and character classes, including
   UTF-8 sequences such as `\303\251` and binary bytes such as `\377`.
 - Use `--residuals` with `flexr explain` or `flexr trace` to see what a

@@ -66,7 +66,6 @@ RSpec.describe "compiler diagnostic locations" do
       "/a(?=b)/" => "rule(/a/, followed_by: /b/)",
       '/".*?"/' => 'rule(/"[^"\n]*"/)',
       '/"[^"\n]*+"/' => 'rule(/"[^"\n]*"/)',
-      '/\R/' => 'rule(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/)',
       '/\q/' => 'rule(/q/)',
       '/"(?>[^"\n]*)"/' => 'rule(/"[^"\n]*"/)',
       '/(a|b)\1/' => 'rule(/(?:aa|bb)/)',

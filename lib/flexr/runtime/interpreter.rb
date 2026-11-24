@@ -163,7 +163,7 @@ module Flexr
         paths = (@fast_paths ||= {}.compare_by_identity)
         @fast_path = paths.fetch(machine) do
           rules = machine.dfa.rule_ids.map { |rule_index| @rules.fetch(rule_index) }
-          paths[machine] = !@config.options[:allow_empty_match] &&
+          paths[machine] = !@config.options[:allow_empty_match] && !machine.dfa.context_dependent_end? &&
             rules.none?(&:trailing) && rules.none?(&:capture_patterns) &&
             rules.none? { |rule| rule.pattern_conditions.any? { |condition| condition&.bol_only || condition&.end_anchor } }
         end
@@ -197,7 +197,7 @@ module Flexr
         return false if acceptance.bol_only && !@lexer.__flexr_beginning_of_line_at?(starting, @lexer.byte_pos)
         return false unless @lexer.utf8_boundary?(ending)
 
-        !acceptance.end_anchor || end_anchor_match?(buffer, ending)
+        !acceptance.end_anchor || acceptance.valid_end?(buffer.getbyte(ending))
       end
 
       def trailing_dfa(pattern)
@@ -212,7 +212,7 @@ module Flexr
           candidate = @rules.fetch(acceptance.rule_index)
           next if acceptance.bol_only && !@lexer.beginning_of_line?
           next if check_boundary && !@lexer.utf8_boundary?(cursor)
-          next unless !acceptance.end_anchor || end_anchor_match?(buffer, cursor)
+          next unless !acceptance.end_anchor || acceptance.valid_end?(buffer.getbyte(cursor))
           next if expected && !expected_rule?(candidate, expected, buffer, position, cursor)
 
           trailing_size = trailing_length(candidate, buffer, cursor)
@@ -342,10 +342,6 @@ module Flexr
 
           [region.state, region]
         end.to_h
-      end
-
-      def end_anchor_match?(buffer, position)
-        buffer.eof?(position) || buffer.getbyte(position) == 0x0a
       end
 
       def ensure_token_size!(end_position, position, rule: nil)

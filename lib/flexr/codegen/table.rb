@@ -39,6 +39,7 @@ module Flexr
         dense_rows = !direct && small_table
         accelerate = memoized ? "accelerate && (guarded_steps || !memo_states&.[](current))" : "accelerate"
         captures = compiled.rules.any?(&:capture_patterns)
+        contextual_end = compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? }
         fast_winners = small_table && !captures && !memoized_body
         scan_cache = direct ? "@__flexr_generated_scan_layout" : "@__flexr_generated_scan_fast"
         fast_path = direct ? "__flexr_generated_direct_layout" : "__flexr_generated_fast_path?"
@@ -310,6 +311,7 @@ module Flexr
         end
         lines << "#{indent}end"
         lines << "#{indent}def __flexr_generated_simple_fast_path?(dfa)"
+        lines << "#{indent}  return false if dfa.context_dependent_end?" if contextual_end
         lines << "#{indent}  @__flexr_generated_simple_fast_paths ||= {}"
         lines << "#{indent}  return @__flexr_generated_simple_fast_paths[dfa] if @__flexr_generated_simple_fast_paths.key?(dfa)"
         lines << "#{indent}  rules = dfa.rule_ids.map { |rule_index| self.class.__flexr_rules.fetch(rule_index) }"
@@ -320,7 +322,12 @@ module Flexr
         lines << "#{indent}def __flexr_generated_acceptance(dfa, state, start_position, cursor, best)"
         lines << "#{indent}  dfa.accepts[state].each do |acceptance|"
         lines << "#{indent}    next if acceptance.bol_only && !beginning_of_line?"
-        lines << "#{indent}    next if acceptance.end_anchor && !(buffer.eof?(cursor) || buffer.getbyte(cursor) == 0x0a)"
+        next_byte_check = if contextual_end
+          "!acceptance.valid_end?(buffer.getbyte(cursor))"
+        else
+          "!(buffer.eof?(cursor) || buffer.getbyte(cursor) == 0x0a)"
+        end
+        lines << "#{indent}    next if acceptance.end_anchor && #{next_byte_check}"
         lines << "#{indent}    rule = self.class.__flexr_rules.fetch(acceptance.rule_index)"
         lines << "#{indent}    next if best && cursor < best.total_end_pos"
         lines << "#{indent}    next if best && cursor == best.total_end_pos &&"

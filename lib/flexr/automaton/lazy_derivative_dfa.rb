@@ -29,6 +29,10 @@ module Flexr
 
       def direct = nil
 
+      def context_dependent_end?
+        @terms.context_dependent_end?
+      end
+
       def transition(state, byte)
         class_id = @ec.fetch(byte)
         targets = @transitions.fetch(state)
@@ -63,9 +67,8 @@ module Flexr
 
       def add_state(vector)
         state = @transitions.length
-        accepts = vector.filter_map { |pattern, term| @conditions.fetch(pattern) if @terms.nullable?(term) }
         @vectors << vector
-        @accepts << accepts.uniq.freeze
+        @accepts << @terms.accepting_conditions(vector, @conditions)
         @transitions << []
         @ids[vector] = state
       end

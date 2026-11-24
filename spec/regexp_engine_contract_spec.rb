@@ -44,7 +44,7 @@ RSpec.describe "regexp engine contracts" do
   end
 
   it "rejects unknown and unsupported escapes instead of treating them as literals" do
-    %w[\\q \\g<name> \\R \\X \\cA \\M-a].each do |source|
+    %w[\\q \\g<name> \\X \\cA \\M-a].each do |source|
       expect { Flexr::Regexp::Parser.new(source).parse }
         .to raise_error(Flexr::UnsupportedRegexpError) do |error|
           expect(error.diagnostic.code).to eq("FLEXR-E014")
@@ -150,35 +150,19 @@ RSpec.describe "regexp engine contracts" do
     end
   end
 
-  {
-    Encoding::UTF_8 => /\r\n|[\n\v\f\r\u0085\u2028\u2029]/,
-    Encoding::BINARY => /\r\n|[\n\v\f\r]/n
-  }.each do |encoding, replacement|
-    it "shows a standalone line-break rule for #{encoding}" do
-      lexer = Class.new(Flexr::Lexer) do
-        encoding encoding
-        rule(/\R/, emit: :NEWLINE)
-      end
-
-      expect { lexer.compile! }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-        expect(error.diagnostic.code).to eq("FLEXR-E014")
-        expect(error.diagnostic.help).to include("standalone line-break token", "rule(#{replacement.inspect})", "keep the action")
-      end
-    end
-
+  { Encoding::UTF_8 => /\R/, Encoding::BINARY => /\R/n }.each do |encoding, pattern|
     %i[table direct auto firstmatch].each do |backend|
       it "preserves #{encoding} line breaks and CRLF with #{backend}" do
         lexer = Class.new(Flexr::Lexer) do
           encoding encoding
           backend backend
           option :experimental if backend == :firstmatch
-          rule(replacement) { emit :NEWLINE }
+          rule(pattern) { emit :NEWLINE }
           rule(/./m, skip: true)
         end
         input = "\r\n\r\n\n\v\f\r\u0085\u2028\u2029x\t\u0086"
         input = input.b if encoding == Encoding::BINARY
-        original = encoding == Encoding::BINARY ? /\R/n : /\R/
-        expected = input.scan(original).map { |text| [:NEWLINE, text.bytes] }
+        expected = input.scan(pattern).map { |text| [:NEWLINE, text.bytes] }
 
         [input, StringIO.new(input)].each do |source|
           tokens = lexer.new(source, chunk_size: 1).tokens.map { |token, text| [token, text.bytes] }

@@ -78,6 +78,12 @@ module Flexr
           ' unless defined?(Flexr::Runtime::Captures)'
         install = "#{guard}\n#{indent}#{install}"
       end
+      if compiled.machines.values.any? { |machine| machine.dfa.context_dependent_end? } ||
+          compiled.rules.any? { |rule| rule.trailing_dfa&.context_dependent_end? || rule.capture_patterns&.any?(Array) }
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support next-byte conditions")' \
+          ' unless Flexr::Automaton::Acceptance.method_defined?(:valid_end?)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if uses_delegation?(parsed)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support lexer delegation")' \
           ' unless defined?(Flexr::Runtime::DelegatedTokens)'

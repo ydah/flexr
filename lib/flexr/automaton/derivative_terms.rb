@@ -24,8 +24,8 @@ module Flexr
         @derivatives = []
         @graphs = []
         @graph_ids = {}.compare_by_identity
-        intern(:fail, [], false)
-        intern(:empty, [], true)
+        intern(:fail, [], 0)
+        intern(:empty, [], EndContext::ANY)
         @universe = negate(FAIL)
       end
 
@@ -33,9 +33,12 @@ module Flexr
         case node
         when Regexp::AST::Empty then EMPTY
         when Regexp::AST::Fail then FAIL
+        when Regexp::AST::NotNextLineFeed
+          @byte_classes.add_range(0x0a, 0x0a)
+          intern(:not_next_lf, [], EndContext::EOF | EndContext::OTHER)
         when Regexp::AST::ByteRange
           @byte_classes.add_range(node.lo, node.hi)
-          intern(:byte, [node.lo, node.hi], false)
+          intern(:byte, [node.lo, node.hi], 0)
         when Regexp::AST::Seq then sequence(node.children.map { |child| from_ast(child) })
         when Regexp::AST::Alt then union(node.children.map { |child| from_ast(child) })
         when Regexp::AST::Star then repeat(from_ast(node.child), 0, nil)
@@ -51,8 +54,24 @@ module Flexr
         end
       end
 
-      def nullable?(id)
-        @nullable.fetch(id)
+      def accepting_conditions(vector, conditions)
+        vector.filter_map do |pattern, term|
+          nullable = nullability(term)
+          next if nullable.zero?
+
+          entry = conditions.fetch(pattern)
+          required = EndContext.mask(entry.end_anchor)
+          allowed = nullable & required
+          next if allowed.zero?
+          next entry if allowed == required
+
+          entry.dup.tap { |copy| copy.end_anchor = EndContext.condition(allowed) }
+        end.uniq
+      end
+
+      def context_dependent_end?
+        @graphs.any?(&:context_dependent_end?) ||
+          @nullable.any? { |mask| !mask.zero? && EndContext.condition(mask).is_a?(Integer) }
       end
 
       def derivative(id, byte, class_id)
@@ -60,6 +79,10 @@ module Flexr
       end
 
       private
+
+      def nullability(id)
+        @nullable.fetch(id)
+      end
 
       def intern(kind, arguments, nullable)
         key = [kind, *arguments].freeze
@@ -86,7 +109,8 @@ module Flexr
         return EMPTY if parts.empty?
         return parts.first if parts.one?
 
-        intern(:sequence, parts, parts.all? { |id| nullable?(id) })
+        nullable = parts.reduce(EndContext::ANY) { |mask, id| mask & nullability(id) }
+        intern(:sequence, parts, nullable)
       end
 
       def union(ids)
@@ -106,7 +130,11 @@ module Flexr
         return identity if parts.empty?
         return parts.first if parts.one?
 
-        nullable = kind == :union ? parts.any? { |id| nullable?(id) } : parts.all? { |id| nullable?(id) }
+        nullable = if kind == :union
+          parts.reduce(0) { |mask, id| mask | nullability(id) }
+        else
+          parts.reduce(EndContext::ANY) { |mask, id| mask & nullability(id) }
+        end
         intern(kind, parts, nullable)
       end
 
@@ -114,23 +142,24 @@ module Flexr
         term = @expressions.fetch(id)
         return term.fetch(1) if term.first == :negate
 
-        intern(:negate, [id], !nullable?(id))
+        intern(:negate, [id], EndContext::ANY ^ nullability(id))
       end
 
       def repeat(id, minimum, maximum)
         return EMPTY if id == EMPTY || maximum&.zero?
         return minimum.zero? ? EMPTY : FAIL if id == FAIL
 
-        minimum = 0 if nullable?(id)
+        nullable = nullability(id)
+        minimum = 0 if nullable == EndContext::ANY
         return id if minimum == 1 && maximum == 1
 
-        intern(:repeat, [id, minimum, maximum], minimum.zero?)
+        intern(:repeat, [id, minimum, maximum], minimum.zero? ? EndContext::ANY : nullable)
       end
 
       def derive(id, byte, class_id)
         kind, *parts = @expressions.fetch(id)
         case kind
-        when :empty, :fail then FAIL
+        when :empty, :fail, :not_next_lf then FAIL
         when :byte then byte.between?(*parts) ? EMPTY : FAIL
         when :sequence then derive_sequence(parts, byte, class_id)
         when :union then union(parts.map { |part| derivative(part, byte, class_id) })
@@ -141,7 +170,8 @@ module Flexr
           head = derivative(part, byte, class_id)
           return FAIL if head == FAIL
 
-          sequence([head, repeat(part, [minimum - 1, 0].max, maximum && (maximum - 1))])
+          remaining = nullability(part).anybits?(EndContext.for_byte(byte)) ? 0 : [minimum - 1, 0].max
+          sequence([head, repeat(part, remaining, maximum && (maximum - 1))])
         when :graph
           graph_id, state = parts
           target = @graphs.fetch(graph_id).transition(state, byte)
@@ -151,10 +181,11 @@ module Flexr
 
       def derive_sequence(parts, byte, class_id)
         choices = []
+        context = EndContext.for_byte(byte)
         parts.each_with_index do |part, index|
           head = derivative(part, byte, class_id)
           choices << sequence([head, *parts.drop(index + 1)]) unless head == FAIL
-          break unless nullable?(part)
+          break unless nullability(part).anybits?(context)
         end
         union(choices)
       end
@@ -171,7 +202,9 @@ module Flexr
       end
 
       def graph_term(id, state)
-        nullable = !@graphs.fetch(id).accepts.fetch(state).empty?
+        nullable = @graphs.fetch(id).accepts.fetch(state).reduce(0) do |mask, acceptance|
+          mask | EndContext.mask(acceptance.end_anchor)
+        end
         intern(:graph, [id, state], nullable)
       end
 
