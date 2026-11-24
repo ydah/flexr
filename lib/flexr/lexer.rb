@@ -6,5 +6,9 @@ module Flexr
     include Runtime
 
     __flexr_reset!
+
+    def self.push(**)
+      Runtime::Push.new(self, **)
+    end
   end
 end

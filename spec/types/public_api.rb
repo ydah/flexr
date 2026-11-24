@@ -97,6 +97,13 @@ next_token = lexer.next_token(expect: [:INTEGER])
 lexer.racc_next_token(expect: [:INTEGER])
 lexer.each_token { |_token| nil }
 
+# @type var stream: Flexr::Runtime::Push
+stream = Flexr::Lexer.push(filename: "stream.txt", chunk_size: 4)
+# @type var streamed: Array[Flexr::token]
+streamed = stream.feed("12")
+stream.feed(" ") { |_token| nil }.finish { |_token| nil }
+puts streamed
+
 # @type var structured_token: Flexr::Runtime::Token
 structured_token = Flexr::Runtime::Token.new(type: :INTEGER, value: 12, location: location)
 # @type var immutable_record: Data
