@@ -26,10 +26,10 @@ require_relative "unicode/case_fold"
 require_relative "regexp/matcher"
 require_relative "automaton/types"
 require_relative "automaton/end_context"
-require_relative "automaton/left_context"
 require_relative "automaton/byte_class_set"
 require_relative "automaton/nfa"
 require_relative "automaton/dfa"
+require_relative "automaton/left_context"
 require_relative "runtime/contextual_regexp"
 require_relative "automaton/contextual_regexp_compiler"
 require_relative "automaton/reference_dfa"
@@ -60,6 +60,7 @@ require_relative "lexer"
 require_relative "rules"
 require_relative "generated"
 require_relative "automaton/lookahead"
+require_relative "runtime/lookbehind"
 
 
 module Flexr
@@ -76,7 +77,14 @@ module Flexr
     end
 
     def compile_pattern(pattern, options: {}, encoding: nil)
-      pattern = ::Regexp.new(pattern.to_s) unless pattern.is_a?(::Regexp) || pattern.is_a?(Pattern)
+      unless pattern.is_a?(::Regexp) || pattern.is_a?(Pattern)
+        source = pattern.to_s
+        pattern = begin
+          ::Regexp.new(source)
+        rescue ::RegexpError
+          Pattern.build(regexp: source)
+        end
+      end
       encoding ||= pattern.is_a?(::Regexp) && pattern.encoding == Encoding::BINARY ? Encoding::BINARY : Encoding::UTF_8
       rule = IR::Rule.new(index: 0, patterns: [pattern], action: :skip, states: [:initial])
       state = IR::State.new(name: :initial, inclusive: true, id: 0)

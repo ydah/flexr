@@ -4,7 +4,13 @@ module Flexr
   class Pattern
     attr_reader :operation, :operands, :name
 
-    def self.build(*values)
+    def self.build(*values, regexp: nil)
+      unless regexp.nil?
+        invalid! unless values.empty? && regexp.is_a?(String)
+
+        return new(:regexp, [regexp])
+      end
+
       operands = values.flatten.map do |value|
         case value
         when Pattern then value
@@ -59,6 +65,7 @@ module Flexr
 
       case @operation
       when :literal then @operands.first.inspect
+      when :regexp then "pattern(regexp: #{@operands.first.inspect})"
       when :! then "!#{@operands.first.inspect}"
       when :upto then "upto(#{@operands.first.inspect})"
       else "(#{@operands.map(&:inspect).join(" #{@operation} ")})"

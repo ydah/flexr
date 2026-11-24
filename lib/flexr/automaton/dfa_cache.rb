@@ -7,7 +7,7 @@ require_relative "../artifact_writer"
 module Flexr
   module Automaton
     class DfaCache
-      SCHEMA_VERSION = 4
+      SCHEMA_VERSION = 5
 
       def initialize(directory, spec, state_limit, construction:)
         @directory = directory
@@ -38,6 +38,7 @@ module Flexr
           start: dfa.start, rule_ids: dfa.rule_ids, state_count: dfa.states, transitions: dfa.transitions
         }
         data[:starts] = dfa.starts if dfa.starts
+        data[:left_context] = dfa.left_context.to_h if dfa.left_context
         payload = JSON.generate(dfa: data, conditions: conditions, empty_absence: empty_absence)
         checksum = Digest::SHA256.hexdigest(key + payload)
         FileUtils.mkdir_p(@directory, mode: 0o700)

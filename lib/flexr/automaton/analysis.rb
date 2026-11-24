@@ -229,7 +229,7 @@ module Flexr
         cursor = offset
         matches = []
         at_line_start = offset.zero? || input.getbyte(offset - 1) == 0x0a
-        state = dfa.start_for(LeftContext.at(offset, at_line_start))
+        state = dfa.start_at(input, offset, at_line_start)
         loop do
           if encoding != Encoding::UTF_8 || input.byteslice(0, cursor).force_encoding(encoding).valid_encoding?
             dfa.accepts.fetch(state).each do |acceptance|

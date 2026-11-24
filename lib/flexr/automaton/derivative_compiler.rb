@@ -16,9 +16,11 @@ module Flexr
         operation = terms.operations.join(" and ") unless terms.operations.empty?
         ec, count = terms.byte_classes.build
         representatives = ec.each_index.uniq { |byte| ec.fetch(byte) }
+        left_context = terms.compile_left_context(ec, representatives, &state_limit)
         if terms.left_sensitive
-          states = LeftContext::STATES.map do |left|
-            vector = left == LeftContext::OTHER ? start.reject { |pattern, _| conditions.fetch(pattern).bol_only }.freeze : start
+          contexts = left_context ? left_context.transitions.each_index : LeftContext::STATES
+          states = contexts.map do |left|
+            vector = terms.context_kind(left) == LeftContext::OTHER ? start.reject { |pattern, _| conditions.fetch(pattern).bol_only }.freeze : start
             [vector, left]
           end
           starts = states.each_index.to_a
@@ -39,7 +41,7 @@ module Flexr
             successor = advance(vector, terms, byte, class_id, left)
             next if successor.empty?
 
-            successor = [successor, LeftContext.after(byte)] if left
+            successor = [successor, terms.next_left(left, byte)] if left
             ids[successor] ||= begin
               state_limit.call(states.length, operation)
               states.push(successor).length - 1
@@ -49,7 +51,7 @@ module Flexr
         end
 
         dfa = DFA.new(transitions: transitions, accepts: accepts, ec: ec, class_count: count,
-                      start: 0, starts: starts, rule_ids: accepts.flatten.map(&:rule_index))
+                      start: 0, starts: starts, left_context: left_context, rule_ids: accepts.flatten.map(&:rule_index))
         return dfa unless minimize
         return Minimizer.minimize(dfa) unless retain_residuals
 

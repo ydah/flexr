@@ -162,6 +162,8 @@ module Flexr
         return AST::Absence.new(child: node, loc: span(starting)) if prefix == :absence
         return AST::Lookahead.new(child: node, negative: prefix == :negative_lookahead, loc: span(starting)) if
           %i[positive_lookahead negative_lookahead].include?(prefix)
+        return AST::Lookbehind.new(child: node, negative: prefix == :negative_lookbehind, loc: span(starting)) if
+          %i[positive_lookbehind negative_lookbehind].include?(prefix)
         return AST::NamedCapture.new(opening: prefix, child: node) if prefix.is_a?(String)
 
         node
@@ -196,8 +198,8 @@ module Flexr
         end
         return :positive_lookahead if consume?("=")
         return :negative_lookahead if consume?("!")
-        raise unsupported("lookbehind", "use separate rules or lexer states to track the preceding input") if
-          peek_prefix?("<=") || peek_prefix?("<!")
+        return :positive_lookbehind if consume?("<=")
+        return :negative_lookbehind if consume?("<!")
         if consume?(">")
           raise unsupported("atomic groups",
                             'for unescaped single-line quoted text, a DFA-compatible rewrite is rule(/"[^"\n]*"/); keep the action; removing atomic groups can change matches')

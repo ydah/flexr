@@ -46,10 +46,10 @@ module Flexr
     end
 
     class DFA
-      attr_reader :transitions, :accepts, :ec, :class_count, :start, :starts, :states, :rule_ids, :packed, :direct
+      attr_reader :transitions, :accepts, :ec, :class_count, :start, :starts, :left_context, :states, :rule_ids, :packed, :direct
 
       def initialize(accepts:, ec:, class_count:, start:, rule_ids:, transitions: nil, packed: nil, direct: nil,
-                     state_count: nil, starts: nil)
+                     state_count: nil, starts: nil, left_context: nil)
         @packed = freeze_representation(packed)
         @direct = freeze_representation(direct)
         @states = state_count || transitions&.length || direct_state_count
@@ -69,13 +69,16 @@ module Flexr
         @class_count = class_count
         @start = start
         @starts = starts&.freeze
-        @rule_ids = rule_ids.map { |id| id.respond_to?(:rule_index) ? id.rule_index : id }.uniq.sort.freeze
+        @left_context = left_context
+        @rule_ids = rule_ids.uniq.sort.freeze
         freeze
       end
 
       def start_for(context)
         @starts ? @starts.fetch(context) : @start
       end
+
+      def start_at(*) = @start
 
       def transition(state, byte)
         class_id = @ec[byte]

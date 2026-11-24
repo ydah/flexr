@@ -129,8 +129,11 @@ module Flexr
 
       def evaluate_call(node)
         if !node.block && %i[pattern upto].include?(node.name) && node.receiver.nil?
-          arguments = Array(node.arguments&.arguments)
-          return Pattern.build(*arguments.map { |argument| evaluate(argument) }) if node.name == :pattern
+          arguments = Array(node.arguments&.arguments).dup
+          if node.name == :pattern
+            keywords = arguments.last.is_a?(::Prism::KeywordHashNode) ? evaluate_hash(arguments.pop) : {}
+            return Pattern.build(*arguments.map { |argument| evaluate(argument) }, **keywords)
+          end
           return Pattern.upto(evaluate(arguments.first)) if arguments.one? && !arguments.first.is_a?(::Prism::SplatNode)
         end
         if !node.block && node.receiver && %i[| + & - !].include?(node.name)

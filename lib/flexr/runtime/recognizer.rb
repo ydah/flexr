@@ -62,7 +62,7 @@ module Flexr
     def walk(dfa, input, start)
       cursor = boundary = start
       bol = start.zero? || input.getbyte(start - 1) == 0x0a
-      state = dfa.starts ? dfa.start_for(Automaton::LeftContext.at(start, bol)) : dfa.start
+      state = dfa.start_at(input, start, bol)
       while state
         byte = input.getbyte(cursor)
         if cursor == boundary

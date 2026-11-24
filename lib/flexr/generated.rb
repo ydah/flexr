@@ -134,7 +134,7 @@ module Flexr
     def shareable_dfa(dfa)
       Automaton::DFA.new(transitions: dfa.transitions.map(&:dup), accepts: dfa.accepts, ec: dfa.ec,
                          class_count: dfa.class_count, start: dfa.start, rule_ids: dfa.rule_ids,
-                         direct: dfa.direct, starts: dfa.starts)
+                         direct: dfa.direct, starts: dfa.starts, left_context: dfa.left_context)
     end
 
     def incompatible_artifact!(detail)
@@ -161,7 +161,8 @@ module Flexr
       Automaton::DFA.new(
         transitions: data[:transitions], accepts: data.fetch(:accepts), ec: data.fetch(:ec),
         class_count: data.fetch(:class_count), start: data.fetch(:start), rule_ids: data.fetch(:rule_ids),
-        packed: decode_packed(data[:packed]), direct: data[:direct], state_count: data.fetch(:state_count), starts: data[:starts]
+        packed: decode_packed(data[:packed]), direct: data[:direct], state_count: data.fetch(:state_count), starts: data[:starts],
+        left_context: data[:left_context]
       )
     end
 

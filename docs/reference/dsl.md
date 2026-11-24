@@ -92,6 +92,11 @@ end
 | `a - b` | Strings matched by `a` and excluded by `b` |
 | `!a` | All strings in the subject alphabet outside `a` |
 
+`pattern(regexp: source)` parses a string as Flexr regexp source. Use it
+for regular expressions that Ruby cannot construct, such as
+[variable-width lookbehind](regexp.md#lookbehind). Positional strings in
+`pattern` are literal strings.
+
 Complement is relative to valid Unicode scalar strings in a UTF-8 lexer and
 all byte strings in a binary lexer. Use line anchors in a plain rule regexp.
 Pattern operations and earlier constant definitions are resolved by the static

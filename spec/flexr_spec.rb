@@ -110,15 +110,6 @@ RSpec.describe Flexr do
     expect(lexer_class.new("A").tokens).to eq([[:A, "A"]])
   end
 
-  it "reports unsupported lookbehind with a state-based alternative" do
-    ["(?<=a)b", "(?<!a)b"].each do |source|
-      expect { Flexr::Regexp::Parser.new(source).parse }.to raise_error(Flexr::UnsupportedRegexpError) do |error|
-        expect(error.diagnostic.code).to eq("FLEXR-E014")
-        expect(error.diagnostic.help).to include("separate rules or lexer states")
-      end
-    end
-  end
-
   it "keeps followed_by context unconsumed while preserving the rule action" do
     lexer = Class.new(Flexr::Lexer) do
       rule(/a/, followed_by: /b/) { emit :A }

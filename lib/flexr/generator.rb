@@ -97,6 +97,11 @@ module Flexr
         guard += ' unless defined?(Flexr::Runtime::ContextualRegexp) && Flexr::Runtime::ContextualRegexp.method_defined?(:invalid_eof)'
         install = "#{guard}\n#{indent}#{install}"
       end
+      if regexp_lookbehind?(compiled)
+        guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp lookbehind")' \
+          ' unless defined?(Flexr::Runtime::Lookbehind)'
+        install = "#{guard}\n#{indent}#{install}"
+      end
       if regexp_left_context?(compiled)
         guard = 'Flexr::Generated.incompatible_artifact!("runtime does not support regexp left context")' \
           ' unless defined?(Flexr::Automaton::LeftContext)'
@@ -258,6 +263,7 @@ module Flexr
         state_count: dfa.states, start: dfa.start, rule_ids: dfa.rule_ids
       }
       data[:starts] = dfa.starts if dfa.starts
+      data[:left_context] = dfa.left_context.to_h if dfa.left_context
       pack_tables = %i[rows full].include?(compression) || @options.fetch(:table_format, :literal).to_sym == :packed
       if direct
         data[:direct] = direct
@@ -295,6 +301,7 @@ module Flexr
       sources = RUNTIME_SOURCES.dup
       sources << "automaton/end_context.rb" if regexp_end_context?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "automaton/left_context.rb" if regexp_left_context?(compiled)
+      sources << "runtime/lookbehind.rb" if regexp_lookbehind?(compiled)
       sources << "automaton/lookahead.rb" if regexp_lookahead?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "runtime/contextual_regexp.rb" if compiled.rules.any?(&:contextual_patterns)
       sources << "runtime/input_stack.rb" if parsed.uses_input_stack || parsed.config.dig(:options, :input_stack)
@@ -321,6 +328,10 @@ module Flexr
     def regexp_left_context?(compiled)
       compiled.machines.values.any? { |machine| machine.dfa.starts } ||
         compiled.rules.any? { |rule| rule.trailing_dfa&.starts || rule.contextual_patterns&.any?(&:left_context) }
+    end
+
+    def regexp_lookbehind?(compiled)
+      !Runtime::Lookbehind.graphs(compiled).empty?
     end
 
     def regexp_lookahead?(compiled)
@@ -443,6 +454,8 @@ module Flexr
         "[#{value.map { |item| ruby_literal(item) }.join(', ')}]"
       when Automaton::Acceptance
         "::Flexr::Automaton::Acceptance.new(**#{ruby_literal(value.to_h)})"
+      when Automaton::LeftContext::Graph
+        "::Flexr::Automaton::LeftContext::Graph.new(**#{ruby_literal(value.to_h)})"
       when Automaton::Lookahead
         "::Flexr::Automaton::Lookahead.new(**#{ruby_literal(value.to_h)})"
       when Automaton::DFA
@@ -451,6 +464,7 @@ module Flexr
         definition = value.to_h
         definition.delete(:invalid_eof) unless value.invalid_eof
         definition.delete(:left_context) unless value.left_context
+        %i[history_bytes invalid_left invalid_both].each { |key| definition.delete(key) unless definition[key] }
         "::Flexr::Runtime::ContextualRegexp.new(**#{ruby_literal(definition)})"
       when Pattern
         "::Flexr::Pattern.__flexr_restore(#{value.operation.inspect}, #{ruby_literal(value.operands)}, #{ruby_literal(value.name)})"

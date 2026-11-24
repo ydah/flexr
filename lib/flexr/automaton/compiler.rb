@@ -199,6 +199,14 @@ module Flexr
             raise CompileError.new(diagnostic.message, diagnostic: diagnostic)
           end
           normalize_regexp(regexp, ast)
+        when :regexp
+          source = pattern.operands.first
+          ast = Regexp::Parser.new(source, encoding: @spec.encoding, unicode: @spec.options[:unicode] == true).parse
+          Regexp::AST.anchors(ast).each { |anchor| anchor.kind = :line_start if anchor.kind == :bol }
+          normalizer = Regexp::Normalizer.new(ast, encoding: @spec.encoding, prebuilt_properties: @prebuilt_properties)
+          body = normalizer.normalize
+          @used_prebuilt_properties ||= normalizer.used_prebuilt_properties
+          body
         when :|, :+
           children = pattern.operands.map { |operand| normalized_value(operand, rule) }
           klass = pattern.operation == :| ? Regexp::AST::Alt : Regexp::AST::Seq
@@ -265,7 +273,8 @@ module Flexr
 
         accepts = product.accepts.map { |labels| labels.reject { |label| label.rule_index == overlap_probe.rule_index } }
         filtered = DFA.new(transitions: product.transitions, accepts: accepts, ec: product.ec,
-                           class_count: product.class_count, start: product.start, starts: product.starts, rule_ids: [0])
+                           class_count: product.class_count, start: product.start, starts: product.starts,
+                           left_context: product.left_context, rule_ids: [0])
         [filtered, true]
       end
 
@@ -512,15 +521,28 @@ module Flexr
         body = Regexp::Normalizer.new(ast, encoding: encoding, subject_encoding: @spec.encoding, prebuilt_properties: false).normalize
         options = { encoding: encoding, unicode: @spec.options[:unicode] == true }
         anchors = Regexp::AST.anchors(ast)
-        left_context = anchors.any? { |anchor| Regexp::AST.left_anchor?(anchor) }
+        behind = Regexp::AST.lookbehind?(ast)
+        left_context = behind || anchors.any? { |anchor| Regexp::AST.left_anchor?(anchor) }
         start = left_context ? '\G' : '\A'
-        reference = contextual_reference(regexp, options, start, terminal_line_end ? "$" : "")
-        if anchors.any? { |anchor| %i[line_start line_end eof final_eol].include?(anchor.kind) }
-          before_lf = terminal_line_end ? '(?=\n)' : ""
-          invalid_eof = contextual_reference(regexp, options.merge(invalid_eof: true), start, before_lf)
+        ending = terminal_line_end ? "$" : ""
+        reference = contextual_reference(regexp, options, start, ending)
+        if terminal_line_end || anchors.any? { |anchor| %i[line_start line_end eof final_eol].include?(anchor.kind) }
+          invalid_ending = !behind && terminal_line_end ? '(?=\n)' : ending
+          invalid_options = options.merge(invalid_eof: true, invalid_tail_marker: behind)
+          invalid_eof = contextual_reference(regexp, invalid_options, start, invalid_ending)
         end
         compiler = ContextualRegexpCompiler.new { |state| enforce_state_limit!(state, "regexp context") }
-        compiler.compile(body, reference, invalid_eof: invalid_eof, left_context: left_context)
+        if behind
+          # Keep one complete UTF-8 scalar beyond the farthest assertion.
+          history_bytes = compiler.lookbehind_width(body) + 4
+          invalid_left = contextual_reference(regexp, options.merge(invalid_left: true), start, ending)
+          if invalid_eof
+            invalid_edges = invalid_options.merge(invalid_left: true)
+            invalid_both = contextual_reference(regexp, invalid_edges, start, invalid_ending)
+          end
+        end
+        compiler.compile(body, reference, invalid_eof: invalid_eof, left_context: left_context,
+                         history_bytes: history_bytes, invalid_left: invalid_left, invalid_both: invalid_both)
       end
 
       def contextual_reference(regexp, options, start, ending)

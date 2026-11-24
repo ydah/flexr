@@ -9,13 +9,37 @@ module Flexr
         @accept = append(:accept)
       end
 
-      def compile(ast, regexp, invalid_eof: nil, left_context: false)
+      def compile(ast, regexp, **)
         entry = build(ast, @accept)
-        Runtime::ContextualRegexp.new(regexp: regexp, invalid_eof: invalid_eof, instructions: @instructions, entry: entry,
-                                      left_context: left_context)
+        Runtime::ContextualRegexp.new(regexp: regexp, instructions: @instructions, entry: entry, **)
+      end
+
+      def lookbehind_width(node)
+        case node
+        when Regexp::AST::Lookbehind
+          consuming_width(node.child) + lookbehind_width(node.child)
+        when Regexp::AST::Seq, Regexp::AST::Alt
+          node.children.map { |child| lookbehind_width(child) }.max || 0
+        when Regexp::AST::Difference, Regexp::AST::Intersection
+          [lookbehind_width(node.left), lookbehind_width(node.right)].max
+        when Regexp::AST::Star, Regexp::AST::Repeat, Regexp::AST::NamedCapture, Regexp::AST::Lookahead
+          lookbehind_width(node.child)
+        else 0
+        end
       end
 
       private
+
+      def consuming_width(node)
+        case node
+        when Regexp::AST::ByteRange then 1
+        when Regexp::AST::Seq then node.children.sum { |child| consuming_width(child) }
+        when Regexp::AST::Alt then node.children.map { |child| consuming_width(child) }.max
+        when Regexp::AST::NamedCapture then consuming_width(node.child)
+        when Regexp::AST::Repeat then (node.maximum || node.minimum) * consuming_width(node.child)
+        else 0
+        end
+      end
 
       def append(*instruction)
         @state_limit.call(@instructions.length)
@@ -38,6 +62,7 @@ module Flexr
           node.children.reverse_each.reduce(nil) { |tail, part| choice(build(part, following), tail) }
         when Regexp::AST::NamedCapture then build(node.child, following)
         when Regexp::AST::Lookahead then assertion(node, following)
+        when Regexp::AST::Lookbehind then predicate(node, following)
         when Regexp::AST::Difference, Regexp::AST::Intersection then append(:span, language(node), following)
         when Regexp::AST::Star then repeated(node.child, 0, nil, following)
         when Regexp::AST::Repeat then repeated(node.child, node.minimum, node.maximum, following)
@@ -55,6 +80,8 @@ module Flexr
         dfa = language(node)
         if dfa.starts
           choices = dfa.starts.map { |state| dfa.accepts.fetch(state).first }.freeze
+          return append(:context_predicate, choices, following, dfa.left_context) if dfa.left_context
+
           return append(:context_predicate, choices, following)
         end
 

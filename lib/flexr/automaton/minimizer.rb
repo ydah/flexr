@@ -88,7 +88,8 @@ module Flexr
         accepts = order.map { |group| dfa.accepts.fetch(representatives.fetch(group)) }
         rule_ids = accepts.flatten.map(&:rule_index).uniq.sort
         DFA.new(transitions: transitions, accepts: accepts, ec: dfa.ec, class_count: dfa.class_count,
-                start: 0, starts: dfa.starts && start_groups.map { |group| index.fetch(group) }, rule_ids: rule_ids)
+                start: 0, starts: dfa.starts && start_groups.map { |group| index.fetch(group) },
+                left_context: dfa.left_context, rule_ids: rule_ids)
       end
 
       def group_ids(partitions)
