@@ -39,6 +39,8 @@ module Flexr
     end
 
     def generate
+      raise ArgumentError, "--profile requires static generation; remove --eval" if @eval_mode && @options[:profile]
+
       ArtifactWriter.ensure_distinct!(@path, @output) if @output
       ArtifactWriter.ensure_distinct!(@options[:lrama_grammar], @output) if @output && @options[:lrama_grammar]
       # Keep generated source stable when a checkout presents the spec with
@@ -58,10 +60,14 @@ module Flexr
     private
 
     def generate_static(parsed)
+      raise ArgumentError, "--profile requires a DFA backend; firstmatch cannot be profiled" if
+        @options[:profile] && @options.fetch(:backend, parsed.config[:backend]).to_sym == :firstmatch
+
       compiled = compile_parsed(parsed)
       @diagnostics = Array(compiled.diagnostics)
       validate_diagnostics!(compiled)
       contexts = parser_contexts(compiled)
+      profile = generation_profile(parsed, compiled, optimize: contexts.nil?) if @options[:profile]
       payload = generated_payload(parsed, compiled)
       indent = Source::Passthrough.indentation(parsed.source, parsed.first_dsl_offset)
       install = "Flexr::Generated.install_compiled!(self, #{payload})\n"
@@ -146,7 +152,7 @@ module Flexr
       end
       scanner = Codegen::Table.new(compiled).source(
         indent: indent, direct: effective_backend(parsed) == :direct, shortest_states: shortest_states,
-        parser_contexts: !contexts.nil?, packed: table_format == :packed
+        parser_contexts: !contexts.nil?, packed: table_format == :packed, profile: profile
       )
       install = "#{install}#{scanner}"
       install = "#{install}#{generated_action_source(parsed, indent)}"
@@ -172,13 +178,21 @@ module Flexr
         "# compiled: true",
         "# eval: #{@eval_mode}",
         "# standalone: #{standalone?(parsed)}"
-      ].join("\n")
-      prefix = standalone_prefix(parsed, compiled, parser_contexts: !contexts.nil?) if standalone?(parsed)
-      Source::Passthrough.insert_after_preamble(result, "#{header}\n#{prefix}")
+      ]
+      header.concat(profile.header_lines) if profile
+      prefix = standalone_prefix(parsed, compiled, parser_contexts: !contexts.nil?, profile: profile) if standalone?(parsed)
+      Source::Passthrough.insert_after_preamble(result, "#{header.join("\n")}\n#{prefix}")
     end
 
-    def standalone_prefix(parsed, compiled, parser_contexts:)
-      source = embedded_runtime(parsed, compiled, parser_contexts: parser_contexts)
+    def generation_profile(parsed, compiled, optimize:)
+      require_relative "source/generation_profile"
+
+      Source::GenerationProfile.new(parsed, compiled, backend: effective_backend(parsed), options: effective_options(parsed),
+                                    patterns: @options[:profile], output: @output, optimize: optimize)
+    end
+
+    def standalone_prefix(parsed, compiled, parser_contexts:, profile: nil)
+      source = embedded_runtime(parsed, compiled, parser_contexts: parser_contexts, profile: profile)
       "raise LoadError, \"flexr requires Ruby 3.4 or newer\" if RUBY_VERSION < \"3.4\"\nrequire \"json\"\nrequire \"monitor\"\n#{source}\n"
     end
 
@@ -404,7 +418,7 @@ module Flexr
       @options.fetch(:table_format, :literal).to_sym
     end
 
-    def embedded_runtime(parsed, compiled, parser_contexts: false)
+    def embedded_runtime(parsed, compiled, parser_contexts: false, profile: nil)
       sources = RUNTIME_SOURCES + INCREMENTAL_RUNTIME_SOURCES + PARALLEL_RUNTIME_SOURCES
       sources << "automaton/end_context.rb" if regexp_end_context?(compiled) || compiled.rules.any?(&:contextual_patterns)
       sources << "automaton/left_context.rb" if regexp_left_context?(compiled)
@@ -420,7 +434,8 @@ module Flexr
         sources.insert(sources.index("runtime/interpreter.rb"), "runtime/firstmatch.rb")
       else
         sources.concat(DFA_ERROR_RUNTIME_SOURCES)
-        sources.push("automaton/whole_token.rb", "runtime/whole_token.rb") if effective_options(parsed)[:accel] == :strscan
+        sources.push("automaton/whole_token.rb", "runtime/whole_token.rb") if
+          effective_options(parsed)[:accel] == :strscan || profile&.whole_tokens&.any?
       end
       sources.insert(6, *MATCHER_RUNTIME_SOURCES) if matcher_runtime?(parsed)
       sources.insert(6, "pattern.rb") if parsed.uses_patterns ||
