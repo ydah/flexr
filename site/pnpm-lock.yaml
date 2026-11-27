@@ -18,8 +18,8 @@ importers:
         specifier: 2.10.1
         version: 2.10.1
       '@viz-js/viz':
-        specifier: 3.25.0
-        version: 3.25.0
+        specifier: 3.31.0
+        version: 3.31.0
       astro:
         specifier: ^5.14.1
         version: 5.18.2(@types/node@24.13.3)(rollup@4.62.4)(typescript@5.9.3)(yaml@2.9.0)
@@ -916,8 +916,8 @@ packages:
   '@ungap/structured-clone@1.3.3':
     resolution: {integrity: sha512-60YRaenCQcVjYEKOcG824+DRGGIQ3VKErcBoAEDJZz5bKIs2ZG+X/H9Nk+Q6EVkwJk5QNApxbrc5QtBSwtrXAg==}
 
-  '@viz-js/viz@3.25.0':
-    resolution: {integrity: sha512-dM7zAYMdf7mcRz5Kdb+YJb6+qv5Rjk0rPZ18gROdpMrP/3S7RFOp8uxybeiz5RypHrE1zo1vccA8Twh4mIcLZw==}
+  '@viz-js/viz@3.31.0':
+    resolution: {integrity: sha512-r7zlQdRvcwvIpjHGgs+KNWHeE/P5/Dq7k8ZAKaMCbZqomxCBJV78gVuQYaHzFVca+kB0mX0fMW9UFevCOBG50A==}
 
   '@volar/kit@2.4.28':
     resolution: {integrity: sha512-cKX4vK9dtZvDRaAzeoUdaAJEew6IdxHNCRrdp5Kvcl6zZOqb6jTOfk3kXkIkG3T7oTFXguEMt5+9ptyqYR84Pg==}
@@ -3112,7 +3112,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.3': {}
 
-  '@viz-js/viz@3.25.0': {}
+  '@viz-js/viz@3.31.0': {}
 
   '@volar/kit@2.4.28(typescript@5.9.3)':
     dependencies:
